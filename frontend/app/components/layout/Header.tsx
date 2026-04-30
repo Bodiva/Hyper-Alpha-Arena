@@ -73,9 +73,6 @@ export default function Header({ title = 'Hyper Alpha Arena', currentAccount, sh
         <div className="flex items-center gap-2 md:gap-3">
           <h1 className="text-base md:text-xl font-bold truncate">{title}</h1>
 
-          {currentExchangeInfo.id === 'hyperliquid' && !isVipMember && (
-            <span className="hidden md:inline text-xs text-muted-foreground ml-2">{t('header.premiumDiscount', 'Subscribe to Premium for service fee 50% off.')}</span>
-          )}
         </div>
 
         {/* Right side controls - Hidden on mobile */}

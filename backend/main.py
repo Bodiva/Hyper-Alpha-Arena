@@ -731,6 +731,11 @@ from api.bot_routes import router as bot_router
 from api.factor_routes import router as factor_router
 from api.news_routes import router as news_router
 from api.market_intelligence_routes import router as market_intelligence_router
+from api.alpha_trace_agent_runtime_routes import router as alpha_trace_agent_runtime_router
+from api.alpha_trace_evidence_routes import router as alpha_trace_evidence_router
+from api.alpha_trace_asset_routes import router as alpha_trace_asset_router
+from api.alpha_trace_strategy_routes import router as alpha_trace_strategy_router
+from api.alpha_trace_portfolio_routes import router as alpha_trace_portfolio_router
 from routes.program_routes import router as program_router
 # Removed: AI account routes merged into account_routes (unified AI trader accounts)
 
@@ -764,6 +769,11 @@ app.include_router(bot_router)
 app.include_router(factor_router)
 app.include_router(news_router)
 app.include_router(market_intelligence_router)
+app.include_router(alpha_trace_agent_runtime_router)
+app.include_router(alpha_trace_evidence_router)
+app.include_router(alpha_trace_asset_router)
+app.include_router(alpha_trace_strategy_router)
+app.include_router(alpha_trace_portfolio_router)
 # app.include_router(ai_account_router, prefix="/api")  # Removed - merged into account_router
 
 # Strategy route aliases for frontend compatibility

@@ -1,0 +1,12 @@
+export const PRODUCT_NAME = "AlphaTrace";
+export const PRODUCT_CN_NAME = "AlphaTrace 智能投研决策平台";
+export const PRODUCT_SUBTITLE = "Agentic Investment Research Workbench for ETF, Funds and Futures";
+export const PRODUCT_CN_SUBTITLE = "面向 ETF / 基金 / 期货的 Agentic 投研与组合配置工作台";
+export const PRODUCT_DESCRIPTION = "可追溯、可复盘、可量化评估的 Agentic 投研决策平台";
+export const BRAND_OWNER = "SUNYARD.AI";
+export const BRAND_BADGE = "Powered by SUNYARD.AI";
+export const BRAND_CN_BADGE = "SUNYARD.AI 出品";
+export const PRODUCT_FULL_NAME = "AlphaTrace by SUNYARD.AI";
+export const PRODUCT_CN_FULL_NAME = "AlphaTrace 智能投研决策平台 · SUNYARD.AI 出品";
+export const LEGACY_PROJECT_NAME = "Hyper-Alpha-Arena";
+export const PRODUCT_ASSET_SCOPE = ["ETF", "基金", "期货", "指数", "组合"] as const;

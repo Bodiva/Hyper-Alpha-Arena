@@ -43,6 +43,15 @@ services:
       FACTOR_ENGINE_ENABLED: "true"
       # Hyper Insight login-based integration
       HYPER_INSIGHT_API_BASE_URL: ${HYPER_INSIGHT_API_BASE_URL:-https://hyper.akooi.com}
+      # AlphaTrace Qwen runner fallback configuration.
+      # API keys are read from the host environment or existing Hyper AI DB config;
+      # do not hard-code secrets in this file.
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+      QWEN_BASE_URL: ${QWEN_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      QWEN_MODEL: ${QWEN_MODEL:-qwen-plus}
+      # AlphaTrace runtime JSON store. /app/data is backed by the app_data Docker volume.
+      ALPHA_TRACE_AGENT_RUN_STORE: ${ALPHA_TRACE_AGENT_RUN_STORE:-json}
+      ALPHA_TRACE_AGENT_RUN_STORE_PATH: ${ALPHA_TRACE_AGENT_RUN_STORE_PATH:-/app/data/alpha_trace_agent_runs.json}
       # Explicitly disable all proxy settings in container
       HTTP_PROXY: ""
       HTTPS_PROXY: ""

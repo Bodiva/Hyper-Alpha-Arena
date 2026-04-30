@@ -304,6 +304,9 @@ cython_debug/
 # *.csv
 backend/static/
 backend/data.db
+backend/runtime_data/
+alpha_trace_agent_runs.json
+*.agent_runs.json
 us_crypto_news.json
 data.db
 backend/tests/

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 import './index.css'
 import './i18n' // Initialize i18n
@@ -40,9 +40,22 @@ import MobileModelChat from '@/components/mobile/MobileModelChat'
 import MobileDashboard from '@/components/mobile/MobileDashboard'
 import MobilePrograms from '@/components/mobile/MobilePrograms'
 import ProgramTrader from '@/components/program/ProgramTrader'
-import SettingsPage from '@/components/settings/SettingsPage'
+import LegacySettingsPage from '@/components/settings/SettingsPage'
 import { SplashScreen, HyperAiOnboarding, HyperAiPage } from '@/components/hyper-ai'
 import ArenaAssets from '@/components/arena/ArenaAssets'
+import DashboardPage from '@/pages/DashboardPage'
+import AssetResearchPage from '@/pages/AssetResearchPage'
+import AssetDetailPage from '@/pages/AssetDetailPage'
+import AgentLabPage from '@/pages/AgentLabPage'
+import AgentRunDetailPage from '@/pages/AgentRunDetailPage'
+import StrategyLabPage from '@/pages/StrategyLabPage'
+import LeaderboardPage from '@/pages/LeaderboardPage'
+import PortfolioWorkspacePage from '@/pages/PortfolioWorkspacePage'
+import EvidenceCenterPage from '@/pages/EvidenceCenterPage'
+import DataSourcesPage from '@/pages/DataSourcesPage'
+import DecisionAttributionPage from '@/pages/DecisionAttributionPage'
+import WorkbenchSettingsPage from '@/pages/SettingsPage'
+import { createHashUrl, parseAlphaTraceRoute } from '@/shared/lib/navigation'
 // Remove CallbackPage import - handle inline
 import { AIDecision, getAccounts, checkMainnetAccounts, approveBuilder, type UnauthorizedAccount } from '@/lib/api'
 import { checkWalletUpgradeNeeded } from '@/lib/hyperliquidApi'
@@ -82,6 +95,18 @@ interface Trade { id: number; order_id: number; account_id: number; symbol: stri
 
 const PAGE_TITLES: Record<string, string> = {
   'hyper-ai': 'Hyper AI',
+  dashboard: 'Dashboard',
+  'asset-research': 'Asset Research',
+  'asset-detail': 'Asset Detail',
+  'agent-lab': 'Agent Lab',
+  'agent-run-detail': 'Agent Run Detail',
+  'strategy-lab': 'Strategy Lab',
+  leaderboard: 'Leaderboard',
+  'portfolio-workspace': 'Portfolio Workspace',
+  'evidence-center': 'Evidence Center',
+  'data-sources': 'Data Sources',
+  'decision-attribution': 'Decision Attribution',
+  'settings-workbench': 'Settings',
   comprehensive: 'Dashboard',
   'system-logs': 'System Logs',
   'prompt-management': 'Prompt Templates',
@@ -98,6 +123,98 @@ const PAGE_TITLES: Record<string, string> = {
   'arena-assets': 'Arena Assets',
 }
 
+interface RouteTarget {
+  page: string
+  query?: string
+}
+
+const normalizePath = (pathname: string): string => {
+  if (pathname === '/') return pathname
+  return pathname.endsWith('/') ? pathname.slice(0, -1) : pathname
+}
+
+const resolvePathToRoute = (pathname: string): RouteTarget | null => {
+  const normalizedPath = normalizePath(pathname)
+
+  if (normalizedPath === '/dashboard') return { page: 'dashboard' }
+  if (normalizedPath === '/assets') return { page: 'asset-research' }
+  if (normalizedPath === '/agent-lab') return { page: 'agent-lab' }
+  if (normalizedPath === '/strategy-lab') return { page: 'strategy-lab' }
+  if (normalizedPath === '/leaderboard') return { page: 'leaderboard' }
+  if (normalizedPath === '/portfolio') return { page: 'portfolio-workspace' }
+  if (normalizedPath === '/evidence') return { page: 'evidence-center' }
+  if (normalizedPath === '/data-sources') return { page: 'data-sources' }
+  if (normalizedPath === '/decision-attribution') return { page: 'decision-attribution' }
+  if (normalizedPath === '/settings') return { page: 'settings-workbench' }
+
+  const assetDetailMatch = normalizedPath.match(/^\/assets\/([^/]+)$/)
+  if (assetDetailMatch) {
+    const assetId = decodeURIComponent(assetDetailMatch[1])
+    return {
+      page: 'asset-detail',
+      query: new URLSearchParams({ assetId }).toString(),
+    }
+  }
+
+  const runDetailMatch = normalizedPath.match(/^\/agent-lab\/runs\/([^/]+)$/)
+  if (runDetailMatch) {
+    const runId = decodeURIComponent(runDetailMatch[1])
+    return {
+      page: 'agent-run-detail',
+      query: new URLSearchParams({ runId }).toString(),
+    }
+  }
+
+  return null
+}
+
+const resolveHashRoute = (hash: string, pathname: string): RouteTarget | null => {
+  const hashParamIndex = hash.indexOf('?')
+  const rawPageName = hashParamIndex !== -1 ? hash.slice(0, hashParamIndex) : hash
+  const query = hashParamIndex !== -1 ? hash.slice(hashParamIndex + 1) : ''
+
+  if (rawPageName === 'settings' && pathname !== '/dashboard') {
+    return query ? { page: 'settings', query } : { page: 'settings' }
+  }
+
+  const alphaTraceTarget = parseAlphaTraceRoute(hash)
+  if (alphaTraceTarget && PAGE_TITLES[alphaTraceTarget.page]) {
+    return alphaTraceTarget
+  }
+
+  const pageName = rawPageName === 'hyper-a' ? 'hyper-ai' : rawPageName
+
+  if (PAGE_TITLES[pageName]) {
+    return query ? { page: pageName, query } : { page: pageName }
+  }
+
+  return null
+}
+
+const getUnknownHashFallback = (hash: string, pathname: string): RouteTarget => {
+  const normalizedHash = hash.split('?')[0].replace(/^\/+/, '')
+  const shouldPreferAlphaTraceDashboard =
+    pathname === '/dashboard' ||
+    [
+      'dashboard',
+      'assets',
+      'agent-lab',
+      'strategy-lab',
+      'evidence',
+      'decision-attribution',
+      'portfolio',
+      'leaderboard',
+      'data-sources',
+      'settings',
+    ].some((prefix) => normalizedHash === prefix || normalizedHash.startsWith(`${prefix}/`))
+
+  console.warn(
+    `[AlphaTrace] Unknown hash route "${hash}". Falling back to ${shouldPreferAlphaTraceDashboard ? 'dashboard' : 'hyper-ai'}.`,
+  )
+
+  return { page: shouldPreferAlphaTraceDashboard ? 'dashboard' : 'hyper-ai' }
+}
+
 function App() {
   const { tradingMode } = useTradingMode()
   const { setUser: setAuthUser } = useAuth()
@@ -111,6 +228,7 @@ function App() {
   const [allAssetCurves, setAllAssetCurves] = useState<any[]>([])
   const [hyperliquidRefreshKey, setHyperliquidRefreshKey] = useState(0)
   const [currentPage, setCurrentPage] = useState<string>('hyper-ai')
+  const [routeQuery, setRouteQuery] = useState<string>('')
   const tradingModeRef = useRef(tradingMode)
 
   /**
@@ -125,7 +243,19 @@ function App() {
    */
   const handlePageChange = useCallback((page: string) => {
     setCurrentPage(page)
+    setRouteQuery('')
     window.location.hash = page
+  }, [])
+
+  const handleRouteNavigate = useCallback((path: string) => {
+    const target = parseAlphaTraceRoute(path) ?? resolvePathToRoute(path)
+    if (!target) {
+      return
+    }
+    setCurrentPage(target.page)
+    setRouteQuery(target.query ?? '')
+    window.history.pushState(null, '', createHashUrl(path))
+    window.dispatchEvent(new Event('hashchange'))
   }, [])
 
   // Hyper AI states - initialization happens during splash
@@ -277,31 +407,46 @@ function App() {
       return
     }
 
-    /**
-     * Hash routing with optional parameters: #page-name or #page-name?view=ID
-     * Extract page name from hash (everything before ? if present)
-     */
     if (hash) {
-      const hashParamIndex = hash.indexOf('?')
-      const pageName = hashParamIndex !== -1 ? hash.slice(0, hashParamIndex) : hash
-      if (PAGE_TITLES[pageName]) {
-        setCurrentPage(pageName)
+      const hashTarget = resolveHashRoute(hash, pathname) ?? getUnknownHashFallback(hash, pathname)
+      setCurrentPage(hashTarget.page)
+      setRouteQuery(hashTarget.query ?? '')
+      return
+    }
+
+    const pathTarget = parseAlphaTraceRoute(pathname) ?? resolvePathToRoute(pathname)
+    if (pathTarget) {
+      setCurrentPage(pathTarget.page)
+      setRouteQuery(pathTarget.query ?? '')
+      if (!window.location.hash) {
+        window.history.replaceState(null, '', createHashUrl(pathname))
       }
     }
   }, [])
 
   // Listen for hash changes (e.g. from Factor Analysis "Ask AI" button)
   useEffect(() => {
-    const onHashChange = () => {
+    const syncRouteFromLocation = () => {
       const hash = window.location.hash.slice(1)
       if (hash) {
-        const paramIdx = hash.indexOf('?')
-        const pageName = paramIdx !== -1 ? hash.slice(0, paramIdx) : hash
-        if (PAGE_TITLES[pageName]) setCurrentPage(pageName)
+        const hashTarget = resolveHashRoute(hash, window.location.pathname) ?? getUnknownHashFallback(hash, window.location.pathname)
+        setCurrentPage(hashTarget.page)
+        setRouteQuery(hashTarget.query ?? '')
+        return
+      }
+
+      const pathTarget = parseAlphaTraceRoute(window.location.pathname) ?? resolvePathToRoute(window.location.pathname)
+      if (pathTarget) {
+        setCurrentPage(pathTarget.page)
+        setRouteQuery(pathTarget.query ?? '')
       }
     }
-    window.addEventListener('hashchange', onHashChange)
-    return () => window.removeEventListener('hashchange', onHashChange)
+    window.addEventListener('hashchange', syncRouteFromLocation)
+    window.addEventListener('popstate', syncRouteFromLocation)
+    return () => {
+      window.removeEventListener('hashchange', syncRouteFromLocation)
+      window.removeEventListener('popstate', syncRouteFromLocation)
+    }
   }, [])
 
   const [accountRefreshTrigger, setAccountRefreshTrigger] = useState<number>(0)
@@ -739,6 +884,10 @@ function App() {
     )
   }
 
+  const routeParams = new URLSearchParams(routeQuery)
+  const selectedAssetId = routeParams.get('assetId') ?? undefined
+  const selectedRunId = routeParams.get('runId') ?? undefined
+
   const renderMainContent = () => {
     const refreshData = () => {
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -754,6 +903,58 @@ function App() {
 
         {currentPage === 'hyper-ai' && (
           <HyperAiPage />
+        )}
+
+        {currentPage === 'dashboard' && (
+          <DashboardPage onNavigate={handleRouteNavigate} />
+        )}
+
+        {currentPage === 'asset-research' && (
+          <AssetResearchPage
+            onOpenAsset={(assetId) => handleRouteNavigate(`/assets/${encodeURIComponent(assetId)}`)}
+          />
+        )}
+
+        {currentPage === 'asset-detail' && (
+          <AssetDetailPage assetId={selectedAssetId} />
+        )}
+
+        {currentPage === 'agent-lab' && (
+          <AgentLabPage
+            onOpenRun={(runId) => handleRouteNavigate(`/agent-lab/runs/${encodeURIComponent(runId)}`)}
+          />
+        )}
+
+        {currentPage === 'agent-run-detail' && (
+          <AgentRunDetailPage runId={selectedRunId} />
+        )}
+
+        {currentPage === 'strategy-lab' && (
+          <StrategyLabPage />
+        )}
+
+        {currentPage === 'leaderboard' && (
+          <LeaderboardPage />
+        )}
+
+        {currentPage === 'portfolio-workspace' && (
+          <PortfolioWorkspacePage />
+        )}
+
+        {currentPage === 'evidence-center' && (
+          <EvidenceCenterPage />
+        )}
+
+        {currentPage === 'data-sources' && (
+          <DataSourcesPage />
+        )}
+
+        {currentPage === 'decision-attribution' && (
+          <DecisionAttributionPage />
+        )}
+
+        {currentPage === 'settings-workbench' && (
+          <WorkbenchSettingsPage />
         )}
 
         {currentPage === 'comprehensive' && (
@@ -846,7 +1047,7 @@ function App() {
         )}
 
         {currentPage === 'settings' && (
-          <SettingsPage />
+          <LegacySettingsPage />
         )}
 
         {currentPage === 'arena-assets' && (

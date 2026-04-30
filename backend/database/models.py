@@ -227,14 +227,14 @@ class CryptoPrice(Base):
 class CryptoKline(Base):
     __tablename__ = "crypto_klines"
 
-    id = Column(Integer, primary_key=True, index=True)
-    exchange = Column(String(20), nullable=False, default="hyperliquid", index=True)
-    symbol = Column(String(20), nullable=False, index=True)
+    id = Column(Integer, primary_key=True)
+    exchange = Column(String(20), nullable=False, default="hyperliquid")
+    symbol = Column(String(20), nullable=False)
     market = Column(String(10), nullable=False, default="CRYPTO")
     period = Column(String(10), nullable=False)  # 1m, 5m, 15m, 30m, 1h, 1d
-    timestamp = Column(Integer, nullable=False, index=True)
+    timestamp = Column(Integer, nullable=False)
     datetime_str = Column(String(50), nullable=False)
-    environment = Column(String(20), nullable=False, default="mainnet", index=True)  # testnet or mainnet
+    environment = Column(String(20), nullable=False, default="mainnet")  # testnet or mainnet
     open_price = Column(DECIMAL(18, 6), nullable=True)
     high_price = Column(DECIMAL(18, 6), nullable=True)
     low_price = Column(DECIMAL(18, 6), nullable=True)
