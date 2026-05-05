@@ -4767,3 +4767,47 @@ Validation:
 
 1. `python -m py_compile backend/api/alpha_trace_agent_runtime_routes.py backend/services/async_tasks/mysql_store.py`.
 2. Runtime API smoke after backend reload/restart window.
+
+## M141 - Evidence Retrieve ToolAdapter
+
+Status: Completed
+
+Goal:
+
+Wrap `evidence.retrieve` behind `ToolAdapter` so future orchestrators can invoke evidence retrieval through a governed tool boundary.
+
+Scope:
+
+1. Add `EvidenceRetrieveToolAdapter`.
+2. Register it in default integration registry.
+3. Do not replace current runner calls yet.
+
+Acceptance:
+
+1. Adapter can retrieve static evidence when invoked directly.
+
+Validation:
+
+1. `python -m py_compile backend/services/integration_adapters/tool_adapters.py backend/services/integration_adapters/registry.py`.
+
+## M142 - Market Context ToolAdapter
+
+Status: Completed
+
+Goal:
+
+Wrap `market.context.load` behind `ToolAdapter` so future orchestrators can invoke market context through a governed tool boundary.
+
+Scope:
+
+1. Add `MarketContextToolAdapter`.
+2. Register it in default integration registry.
+3. Do not replace current runner calls yet.
+
+Acceptance:
+
+1. Adapter can load static market context when invoked directly.
+
+Validation:
+
+1. `python -m py_compile backend/services/integration_adapters/tool_adapters.py backend/services/integration_adapters/registry.py`.

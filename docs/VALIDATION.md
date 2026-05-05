@@ -1917,3 +1917,13 @@ After backend reload/restart, smoke:
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/agent-runs/runtime/tasks
 ```
+
+### M141-M142 Evidence and Market ToolAdapters
+
+Run:
+
+```powershell
+python -m py_compile backend/services/integration_adapters/tool_adapters.py backend/services/integration_adapters/registry.py backend/services/integration_adapters/__init__.py
+```
+
+Optional local smoke invokes both adapters with static data and `includeExternal=False` for evidence to avoid network dependency.

@@ -7,6 +7,7 @@ from services.integration_adapters.base import IntegrationAdapter
 from services.integration_adapters.bocha_adapter import BochaDataProviderAdapter
 from services.integration_adapters.market_data_adapter import StaticMarketDataProviderAdapter
 from services.integration_adapters.qwen_model_adapter import QwenModelProviderAdapter
+from services.integration_adapters.tool_adapters import EvidenceRetrieveToolAdapter, MarketContextToolAdapter
 
 
 class IntegrationAdapterRegistry:
@@ -53,6 +54,8 @@ def build_default_integration_registry() -> IntegrationAdapterRegistry:
     registry.register(BochaDataProviderAdapter())
     registry.register(StaticMarketDataProviderAdapter())
     registry.register(QwenModelProviderAdapter())
+    registry.register(EvidenceRetrieveToolAdapter())
+    registry.register(MarketContextToolAdapter())
     return registry
 
 

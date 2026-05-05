@@ -3641,3 +3641,31 @@ Validation:
 
 Notes:
 - Current submit flow is not yet writing task snapshots, so the endpoint may return an empty list until a later wiring milestone.
+
+## 2026-05-05 - M141-M142 Evidence and Market ToolAdapters
+
+Goal:
+- Add governed ToolAdapter wrappers for `evidence.retrieve` and `market.context.load`.
+
+Changes:
+- Added `backend/services/integration_adapters/tool_adapters.py`.
+- Registered `EvidenceRetrieveToolAdapter` and `MarketContextToolAdapter` in default integration registry.
+- Updated integration adapter exports.
+
+Validation:
+- Pending py_compile and optional local static smoke.
+
+Notes:
+- Current Qwen/Native runners are not rewired yet. This keeps behavior stable while introducing the future execution boundary.
+
+## 2026-05-05 - M141-M142 ToolAdapter Local Smoke
+
+Validation:
+- `python -m py_compile backend/services/integration_adapters/tool_adapters.py backend/services/integration_adapters/registry.py backend/services/integration_adapters/__init__.py`: passed.
+- Local static smoke passed:
+  - `EvidenceRetrieveToolAdapter` returned 2 evidence IDs for `asset_etf_510300` with `includeExternal=False`.
+  - `MarketContextToolAdapter` returned market context for `asset_etf_510300`.
+- Local Python emitted the same requests dependency warning; unrelated to adapter behavior.
+
+Next:
+- M143 can begin a runtime-safe migration by optionally letting Native/Qwen runner call these ToolAdapters behind a feature flag, or continue with ModelProvider extraction tests.

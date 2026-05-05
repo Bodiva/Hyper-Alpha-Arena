@@ -19,6 +19,7 @@ from services.integration_adapters.bocha_adapter import BochaDataProviderAdapter
 from services.integration_adapters.market_data_adapter import StaticMarketDataProviderAdapter
 from services.integration_adapters.qwen_model_adapter import QwenModelProviderAdapter
 from services.integration_adapters.registry import IntegrationAdapterRegistry, build_default_integration_registry
+from services.integration_adapters.tool_adapters import EvidenceRetrieveToolAdapter, MarketContextToolAdapter
 
 __all__ = [
     "DataProviderAdapter",
@@ -41,4 +42,7 @@ __all__ = [
     "QwenModelProviderAdapter",
     "IntegrationAdapterRegistry",
     "build_default_integration_registry",
+    "EvidenceRetrieveToolAdapter",
+    "MarketContextToolAdapter",
 ]
+
