@@ -23,9 +23,11 @@ from schemas.alpha_trace_agent_runtime import (
 )
 from services.agent_runners.base import AgentRunnerContext
 from services.agent_runners.registry import AgentRunnerConfigurationError, AgentRunnerExecutionError
+from services.agent_orchestrator.tool_executor import ToolExecutor
 from services.agent_tool_registry import get_agent_tool_contract
 from services.evidence_retrieval.retriever import EvidenceRetriever, to_evidence_reference
 from services.evidence_retrieval.static_evidence_seed import EvidenceItem
+from services.integration_adapters import MarketContextToolAdapter, ToolInvocationRequest
 from services.evidence_retrieval.support_scoring import score_evidence_support
 from services.market_data_store.market_data_store import get_static_market_data_store
 from services.portfolio_store.portfolio_store import get_static_portfolio_store
@@ -427,6 +429,9 @@ class QwenRunnerAdapter:
         context: AgentRunnerContext,
         run_id: str,
     ) -> Optional[Dict[str, Any]]:
+        if os.getenv("ALPHATRACE_USE_TOOL_ADAPTERS", "").strip().lower() == "true":
+            return self._load_market_context_with_tool_adapter(request, context, run_id)
+
         if not request.assetId:
             return None
 
@@ -489,6 +494,64 @@ class QwenRunnerAdapter:
                     toolName="market.context.load",
                     status="failed",
                     summary=f"Market context load failed; Qwen will continue without market seed context. Error: {exc}",
+                ),
+                agent_name="Market Context Loader",
+                team="analyst_team",
+            )
+            return None
+
+    def _load_market_context_with_tool_adapter(
+        self,
+        request: SubmitAgentRunRequest,
+        context: AgentRunnerContext,
+        run_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        if not request.assetId:
+            return None
+        tool_request = ToolInvocationRequest(
+            tool_id="market.context.load",
+            run_id=run_id,
+            step_id="evidence_retrieval",
+            agent_name="Market Context Loader",
+            args={"assetId": request.assetId},
+        )
+        try:
+            self._append_event(
+                context,
+                run_id,
+                "tool.called",
+                self._step_payload(
+                    "evidence_retrieval",
+                    10,
+                    **ToolExecutor.build_called_payload(tool_request),
+                ),
+                agent_name="Market Context Loader",
+                team="analyst_team",
+            )
+            record = ToolExecutor().execute(MarketContextToolAdapter(), tool_request)
+            self._append_event(
+                context,
+                run_id,
+                "tool.result",
+                self._step_payload("evidence_retrieval", 20, **record.result_payload),
+                agent_name="Market Context Loader",
+                team="analyst_team",
+            )
+            if record.result.status != "completed":
+                return None
+            market_context = (record.result.payload or {}).get("marketContext")
+            return market_context if isinstance(market_context, dict) else None
+        except Exception as exc:
+            self._append_event(
+                context,
+                run_id,
+                "tool.result",
+                self._step_payload(
+                    "evidence_retrieval",
+                    20,
+                    toolName="market.context.load",
+                    status="failed",
+                    summary=f"Market context load failed through ToolAdapter; Qwen will continue without market seed context. Error: {exc}",
                 ),
                 agent_name="Market Context Loader",
                 team="analyst_team",

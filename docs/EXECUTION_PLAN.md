@@ -4833,3 +4833,26 @@ Acceptance:
 Validation:
 
 1. `python -m py_compile backend/services/agent_orchestrator/tool_executor.py`.
+
+## M144 - Feature-Flagged Market Context ToolAdapter Path
+
+Status: Completed
+
+Goal:
+
+Add a safe migration point for Qwen/Native market context loading through `ToolAdapter` and `ToolExecutor`.
+
+Scope:
+
+1. Add `ALPHATRACE_USE_TOOL_ADAPTERS=true` gated path for `market.context.load`.
+2. Default behavior remains unchanged when the flag is absent/false.
+3. Do not migrate evidence retrieval yet.
+
+Acceptance:
+
+1. `qwen_runner.py` compiles.
+2. Default runtime behavior is unchanged.
+
+Validation:
+
+1. `python -m py_compile backend/services/agent_runners/qwen_runner.py backend/services/agent_orchestrator/tool_executor.py backend/services/integration_adapters/tool_adapters.py`.

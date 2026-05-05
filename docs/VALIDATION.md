@@ -1937,3 +1937,13 @@ python -m py_compile backend/services/agent_orchestrator/tool_executor.py
 ```
 
 Optional local smoke executes `MarketContextToolAdapter` through `ToolExecutor`.
+
+### M144 Feature-Flagged Market Context ToolAdapter Path
+
+Run:
+
+```powershell
+python -m py_compile backend/services/agent_runners/qwen_runner.py backend/services/agent_orchestrator/tool_executor.py backend/services/integration_adapters/tool_adapters.py
+```
+
+Runtime smoke with `ALPHATRACE_USE_TOOL_ADAPTERS=true` is optional and should only be run in a safe backend reload window.

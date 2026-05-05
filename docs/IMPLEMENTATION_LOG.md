@@ -3693,3 +3693,19 @@ Validation:
 
 Next:
 - M144 can add a ToolExecutor-backed smoke script or start a feature-flagged migration of market/evidence context loading inside Native/Qwen runner.
+
+## 2026-05-05 - M144 Feature-Flagged Market Context ToolAdapter Path
+
+Goal:
+- Add a default-off migration point for `market.context.load` to use ToolAdapter/ToolExecutor from Qwen/Native runner.
+
+Changes:
+- Updated `backend/services/agent_runners/qwen_runner.py`.
+- When `ALPHATRACE_USE_TOOL_ADAPTERS=true`, market context loading uses `MarketContextToolAdapter` and `ToolExecutor` event payloads.
+- Default path remains unchanged.
+
+Validation:
+- Pending py_compile.
+
+Notes:
+- This is intentionally feature-flagged because existing runs and UI are stable on the current event shape.
