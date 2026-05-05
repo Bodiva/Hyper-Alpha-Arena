@@ -4298,3 +4298,25 @@ Notes:
 
 Next:
 - Continue with a backend event/timeline compaction read model so `reasoning.chunk` and `metric.updated` events do not dominate AgentRunDetail timelines.
+
+## 2026-05-05 - M175 AgentRun Timeline Compaction Read Model
+
+Goal:
+- Add a backend read model that turns noisy raw runtime events into a readable timeline summary.
+
+Changes:
+- Added `backend/services/agent_runtime_timeline.py`.
+- Added `GET /api/alpha-trace/agent-runs/{runId}/timeline-summary` in `backend/api/alpha_trace_agent_runtime_routes.py`.
+
+Validation:
+- `python -m py_compile backend/services/agent_runtime_timeline.py backend/api/alpha_trace_agent_runtime_routes.py`: passed.
+- Local pure-function smoke for chunk and metric compaction: passed.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`: passed.
+
+Notes:
+- Raw `/events` and SSE remain unchanged.
+- The read model groups adjacent `reasoning.chunk` and `metric.updated` events by event type, agent, and step.
+- This directly addresses AgentRunDetail timeline fragmentation without changing persistence or runner behavior.
+
+Next:
+- Continue toward exposing the timeline summary to frontend runtime API clients or wiring AgentRunDetail after resolving existing unrelated frontend dirty state.

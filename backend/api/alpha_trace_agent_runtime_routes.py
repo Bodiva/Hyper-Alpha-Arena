@@ -41,6 +41,7 @@ from services.alpha_trace_agent_runtime_service import (
 )
 from services.agent_runtime_health import find_stale_agent_runs
 from services.agent_runtime_metrics import get_agent_run_metrics_snapshot
+from services.agent_runtime_timeline import get_agent_run_timeline_summary
 from services.architecture_index import get_alphatrace_architecture_index
 from services.agent_orchestrator.execution_policy import get_runner_execution_policy
 from services.agent_orchestrator.capability_matrix import get_runner_capability, list_runner_capabilities, resolve_recommended_runner
@@ -621,6 +622,14 @@ def get_agent_run_metrics_endpoint(run_id: str):
     if not snapshot:
         raise _not_found(run_id)
     return snapshot
+
+
+@router.get("/{run_id}/timeline-summary")
+def get_agent_run_timeline_summary_endpoint(run_id: str, limit: int = Query(120, ge=1, le=500)):
+    summary = get_agent_run_timeline_summary(run_id, limit=limit)
+    if not summary:
+        raise _not_found(run_id)
+    return summary
 
 
 @router.get("", response_model=AgentRunListResponse)

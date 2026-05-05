@@ -2350,3 +2350,28 @@ Expected:
 - Build succeeds.
 - `frontend/app/shared/ui/AgentArtifactPreviewCard.tsx` compiles without new dependencies.
 - No existing page wiring is changed in this milestone.
+
+### M175 AgentRun Timeline Compaction Read Model
+
+Required backend compile:
+
+```powershell
+python -m py_compile backend/services/agent_runtime_timeline.py backend/api/alpha_trace_agent_runtime_routes.py
+```
+
+Required local smoke:
+
+- `summarize_runtime_events` groups adjacent `reasoning.chunk` events.
+- `summarize_runtime_events` groups adjacent `metric.updated` events.
+- Raw event counts remain visible in the summary response.
+
+Required regression:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1
+```
+
+Expected:
+
+- Existing `/events` and `/events/stream` contracts remain unchanged.
+- New `/timeline-summary` endpoint is additive.

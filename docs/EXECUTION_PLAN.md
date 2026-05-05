@@ -5716,3 +5716,34 @@ Validation:
 Rollback:
 
 Remove `frontend/app/shared/ui/AgentArtifactPreviewCard.tsx`.
+
+## M175 - AgentRun Timeline Compaction Read Model
+
+Status: Completed
+
+Goal:
+
+Add a backend read model that groups noisy runtime events into a readable timeline summary.
+
+Scope:
+
+1. Add `agent_runtime_timeline` service.
+2. Compact adjacent `reasoning.chunk` and `metric.updated` events by agent and step.
+3. Add `GET /api/alpha-trace/agent-runs/{runId}/timeline-summary`.
+4. Do not change raw events, SSE, runner execution, or persistence.
+
+Acceptance:
+
+1. Backend py_compile passes.
+2. Local smoke proves adjacent chunk and metric events are grouped.
+3. Existing backend abstraction smoke passes.
+
+Validation:
+
+1. `python -m py_compile backend/services/agent_runtime_timeline.py backend/api/alpha_trace_agent_runtime_routes.py`.
+2. Local pure-function timeline summary smoke.
+3. `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`.
+
+Rollback:
+
+Remove `backend/services/agent_runtime_timeline.py` and the timeline-summary route.
