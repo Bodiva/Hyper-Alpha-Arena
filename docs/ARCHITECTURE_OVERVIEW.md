@@ -26,6 +26,10 @@ Hyper-Alpha-Arena/
       model_providers/                     # Model provider catalog and runtime descriptors
       integration_adapters/                # Qwen/Bocha/tool/professional-data/LangAlpha adapter boundary
       data_api/                            # AlphaTrace data API resource/provider catalog
+      data_center_catalog.py               # Data Center connector/governance/store-routing catalog
+      agent_skill_catalog.py               # Agent-configurable skill descriptor catalog
+      agent_skill_bindings.py              # Agent role -> skill/tool/output binding matrix
+      clickhouse_schema_catalog.py         # Planned ClickHouse business analytics schema catalog
       evidence_retrieval/                  # Static + Bocha evidence retrieval and mapping
       asset_store/                         # Asset domain store, static seed today + ClickHouse target
       strategy_store/                      # Strategy domain store
@@ -50,6 +54,10 @@ Hyper-Alpha-Arena/
       shared/ui/
         RuntimeReadinessPanel.tsx
         DataApiCatalogPanel.tsx
+        DataCenterPanel.tsx
+        AgentSkillPanel.tsx
+        AgentSkillBindingPanel.tsx
+        ClickHouseSchemaPanel.tsx
         ModuleBoundaryPanel.tsx
         ExternalComponentPanel.tsx
         IntegrationDecisionPanel.tsx
@@ -75,6 +83,8 @@ Hyper-Alpha-Arena/
 |---|---|---|
 | AlphaTrace API Layer | Owns frontend-facing REST/SSE product contracts. | Frontend consumes AlphaTrace schemas only. |
 | Domain Stores | Asset/Evidence/Strategy/Portfolio/Decision/Leaderboard product data. | Static seed is fallback; ClickHouse is target structured business persistence. |
+| Data Center | Internal/external connector governance and store routing. | Bocha is one tool input; ClickHouse is the business analytics target. |
+| Agent Skills | Product-level role/skill/tool/output binding contracts. | Runners implement skills but do not own product contracts. |
 | Agent Runtime | Submit, background execution, events, SSE, reports, evidence, decision, artifacts. | Product persistence remains AlphaTrace-owned. |
 | Runner Adapters | Stub/Qwen/Native/TradingAgents/LangAlpha runner boundary. | Runners execute and map back to AlphaTrace schema; they do not own product models. |
 | Integration Adapters | Qwen/Bocha/tools/professional data/LangAlpha external bridge. | Secrets are backend-only; diagnostics are sanitized. |
@@ -104,6 +114,7 @@ flowchart LR
   subgraph RuntimeLayer["Execution & Orchestration"]
     Scheduler["Async Task Scheduler Boundary"]
     Orchestrator["Agent Orchestrator / Task Specs / Flow Catalog"]
+    Bindings["Agent Role / Skill Bindings"]
     Runners["Runner Adapter Registry"]
     Artifacts["AgentArtifact Store"]
   end
@@ -134,6 +145,7 @@ flowchart LR
   APILayer --> Review
   Runtime --> Scheduler
   Runtime --> Orchestrator
+  Orchestrator --> Bindings
   Runtime --> Runners
   Runtime --> Artifacts
   Runners --> Qwen
@@ -145,7 +157,9 @@ flowchart LR
   Domains --> ProData
   DataCenter --> Bocha
   DataCenter --> ProData
+  DataCenter --> ClickHouse
   Skills --> Orchestrator
+  Bindings --> Skills
   Orchestrator --> Skills
   Runtime --> MySQL
   Domains --> ClickHouse

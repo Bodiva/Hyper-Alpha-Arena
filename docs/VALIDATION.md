@@ -2955,3 +2955,16 @@ Expected:
 - `frontend/app/shared/ui/ClickHouseSchemaPanel.tsx` compiles.
 - `ArchitectureReviewPanel` renders `clickHouseSchemas` from the review bundle.
 - No new dependencies are introduced.
+
+### M211 Architecture Overview Directory and Flow Refresh
+
+Documentation-only check:
+
+```powershell
+Select-String -Path docs/ARCHITECTURE_OVERVIEW.md -Pattern "data_center_catalog.py","agent_skill_bindings.py","clickhouse_schema_catalog.py","ClickHouseSchemaPanel","AgentSkillBindingPanel"
+```
+
+Expected:
+
+- Architecture overview lists the new backend catalogs and frontend panels.
+- Diagram mentions Data Center, role/skill bindings, and ClickHouse routing.

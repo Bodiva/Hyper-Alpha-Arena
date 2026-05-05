@@ -6787,3 +6787,30 @@ Validation:
 Rollback:
 
 Remove `ClickHouseSchemaPanel` and the ArchitectureReviewPanel additions.
+
+## M211 - Architecture Overview Directory and Flow Refresh
+
+Status: Completed
+
+Goal:
+
+Refresh the compact architecture overview so the current backend/frontend directory structure and diagrams include Data Center, Agent Skill, role binding, and ClickHouse schema catalog layers.
+
+Scope:
+
+1. Update `docs/ARCHITECTURE_OVERVIEW.md` directory structure.
+2. Update architecture diagram with role/skill bindings and ClickHouse routing.
+3. Do not modify business code.
+
+Acceptance:
+
+1. Overview lists Data Center catalog, Agent Skill catalog, Agent Skill Binding matrix, ClickHouse schema catalog, and frontend panels.
+2. Overview diagram shows Data Center, Skills, Bindings, and ClickHouse flow.
+
+Validation:
+
+1. `Select-String -Path docs/ARCHITECTURE_OVERVIEW.md -Pattern "data_center_catalog.py","agent_skill_bindings.py","clickhouse_schema_catalog.py","ClickHouseSchemaPanel","AgentSkillBindingPanel"`.
+
+Rollback:
+
+Revert the overview document additions.

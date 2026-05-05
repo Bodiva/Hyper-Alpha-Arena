@@ -5053,3 +5053,23 @@ Notes:
 
 Next:
 - Continue with M211: summarize current architecture directory structure and data flow after M204-M210, then decide next implementation slice.
+
+## 2026-05-05 - M211 Architecture Overview Directory and Flow Refresh
+
+Goal:
+- Refresh compact architecture overview with the current Data Center, Agent Skill, Binding, and ClickHouse schema catalog layers.
+
+Changes:
+- Updated `docs/ARCHITECTURE_OVERVIEW.md` directory structure and architecture diagram.
+
+Validation:
+- `Select-String -Path docs/ARCHITECTURE_OVERVIEW.md -Pattern "data_center_catalog.py","agent_skill_bindings.py","clickhouse_schema_catalog.py","ClickHouseSchemaPanel","AgentSkillBindingPanel"`: passed, 5 matches.
+
+Result:
+- M211 is complete. Compact architecture overview now reflects the current Data Center, Skill, Binding, and ClickHouse catalog layers.
+
+Notes:
+- Documentation-only milestone.
+
+Next:
+- Continue with M212: decide whether to add live API smoke for the new runtime catalog endpoints or start ClickHouse migration design.
