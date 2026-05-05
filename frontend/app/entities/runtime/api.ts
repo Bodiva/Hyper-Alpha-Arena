@@ -152,6 +152,25 @@ export interface AgentRunTimelineSummary {
   message?: string;
 }
 
+export interface AgentArtifactTypeDescriptor {
+  artifact_type: AgentArtifactType | string;
+  display_name: string;
+  preview_policy: string;
+  canonical_source: string;
+  embeddable: boolean;
+  persist_preview_payload: boolean;
+  supported_sources: string[];
+  notes: string;
+}
+
+export interface AgentArtifactCatalogResponse {
+  version: number;
+  artifactTypes: AgentArtifactTypeDescriptor[];
+  total: number;
+  policies: JsonRecord;
+  message?: string;
+}
+
 export const getRuntimeArchitectureAsync = () =>
   httpClient.get<RuntimeArchitectureIndex>(ENDPOINTS.alphaTraceAgentRuntimeArchitecture);
 
@@ -172,3 +191,6 @@ export const listAgentRunArtifactsAsync = (runId: string) =>
 
 export const getAgentRunTimelineSummaryAsync = (runId: string) =>
   httpClient.get<AgentRunTimelineSummary>(ENDPOINTS.alphaTraceAgentRunTimelineSummary(runId));
+
+export const getAgentArtifactCatalogAsync = () =>
+  httpClient.get<AgentArtifactCatalogResponse>(ENDPOINTS.alphaTraceAgentRuntimeArtifactCatalog);

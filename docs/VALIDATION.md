@@ -2410,3 +2410,18 @@ Expected:
 - Artifact catalog includes all supported artifact types.
 - Catalog policies state canonical URL and HTML safety behavior.
 - Runtime architecture index links to `/runtime/artifacts/catalog`.
+
+### M178 Frontend Artifact Catalog API Contract
+
+Required frontend build:
+
+```powershell
+pnpm --dir frontend build
+```
+
+Expected:
+
+- Build succeeds.
+- `frontend/app/shared/api/endpoints.ts` exports the artifact catalog endpoint.
+- `frontend/app/entities/runtime/api.ts` exports artifact catalog types and `getAgentArtifactCatalogAsync`.
+- No existing page wiring is changed in this milestone.

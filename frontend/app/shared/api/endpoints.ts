@@ -48,6 +48,7 @@ export const ENDPOINTS = {
   alphaTraceAgentRuntimeConfig: "/alpha-trace/agent-runs/runtime/config",
   alphaTraceAgentRuntimeModelProviders: "/alpha-trace/agent-runs/runtime/model-providers",
   alphaTraceAgentRuntimeOrchestrators: "/alpha-trace/agent-runs/runtime/orchestrators",
+  alphaTraceAgentRuntimeArtifactCatalog: "/alpha-trace/agent-runs/runtime/artifacts/catalog",
   alphaTraceAgentRuntimeLogs: "/alpha-trace/agent-runs/runtime/logs",
   alphaTraceAgentRuntimeWorkers: "/alpha-trace/agent-runs/runtime/workers",
   alphaTraceDemoAgentRun: "/alpha-trace/agent-runs/demo",
@@ -132,6 +133,7 @@ export const ALPHA_TRACE_AGENT_RUNTIME_ARCHITECTURE = ENDPOINTS.alphaTraceAgentR
 export const ALPHA_TRACE_AGENT_RUNTIME_CONFIG = ENDPOINTS.alphaTraceAgentRuntimeConfig;
 export const ALPHA_TRACE_AGENT_RUNTIME_MODEL_PROVIDERS = ENDPOINTS.alphaTraceAgentRuntimeModelProviders;
 export const ALPHA_TRACE_AGENT_RUNTIME_ORCHESTRATORS = ENDPOINTS.alphaTraceAgentRuntimeOrchestrators;
+export const ALPHA_TRACE_AGENT_RUNTIME_ARTIFACT_CATALOG = ENDPOINTS.alphaTraceAgentRuntimeArtifactCatalog;
 export const ALPHA_TRACE_AGENT_RUNTIME_LOGS = ENDPOINTS.alphaTraceAgentRuntimeLogs;
 export const ALPHA_TRACE_AGENT_RUNTIME_WORKERS = ENDPOINTS.alphaTraceAgentRuntimeWorkers;
 export const ALPHA_TRACE_DEMO_AGENT_RUN = ENDPOINTS.alphaTraceDemoAgentRun;

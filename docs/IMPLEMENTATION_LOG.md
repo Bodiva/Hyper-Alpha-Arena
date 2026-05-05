@@ -4363,3 +4363,22 @@ Notes:
 
 Next:
 - Continue with frontend API typing for artifact catalog or a UI-safe diagnostics surface.
+
+## 2026-05-05 - M178 Frontend Artifact Catalog API Contract
+
+Goal:
+- Expose the backend AgentArtifact catalog to frontend API clients.
+
+Changes:
+- Updated `frontend/app/shared/api/endpoints.ts`.
+- Updated `frontend/app/entities/runtime/api.ts`.
+
+Validation:
+- `pnpm --dir frontend build`: passed.
+
+Notes:
+- This is API typing only; no existing page UI was changed.
+- The contract lets future pages render Bocha/LangAlpha/tool artifacts according to backend safety policies.
+
+Next:
+- Continue with a runtime diagnostics read model or a minimal UI-safe page integration once existing frontend dirty state is isolated.
