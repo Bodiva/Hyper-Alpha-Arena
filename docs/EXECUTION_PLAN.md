@@ -7057,3 +7057,35 @@ Validation:
 Rollback:
 
 Set `ALPHA_TRACE_ETF_IMPORT_TABLE=alpha_trace.etf_file_imports` and revert the structured ClickHouse table/import mapper changes.
+
+## M219 - Agent Lab Runner Copy and Store Alias Polish
+
+Status: Completed
+
+Goal:
+
+Make Agent Lab runner actions and failure messages clearer for the current Chinese AlphaTrace workspace, while keeping runner behavior unchanged.
+
+Scope:
+
+1. Add concise Chinese runner labels for stub, Qwen, AlphaTrace Native, and TradingAgents.
+2. Simplify submit/loading/error copy in Agent Lab without changing submit payloads or runner availability logic.
+3. Keep blocked runner behavior intact: unavailable runners remain disabled/blocked based on backend status.
+4. Allow `ALPHA_TRACE_AGENT_ARTIFACT_STORE=db` as a MySQL artifact store alias.
+5. Do not add Strategy Radar / BTC-oriented UI in this milestone.
+
+Acceptance:
+
+1. Frontend build passes.
+2. `agent_artifacts/registry.py` py_compile passes.
+3. Agent Lab still compiles with the same runnerType options.
+4. No backend runner behavior changes.
+
+Validation:
+
+1. `python -m py_compile backend/services/agent_artifacts/registry.py`.
+2. `pnpm --dir frontend build`.
+
+Rollback:
+
+Revert AgentLab copy changes and the artifact store `db` alias.

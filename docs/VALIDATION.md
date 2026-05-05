@@ -3088,3 +3088,11 @@ Required checks:
 3. Import a small structured CSV through `/api/alpha-trace/data-sources/file-imports`.
 4. Query imported batches and rows.
 5. `pnpm --dir frontend build`
+
+## M219 Validation - Agent Lab Runner Copy and Store Alias Polish
+
+Required checks:
+
+1. `python -m py_compile backend/services/agent_artifacts/registry.py`
+2. `pnpm --dir frontend build`
+3. Confirm no Strategy Radar/BTC-oriented page is linked from AlphaTrace navigation.

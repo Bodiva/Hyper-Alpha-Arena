@@ -12,7 +12,7 @@ _MYSQL_STORE: Optional[MysqlAgentArtifactStore] = None
 
 def get_agent_artifact_store() -> AgentArtifactStore:
     store_type = get_agent_artifact_store_type()
-    if store_type == "mysql":
+    if store_type in {"mysql", "db"}:
         global _MYSQL_STORE
         if _MYSQL_STORE is None:
             _MYSQL_STORE = MysqlAgentArtifactStore()

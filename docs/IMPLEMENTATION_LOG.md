@@ -5268,3 +5268,26 @@ M218 runtime validation completion:
 
 M218 result:
 - Complete. ClickHouse now has a structured ETF/index valuation import path.
+
+## 2026-05-05 - M219 Agent Lab Runner Copy and Store Alias Polish
+
+Goal:
+- Make Agent Lab runner controls clearer and keep store naming consistent without changing runner behavior.
+
+Changes:
+- Added concise Chinese runner labels in Agent Lab.
+- Simplified Agent Lab submit/loading/error copy.
+- Kept runner availability checks and submit payloads unchanged.
+- Allowed `ALPHA_TRACE_AGENT_ARTIFACT_STORE=db` as a MySQL-backed artifact store alias.
+- Explicitly excluded the untracked Strategy Radar/BTC-oriented page from this milestone.
+
+Validation:
+- Pending until py_compile and frontend build complete.
+
+M219 validation completion:
+- `python -m py_compile backend/services/agent_artifacts/registry.py`: passed.
+- `pnpm --dir frontend build`: passed with existing chunk/browserslist warnings.
+- Strategy Radar/BTC-oriented files remain untracked and are not linked from AlphaTrace navigation.
+
+M219 result:
+- Complete. Agent Lab runner copy is clearer; runner behavior remains unchanged.
