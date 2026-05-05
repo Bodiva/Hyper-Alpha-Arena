@@ -2375,3 +2375,18 @@ Expected:
 
 - Existing `/events` and `/events/stream` contracts remain unchanged.
 - New `/timeline-summary` endpoint is additive.
+
+### M176 Frontend Timeline Summary API Contract
+
+Required frontend build:
+
+```powershell
+pnpm --dir frontend build
+```
+
+Expected:
+
+- Build succeeds.
+- `frontend/app/shared/api/endpoints.ts` exports the timeline-summary endpoint.
+- `frontend/app/entities/runtime/api.ts` exports timeline summary types and `getAgentRunTimelineSummaryAsync`.
+- No existing page wiring is changed in this milestone.

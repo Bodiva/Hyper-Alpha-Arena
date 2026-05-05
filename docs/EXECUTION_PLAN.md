@@ -5747,3 +5747,31 @@ Validation:
 Rollback:
 
 Remove `backend/services/agent_runtime_timeline.py` and the timeline-summary route.
+
+## M176 - Frontend Timeline Summary API Contract
+
+Status: Completed
+
+Goal:
+
+Expose the AgentRun timeline summary endpoint through frontend API contracts.
+
+Scope:
+
+1. Add `alphaTraceAgentRunTimelineSummary` endpoint constant.
+2. Add `AgentRunTimelineSummary` and `AgentRunTimelineItem` types.
+3. Add `getAgentRunTimelineSummaryAsync(runId)`.
+4. Do not wire existing pages in this milestone.
+
+Acceptance:
+
+1. Frontend build passes.
+2. Timeline summary helper compiles without new dependencies.
+
+Validation:
+
+1. `pnpm --dir frontend build`.
+
+Rollback:
+
+Remove the endpoint constant, types, and helper.

@@ -120,6 +120,38 @@ export interface AgentRunArtifactsResponse {
   error?: string;
 }
 
+export interface AgentRunTimelineItem {
+  itemType: "event" | "streaming.summary" | "metrics.summary" | string;
+  eventType: string;
+  agentName?: string | null;
+  team?: string | null;
+  stepId: string;
+  firstSequence: number;
+  lastSequence: number;
+  startedAt: string;
+  endedAt: string;
+  eventCount: number;
+  title: string;
+  summary: string;
+  charCount: number;
+  payload?: JsonRecord;
+  terminal?: boolean;
+}
+
+export interface AgentRunTimelineSummary {
+  runId: string;
+  status: string;
+  updatedAt?: string | null;
+  completedAt?: string | null;
+  totalRawEvents: number;
+  totalTimelineItems: number;
+  returnedTimelineItems: number;
+  compactedEventTypes: string[];
+  rawEventCounts: Record<string, number>;
+  items: AgentRunTimelineItem[];
+  message?: string;
+}
+
 export const getRuntimeArchitectureAsync = () =>
   httpClient.get<RuntimeArchitectureIndex>(ENDPOINTS.alphaTraceAgentRuntimeArchitecture);
 
@@ -137,3 +169,6 @@ export const getAgentRunMetricsAsync = (runId: string) =>
 
 export const listAgentRunArtifactsAsync = (runId: string) =>
   httpClient.get<AgentRunArtifactsResponse>(ENDPOINTS.alphaTraceAgentRunArtifacts(runId));
+
+export const getAgentRunTimelineSummaryAsync = (runId: string) =>
+  httpClient.get<AgentRunTimelineSummary>(ENDPOINTS.alphaTraceAgentRunTimelineSummary(runId));

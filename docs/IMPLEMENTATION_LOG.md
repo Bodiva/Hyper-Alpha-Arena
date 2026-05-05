@@ -4320,3 +4320,22 @@ Notes:
 
 Next:
 - Continue toward exposing the timeline summary to frontend runtime API clients or wiring AgentRunDetail after resolving existing unrelated frontend dirty state.
+
+## 2026-05-05 - M176 Frontend Timeline Summary API Contract
+
+Goal:
+- Expose the backend AgentRun timeline summary read model to frontend API clients.
+
+Changes:
+- Updated `frontend/app/shared/api/endpoints.ts`.
+- Updated `frontend/app/entities/runtime/api.ts`.
+
+Validation:
+- `pnpm --dir frontend build`: passed.
+
+Notes:
+- This milestone only adds typed API access.
+- No existing page wiring was changed because several frontend pages currently have unrelated dirty edits.
+
+Next:
+- Continue with a backend artifact/timeline catalog or begin page wiring after resolving unrelated frontend dirty state.

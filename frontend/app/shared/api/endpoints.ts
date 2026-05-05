@@ -41,6 +41,7 @@ export const ENDPOINTS = {
   alphaTraceAgentRunWorkerArtifacts: (runId = ":runId") => `/alpha-trace/agent-runs/${runId}/worker-artifacts`,
   alphaTraceAgentRunArtifacts: (runId = ":runId") => `/alpha-trace/agent-runs/${runId}/artifacts`,
   alphaTraceAgentRunMetrics: (runId = ":runId") => `/alpha-trace/agent-runs/${runId}/metrics`,
+  alphaTraceAgentRunTimelineSummary: (runId = ":runId") => `/alpha-trace/agent-runs/${runId}/timeline-summary`,
   alphaTraceAgentRunnerStatus: "/alpha-trace/agent-runs/runners/status",
   alphaTraceAgentRunnerCapabilities: "/alpha-trace/agent-runs/runners/capabilities",
   alphaTraceAgentRuntimeArchitecture: "/alpha-trace/agent-runs/runtime/architecture",
@@ -124,6 +125,7 @@ export const ALPHA_TRACE_AGENT_RUN_CANCEL = ENDPOINTS.alphaTraceAgentRunCancel;
 export const ALPHA_TRACE_AGENT_RUN_WORKER_ARTIFACTS = ENDPOINTS.alphaTraceAgentRunWorkerArtifacts;
 export const ALPHA_TRACE_AGENT_RUN_ARTIFACTS = ENDPOINTS.alphaTraceAgentRunArtifacts;
 export const ALPHA_TRACE_AGENT_RUN_METRICS = ENDPOINTS.alphaTraceAgentRunMetrics;
+export const ALPHA_TRACE_AGENT_RUN_TIMELINE_SUMMARY = ENDPOINTS.alphaTraceAgentRunTimelineSummary;
 export const ALPHA_TRACE_AGENT_RUNNER_STATUS = ENDPOINTS.alphaTraceAgentRunnerStatus;
 export const ALPHA_TRACE_AGENT_RUNNER_CAPABILITIES = ENDPOINTS.alphaTraceAgentRunnerCapabilities;
 export const ALPHA_TRACE_AGENT_RUNTIME_ARCHITECTURE = ENDPOINTS.alphaTraceAgentRuntimeArchitecture;
