@@ -269,6 +269,7 @@ interface BackendEvidenceReference {
   title: string;
   evidenceType: string;
   sourceName: string;
+  sourceType?: string;
   qualityScore: number;
   reliabilityScore?: number;
   summary: string;
@@ -276,6 +277,10 @@ interface BackendEvidenceReference {
   publishedAt?: string | null;
   collectedAt?: string | null;
   relatedAssetIds?: string[];
+  extractedFields?: Array<{ field: string; value: string; confidence?: number }> | Record<string, unknown>;
+  usedByAgentRunIds?: string[];
+  usedByDecisionIds?: string[];
+  metadata?: Record<string, unknown>;
 }
 
 interface BackendRuntimeEvent {
@@ -401,8 +406,26 @@ const mapEvidenceType = (evidenceType: string): EvidenceType => {
     "market_snapshot",
     "industry_data",
     "user_upload",
+    "external_search",
+    "runtime_context",
   ];
   return types.includes(normalized as EvidenceType) ? (normalized as EvidenceType) : "market_snapshot";
+};
+
+const mapBackendExtractedFields = (fields: BackendEvidenceReference["extractedFields"]): Evidence["extractedFields"] => {
+  if (!fields) return [];
+  if (Array.isArray(fields)) {
+    return fields.map((field) => ({
+      field: field.field,
+      value: field.value,
+      confidence: field.confidence ?? 0.8,
+    }));
+  }
+  return Object.entries(fields).map(([field, value]) => ({
+    field,
+    value: String(value),
+    confidence: 0.8,
+  }));
 };
 
 const findAgentIdByName = (agents: Agent[], agentName?: string | null): string => {
@@ -481,6 +504,7 @@ const mapBackendEvidenceReference = (item: BackendEvidenceReference, runId: stri
   title: item.title,
   evidenceType: mapEvidenceType(item.evidenceType),
   sourceName: item.sourceName,
+  sourceType: item.sourceType,
   url: item.url ?? "#",
   publishedAt: item.publishedAt ?? "",
   collectedAt: item.collectedAt ?? item.publishedAt ?? "",
@@ -488,8 +512,10 @@ const mapBackendEvidenceReference = (item: BackendEvidenceReference, runId: stri
   summary: item.summary,
   qualityScore: item.qualityScore,
   reliabilityScore: item.reliabilityScore ?? item.qualityScore,
-  extractedFields: [],
-  usedByAgentRunIds: [runId],
+  extractedFields: mapBackendExtractedFields(item.extractedFields),
+  usedByAgentRunIds: item.usedByAgentRunIds?.length ? item.usedByAgentRunIds : [runId],
+  usedByDecisionIds: item.usedByDecisionIds ?? [],
+  metadata: item.metadata,
 });
 
 const mapBackendAgentRun = (run: BackendAgentRun): AgentRun => {

@@ -49,6 +49,8 @@ def _agent_run_evidence_to_api_item(
             "runScoped": True,
             "resolvedFrom": "agent_run_store",
             "sourceLabel": source_label,
+            "canonicalSourceUrl": evidence.url or "#",
+            "rawExtractedFields": extracted_fields,
             "provenanceStatus": "external_search" if source_type == "bocha_search" else "runtime_context",
             "governanceNote": (
                 "Bocha evidence is an external web-search result. The source URL is the canonical evidence record; "
@@ -205,7 +207,19 @@ def search_alpha_trace_evidence(
 ):
     store = get_static_evidence_store()
     items = store.search(asset_id=assetId, query=q, task_type=taskType, limit=limit)
-    return EvidenceSearchResponse(items=items, total=len(items), query=q, assetId=assetId, taskType=taskType, limit=limit)
+    merged_by_id = {item.evidenceId: item for item in items}
+    for item in _list_run_scoped_evidence(
+        asset_id=assetId,
+        keyword=q,
+        limit=limit,
+    ):
+        merged_by_id.setdefault(item.evidenceId, item)
+    merged_items = sorted(
+        merged_by_id.values(),
+        key=lambda item: (item.collectedAt or item.publishedAt or "", item.qualityScore, item.reliabilityScore),
+        reverse=True,
+    )[:limit]
+    return EvidenceSearchResponse(items=merged_items, total=len(merged_items), query=q, assetId=assetId, taskType=taskType, limit=limit)
 
 
 @router.get("/{evidence_id}", response_model=AlphaTraceEvidenceItem)

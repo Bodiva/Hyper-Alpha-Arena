@@ -700,6 +700,15 @@ export default function EvidenceCenterPage() {
                       )}
                     </div>
 
+                    {selectedEvidence.metadata && Object.keys(selectedEvidence.metadata).length > 0 ? (
+                      <details className="rounded border p-2">
+                        <summary className="cursor-pointer font-medium">Raw metadata / source payload</summary>
+                        <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/30 p-2 text-[11px] text-muted-foreground">
+                          {JSON.stringify(selectedEvidence.metadata, null, 2)}
+                        </pre>
+                      </details>
+                    ) : null}
+
                     <div className="space-y-1">
                       <p className="font-medium">usedByAgentRunIds</p>
                       <div className="flex flex-wrap gap-1">

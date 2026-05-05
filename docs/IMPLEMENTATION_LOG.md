@@ -3228,3 +3228,24 @@ Settings should now display the true backend validation result. A valid Qwen/Das
   - In-process cancellation remains cooperative; restarting the app interrupts active Qwen workers and requires marking old running runs cancelled/failed.
 - Next:
   - Continue M111 - Evidence Detail Traceability for Bocha and Run Evidence, then M112 timeline aggregation cleanup.
+
+## 2026-05-05 - M111 Evidence Detail Traceability
+
+Goal:
+- Make Bocha/run-scoped evidence traceable from AgentRunDetail and Evidence Center.
+
+Changes:
+- Extended AgentRun evidence frontend mapper to preserve sourceType, extractedFields, usedByDecisionIds, and metadata.
+- Extended Evidence API search to merge run-scoped evidence from AgentRunStore, not only static evidence seed.
+- Added canonicalSourceUrl/rawExtractedFields metadata for run-scoped evidence API items.
+- Added collapsible raw metadata/source payload display in Evidence Center detail panel.
+
+Validation:
+- python -m py_compile backend/api/alpha_trace_evidence_routes.py: passed.
+- pnpm --dir frontend build: passed.
+- GET /api/health via 8805: healthy.
+- GET /api/alpha-trace/evidence?sourceType=bocha_search&limit=5: returned Bocha evidence with URL, extractedFields, usedByAgentRunIds, usedByDecisionIds.
+
+Notes:
+- The currently running backend had not reloaded the new /evidence/search merge behavior during smoke, but list/detail already confirmed Bocha evidence exists and is traceable.
+- Existing unrelated Settings module preset changes remain uncommitted and are not part of M111.
