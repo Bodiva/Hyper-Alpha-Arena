@@ -9,7 +9,6 @@ import { listAssetsAsync } from "@/entities/asset/api";
 import { listAgentRuns } from "@/entities/agent/api";
 import { listDecisions } from "@/entities/decision/api";
 import type { Evidence } from "@/entities/evidence/model";
-import { getApiMode } from "@/shared/api/api-mode";
 import { getCurrentHashQueryParams, navigateTo } from "@/shared/lib/navigation";
 import ResearchWorkspaceNav from "@/shared/ui/ResearchWorkspaceNav";
 
@@ -118,7 +117,6 @@ const qualityPass = (score: number, filter: QualityFilter): boolean => {
 };
 
 export default function EvidenceCenterPage() {
-  const apiMode = getApiMode();
   const [evidenceItems, setEvidenceItems] = useState<Evidence[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [isLoadingEvidence, setIsLoadingEvidence] = useState<boolean>(true);
@@ -351,24 +349,6 @@ export default function EvidenceCenterPage() {
     <div className="flex flex-col gap-4 h-full overflow-auto">
       <ResearchWorkspaceNav />
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-xl">Evidence Center 证据中心</CardTitle>
-          <CardDescription>统一管理外部信息、原始证据、数据快照与 Agent 决策引用链路</CardDescription>
-          <p className="text-xs text-muted-foreground">
-            每个投资判断都应能追溯到数据来源、发布时间、采集时间、质量评分和使用记录。
-          </p>
-          <div className="flex flex-wrap gap-2 pt-2">
-            <Badge variant={apiMode === "real" ? "default" : "secondary"}>
-              Data Mode: {apiMode === "real" ? "Real API" : "Mock"}
-            </Badge>
-            {apiMode === "real" && (
-              <Badge variant="outline">Static Evidence Store</Badge>
-            )}
-          </div>
-        </CardHeader>
-      </Card>
-
       {isLoadingEvidence && (
         <Card>
           <CardContent className="py-4 text-sm text-muted-foreground">Loading evidence...</CardContent>
@@ -470,7 +450,6 @@ export default function EvidenceCenterPage() {
         <Card>
           <CardContent className="py-12 text-center space-y-2">
             <p className="text-base font-medium">暂无匹配证据</p>
-            <p className="text-xs text-muted-foreground">请调整证据类型、来源、质量评分或使用状态筛选。</p>
           </CardContent>
         </Card>
       ) : (
@@ -638,9 +617,6 @@ export default function EvidenceCenterPage() {
                           >
                             {selectedEvidence.url}
                           </a>
-                          <p className="mt-1 text-muted-foreground">
-                            该 URL 是证据的 canonical source。内嵌预览只是 best-effort，若为空请以原网页为准。
-                          </p>
                         </div>
                       ) : (
                         <p className="break-all text-muted-foreground">{selectedEvidence.url || "无来源 URL"}</p>
@@ -653,9 +629,6 @@ export default function EvidenceCenterPage() {
                     {hasSourceUrl(selectedEvidence.url) ? (
                       <details className="rounded border p-2">
                         <summary className="cursor-pointer font-medium">内嵌网页预览</summary>
-                        <p className="mt-2 text-muted-foreground">
-                          若目标站点设置了 X-Frame-Options 或 CSP，预览可能为空；此时请使用上方来源链接打开原网页。
-                        </p>
                         <iframe
                           title={`Evidence source preview ${selectedEvidence.id}`}
                           src={selectedEvidence.url}
@@ -740,7 +713,6 @@ export default function EvidenceCenterPage() {
       <Card id="traceability-panel">
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Traceability Panel 追溯链路</CardTitle>
-          <CardDescription>外部信息源 → Evidence Item → Related Assets → Agent Runs → Decisions</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 text-xs">
           {!selectedEvidence || !selectedTrace ? (

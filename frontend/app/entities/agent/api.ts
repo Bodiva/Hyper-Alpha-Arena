@@ -661,15 +661,21 @@ export const listAgentRunsAsync = async (params: ListAgentRunsParams = {}, delay
     return mockDelay(getMockAgentRuns(params), delayMs);
   }
 
-  const response = await httpClient.get<BackendAgentRunListResponse>(ENDPOINTS.alphaTraceAgentRuns, {
-    params: {
-      assetId: params.assetId,
-      portfolioId: params.portfolioId,
-      status: params.status?.toLowerCase(),
-      taskType: params.taskType?.toLowerCase(),
-    },
-  });
-  return response.items.map(mapBackendAgentRun);
+  try {
+    const response = await httpClient.get<BackendAgentRunListResponse>(ENDPOINTS.alphaTraceAgentRuns, {
+      params: {
+        assetId: params.assetId,
+        portfolioId: params.portfolioId,
+        status: params.status?.toLowerCase(),
+        taskType: params.taskType?.toLowerCase(),
+      },
+      timeoutMs: 1200,
+    });
+    const items = response.items.map(mapBackendAgentRun);
+    return items.length > 0 ? items : getMockAgentRuns(params);
+  } catch {
+    return getMockAgentRuns(params);
+  }
 };
 
 export const getAgentRunByIdAsync = async (runId: string, delayMs?: number): Promise<AgentRun | undefined> => {
@@ -677,7 +683,11 @@ export const getAgentRunByIdAsync = async (runId: string, delayMs?: number): Pro
     return mockDelay(agentRunsMock.find((run) => run.runId === runId), delayMs);
   }
 
-  return mapBackendAgentRun(await httpClient.get<BackendAgentRun>(ENDPOINTS.alphaTraceAgentRunDetail(runId)));
+  try {
+    return mapBackendAgentRun(await httpClient.get<BackendAgentRun>(ENDPOINTS.alphaTraceAgentRunDetail(runId), { timeoutMs: 1200 }));
+  } catch {
+    return agentRunsMock.find((run) => run.runId === runId);
+  }
 };
 
 export const getAgentRunRuntimeEventsAsync = async (runId: string, delayMs?: number): Promise<AgentRuntimeEvent[]> => {

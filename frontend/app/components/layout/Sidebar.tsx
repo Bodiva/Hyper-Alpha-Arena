@@ -1,9 +1,8 @@
 import { useState } from 'react'
-import { BarChart3, FileText, NotebookPen, Coins, MessageSquare, Mail, Bot, Ghost, ScrollText, Settings, FlaskConical, Github, ShieldCheck, AlertTriangle } from 'lucide-react'
+import { BarChart3, ChevronDown, FileText, NotebookPen, Coins, MessageSquare, Mail, Bot, Ghost, ScrollText, Settings, FlaskConical, Github, ShieldCheck, AlertTriangle, FileUp } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import ContactDialog from '@/components/contact/ContactDialog'
 import ExchangeModal from '@/components/exchange/ExchangeModal'
-import ExchangeIcon from '@/components/exchange/ExchangeIcon'
 import TradingModeConfirmDialog from '@/components/trading/TradingModeConfirmDialog'
 import { useTradingMode, type TradingMode } from '@/contexts/TradingModeContext'
 import {
@@ -12,6 +11,18 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { PRODUCT_CN_SUBTITLE, PRODUCT_NAME } from '@/shared/lib/product-branding'
+
+const TRADING_CONTEXT_PAGES = new Set([
+  'comprehensive',
+  'trader-management',
+  'program-trader',
+  'signal-management',
+  'attribution',
+  'factor-library',
+  'hyperliquid',
+  'klines',
+])
 
 // AI Trader icon component (custom SVG)
 const AITraderIcon = ({ className }: { className?: string }) => (
@@ -108,9 +119,13 @@ interface SidebarProps {
 
 export default function Sidebar({ currentPage = 'comprehensive', onPageChange, onAccountUpdated }: SidebarProps) {
   const { t, i18n } = useTranslation()
+  const isZh = (i18n.resolvedLanguage || i18n.language || 'zh').toLowerCase().startsWith('zh')
   const { tradingMode, setTradingMode } = useTradingMode()
   const [isExchangeModalOpen, setIsExchangeModalOpen] = useState(false)
   const [confirmTarget, setConfirmTarget] = useState<TradingMode | null>(null)
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
+    automation: true,
+  })
 
   const handleModeClick = (mode: TradingMode) => {
     if (mode === tradingMode) return
@@ -124,122 +139,174 @@ export default function Sidebar({ currentPage = 'comprehensive', onPageChange, o
     setConfirmTarget(null)
   }
 
-  const desktopNav = [
-    { label: t('hyperAi.title', 'Hyper AI'), page: 'hyper-ai', icon: Bot },
-    { label: t('sidebar.dashboard'), page: 'comprehensive', icon: BarChart3 },
-    { label: t('sidebar.aiTrader', 'AI Trader'), page: 'trader-management', icon: Ghost },
-    { label: t('sidebar.prompts', 'Prompts'), page: 'prompt-management', icon: NotebookPen },
-    { label: t('sidebar.programTrader', 'Program Trader'), page: 'program-trader', icon: ScrollText },
-    { label: t('sidebar.signals', 'Signals'), page: 'signal-management', icon: SignalIcon },
-    { label: t('sidebar.attribution', 'Attribution'), page: 'attribution', icon: AttributionIcon },
-    { label: t('sidebar.factorLibrary', 'Factors'), page: 'factor-library', icon: FlaskConical },
-    { label: t('sidebar.manualTrading', 'Manual Trading'), page: 'hyperliquid', icon: Coins },
-    { label: t('sidebar.klines', 'K-Lines'), page: 'klines', icon: KLinesIcon },
-    { label: t('sidebar.systemLogs', 'System Logs'), page: 'system-logs', icon: FileText },
+  const pick = (zh: string, en: string) => isZh ? zh : en
+
+  const toggleNavSection = (sectionId: string) => {
+    setCollapsedSections((prev) => ({
+      ...prev,
+      [sectionId]: !prev[sectionId],
+    }))
+  }
+
+  const navSections = [
+    {
+      id: 'research',
+      label: pick('投研', 'Research'),
+      items: [
+        { label: pick('总览', 'Overview'), page: 'dashboard', icon: BarChart3 },
+        { label: pick('资产研究', 'Assets'), page: 'asset-research', icon: Coins },
+        { label: pick('Agent 实验室', 'Agent Lab'), page: 'agent-lab', icon: Bot },
+        { label: pick('策略实验室', 'Strategy Lab'), page: 'strategy-lab', icon: FlaskConical },
+        { label: pick('组合工作台', 'Portfolio'), page: 'portfolio-workspace', icon: ShieldCheck },
+        { label: pick('证据中心', 'Evidence'), page: 'evidence-center', icon: FileText },
+        { label: pick('数据导入', 'Data Import'), page: 'data-import', icon: FileUp },
+      ],
+    },
+    {
+      id: 'automation',
+      label: pick('自动化', 'Automation'),
+      items: [
+        { label: t('hyperAi.title', 'Hyper AI'), page: 'hyper-ai', icon: Bot },
+        { label: pick('交易总览', 'Dashboard'), page: 'comprehensive', icon: BarChart3 },
+        { label: pick('AI 交易员', 'AI Trader'), page: 'trader-management', icon: Ghost },
+        { label: pick('提示词', 'Prompts'), page: 'prompt-management', icon: NotebookPen },
+        { label: pick('程序交易', 'Program Trader'), page: 'program-trader', icon: ScrollText },
+        { label: pick('信号管理', 'Signals'), page: 'signal-management', icon: SignalIcon },
+        { label: pick('归因分析', 'Attribution'), page: 'attribution', icon: AttributionIcon },
+        { label: pick('因子库', 'Factors'), page: 'factor-library', icon: FlaskConical },
+      ],
+    },
+    {
+      id: 'trading',
+      label: pick('交易与运维', 'Trading & Ops'),
+      items: [
+        { label: pick('手动交易', 'Manual Trading'), page: 'hyperliquid', icon: Coins },
+        { label: pick('K线图表', 'K-Lines'), page: 'klines', icon: KLinesIcon },
+        { label: pick('系统日志', 'System Logs'), page: 'system-logs', icon: FileText },
+        { label: pick('设置', 'Settings'), page: 'settings-workbench', icon: Settings },
+      ],
+    },
   ] as const
 
   const isTestnet = tradingMode === 'testnet'
+  const showTradingContext = TRADING_CONTEXT_PAGES.has(currentPage)
 
   return (
     <>
       {/* Desktop Sidebar - Hidden on mobile */}
-      <aside className="hidden md:flex w-56 border-r h-full flex-col fixed md:relative left-0 top-0 z-50 bg-background">
+      <aside className="hidden md:flex w-64 border-r h-full flex-col fixed md:relative left-0 top-0 z-50 bg-card">
 
         {/* Top: Brand */}
-        <div className="px-4 pt-4 pb-2">
-          <div className="flex items-center gap-2">
-            <img src="/static/logo_app.png" alt="Logo" className="h-7 w-7 object-contain flex-shrink-0" />
-            <span className="text-base font-bold">Hyper Alpha Arena</span>
+        <div className="border-b px-4 py-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">
+              AT
+            </div>
+            <div className="min-w-0">
+              <span className="block truncate text-base font-semibold tracking-tight">{PRODUCT_NAME}</span>
+              <span className="block truncate text-[11px] text-muted-foreground">{PRODUCT_CN_SUBTITLE}</span>
+            </div>
           </div>
         </div>
 
         {/* Environment: Exchange + Trading Mode */}
-        <div className="px-3 pb-3 space-y-2">
-          {/* Exchange */}
-          <div className="rounded-lg bg-muted/40 px-3 py-2">
-            <span className="text-xs font-medium text-muted-foreground">{t('sidebar.exchange', 'Exchange')}</span>
-            <button
-              onClick={() => setIsExchangeModalOpen(true)}
-              className="flex flex-col gap-1.5 w-full mt-1.5 rounded-md hover:bg-muted/60 transition-colors px-1 py-1"
-              title={t('exchange.supportedExchanges', 'Supported Exchanges')}
-            >
-              <div className="flex items-center gap-2.5">
-                <ExchangeIcon exchangeId="hyperliquid" size={18} />
-                <span className="text-sm text-foreground">Hyperliquid</span>
+        {showTradingContext ? (
+          <div className="border-b px-3 py-3">
+            <div className="rounded-md bg-muted/35 p-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-medium text-muted-foreground">{t('sidebar.exchange', 'Exchange')}</span>
+                <button
+                  onClick={() => setIsExchangeModalOpen(true)}
+                  className="rounded-full border bg-background px-2.5 py-1 text-xs font-medium text-foreground transition hover:bg-muted"
+                  title={t('exchange.supportedExchanges', 'Supported Exchanges')}
+                >
+                  Hyperliquid
+                </button>
               </div>
-              <div className="flex items-center gap-2.5">
-                <ExchangeIcon exchangeId="binance" size={18} />
-                <span className="text-sm text-foreground">Binance</span>
-              </div>
-            </button>
+              <TooltipProvider delayDuration={400}>
+                <div className="mt-2 flex overflow-hidden rounded-md border bg-background">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={() => handleModeClick('testnet')}
+                        className={`flex flex-1 items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium transition-all ${
+                          isTestnet
+                            ? 'bg-primary text-primary-foreground'
+                            : 'text-muted-foreground hover:bg-muted'
+                        }`}
+                      >
+                        <ShieldCheck className="h-3.5 w-3.5" />
+                        Testnet
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="max-w-[220px]">
+                      <p className="text-xs">{t('tradingMode.testnetDesc', 'Practice with test funds. Prices and volume differ from Mainnet. No real money at risk.')}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={() => handleModeClick('mainnet')}
+                        className={`flex flex-1 items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium transition-all ${
+                          !isTestnet
+                            ? 'bg-red-500 text-white'
+                            : 'text-muted-foreground hover:bg-muted'
+                        }`}
+                      >
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                        Mainnet
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="max-w-[220px]">
+                      <p className="text-xs">{t('tradingMode.mainnetDesc', 'Real money trading. Signal and market flow data is collected here. Losses are permanent.')}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+              </TooltipProvider>
+            </div>
           </div>
-
-          {/* Trading Mode */}
-          <div className="rounded-lg bg-muted/40 px-3 py-2">
-            <span className="text-xs font-medium text-muted-foreground">{t('sidebar.tradingMode', 'Trading Mode')}</span>
-            <TooltipProvider delayDuration={400}>
-              <div className="flex rounded-lg border border-border overflow-hidden mt-1">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      onClick={() => handleModeClick('testnet')}
-                      className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium transition-all ${
-                        isTestnet
-                          ? 'bg-blue-500 text-white'
-                          : 'text-muted-foreground hover:bg-muted'
-                      }`}
-                    >
-                      <ShieldCheck className="h-3.5 w-3.5" />
-                      Testnet
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="right" className="max-w-[220px]">
-                    <p className="text-xs">{t('tradingMode.testnetDesc', 'Practice with test funds. Prices and volume differ from Mainnet. No real money at risk.')}</p>
-                  </TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      onClick={() => handleModeClick('mainnet')}
-                      className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs font-medium transition-all ${
-                        !isTestnet
-                          ? 'bg-red-500 text-white'
-                          : 'text-muted-foreground hover:bg-muted'
-                      }`}
-                    >
-                      <AlertTriangle className="h-3.5 w-3.5" />
-                      Mainnet
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="right" className="max-w-[220px]">
-                    <p className="text-xs">{t('tradingMode.mainnetDesc', 'Real money trading. Signal and market flow data is collected here. Losses are permanent.')}</p>
-                  </TooltipContent>
-                </Tooltip>
-              </div>
-            </TooltipProvider>
-          </div>
-        </div>
+        ) : null}
 
         {/* Middle: Navigation (scrollable) */}
-        <nav className="flex-1 overflow-y-auto px-4 py-3">
-          <div className="flex flex-col space-y-1.5">
-            {desktopNav.map((item) => {
-              const Icon = item.icon
-              const isActive = currentPage === item.page
-              return (
+        <nav className="flex-1 overflow-y-auto px-3 py-3">
+          <div className="space-y-4">
+            {navSections.map((section) => (
+              <div key={section.id}>
                 <button
-                  key={item.page}
-                  className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                    isActive ? 'bg-secondary/80 text-[#B8860B]' : 'hover:text-[#B8860B] text-muted-foreground'
-                  }`}
-                  onClick={() => onPageChange?.(item.page)}
-                  title={item.label}
+                  type="button"
+                  className="flex w-full items-center justify-between rounded-md px-3 pb-1.5 pt-1 text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground transition hover:bg-muted/60 hover:text-foreground"
+                  onClick={() => toggleNavSection(section.id)}
                 >
-                  <Icon className="w-5 h-5 flex-shrink-0" />
-                  <span>{item.label}</span>
+                  <span>{section.label}</span>
+                  <ChevronDown
+                    className={`h-3.5 w-3.5 transition-transform ${collapsedSections[section.id] ? '-rotate-90' : 'rotate-0'}`}
+                  />
                 </button>
-              )
-            })}
+                {!collapsedSections[section.id] ? (
+                  <div className="mt-1 space-y-1">
+                    {section.items.map((item) => {
+                      const Icon = item.icon
+                      const isActive = currentPage === item.page || (item.page === 'settings-workbench' && currentPage === 'settings')
+                      return (
+                        <button
+                          key={item.page}
+                          className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                            isActive
+                              ? 'bg-primary text-primary-foreground shadow-sm'
+                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                          }`}
+                          onClick={() => onPageChange?.(item.page)}
+                          title={item.label}
+                        >
+                          <Icon className="h-5 w-5 flex-shrink-0" />
+                          <span className="truncate">{item.label}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                ) : null}
+              </div>
+            ))}
           </div>
         </nav>
 
@@ -250,7 +317,7 @@ export default function Sidebar({ currentPage = 'comprehensive', onPageChange, o
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
-                    className="p-2 rounded-md text-muted-foreground hover:text-[#B8860B] hover:bg-muted transition-colors"
+                    className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                     onClick={() => window.open('https://www.akooi.com/docs/guide/getting-started.html', '_blank', 'noopener,noreferrer')}
                   >
                     <HowToUseIcon className="w-4 h-4" />
@@ -264,7 +331,7 @@ export default function Sidebar({ currentPage = 'comprehensive', onPageChange, o
               <Tooltip>
                 <TooltipTrigger asChild>
                   <ContactDialog>
-                    <button className="p-2 rounded-md text-muted-foreground hover:text-[#B8860B] hover:bg-muted transition-colors">
+                    <button className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
                       <Mail className="w-4 h-4" />
                     </button>
                   </ContactDialog>
@@ -278,24 +345,24 @@ export default function Sidebar({ currentPage = 'comprehensive', onPageChange, o
                 <TooltipTrigger asChild>
                   <button
                     className={`p-2 rounded-md transition-colors ${
-                      currentPage === 'settings'
-                        ? 'text-[#B8860B] bg-secondary/80'
-                        : 'text-muted-foreground hover:text-[#B8860B] hover:bg-muted'
+                      currentPage === 'settings-workbench' || currentPage === 'settings'
+                        ? 'text-primary bg-primary/10'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-muted'
                     }`}
-                    onClick={() => onPageChange?.('settings')}
+                    onClick={() => onPageChange?.('settings-workbench')}
                   >
                     <Settings className="w-4 h-4" />
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="top">
-                  <p>{t('sidebar.settings', 'Settings')}</p>
+                  <p>{pick('设置', 'Settings')}</p>
                 </TooltipContent>
               </Tooltip>
 
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
-                    className="p-2 rounded-md text-muted-foreground hover:text-[#B8860B] hover:bg-muted transition-colors"
+                    className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
                     onClick={() => window.open('https://github.com/HammerGPT/Hyper-Alpha-Arena', '_blank', 'noopener,noreferrer')}
                   >
                     <Github className="w-4 h-4" />
@@ -331,10 +398,10 @@ export default function Sidebar({ currentPage = 'comprehensive', onPageChange, o
               : 'hover:bg-muted text-muted-foreground'
           }`}
           onClick={() => onPageChange?.('comprehensive')}
-          title="Dashboard"
+          title={pick('仪表盘', 'Dashboard')}
         >
           <BarChart3 className="w-5 h-5" />
-          <span className="text-xs mt-1">Dashboard</span>
+          <span className="text-xs mt-1">{pick('仪表盘', 'Dashboard')}</span>
         </button>
         <button
           className={`flex flex-col items-center justify-center flex-1 h-12 rounded-lg transition-colors ${
@@ -343,10 +410,10 @@ export default function Sidebar({ currentPage = 'comprehensive', onPageChange, o
               : 'hover:bg-muted text-muted-foreground'
           }`}
           onClick={() => onPageChange?.('klines')}
-          title="K-Lines"
+          title={pick('K线', 'K-Lines')}
         >
           <KLinesIcon className="w-5 h-5" />
-          <span className="text-xs mt-1">K-Lines</span>
+          <span className="text-xs mt-1">{pick('K线', 'K-Lines')}</span>
         </button>
         <button
           className={`flex flex-col items-center justify-center flex-1 h-12 rounded-lg transition-colors ${
@@ -355,10 +422,10 @@ export default function Sidebar({ currentPage = 'comprehensive', onPageChange, o
               : 'hover:bg-muted text-muted-foreground'
           }`}
           onClick={() => onPageChange?.('model-chat')}
-          title="Chat"
+          title={pick('对话', 'Chat')}
         >
           <MessageSquare className="w-5 h-5" />
-          <span className="text-xs mt-1">Chat</span>
+          <span className="text-xs mt-1">{pick('对话', 'Chat')}</span>
         </button>
         <button
           className={`flex flex-col items-center justify-center flex-1 h-12 rounded-lg transition-colors ${
@@ -367,10 +434,10 @@ export default function Sidebar({ currentPage = 'comprehensive', onPageChange, o
               : 'hover:bg-muted text-muted-foreground'
           }`}
           onClick={() => onPageChange?.('program-trader')}
-          title="Programs"
+          title={pick('程序', 'Programs')}
         >
           <MobileProgramsIcon className="w-5 h-5" />
-          <span className="text-xs mt-1">Programs</span>
+          <span className="text-xs mt-1">{pick('程序', 'Programs')}</span>
         </button>
       </nav>
 

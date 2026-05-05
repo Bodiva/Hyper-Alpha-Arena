@@ -611,18 +611,7 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-xl">Agent Lab 多 Agent 投研</CardTitle>
-          <CardDescription>
-            展示 ETF / 基金 / 期货场景下，多 Agent 协同分析、工具调用、证据引用与决策生成过程。
-          </CardDescription>
-          <p className="text-xs text-muted-foreground">
-            不是黑箱结论，而是可追踪、可解释、可复盘的投研过程。
-          </p>
-          <div className="pt-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant={apiMode === "real" ? "secondary" : "outline"}>
-                Data Mode: {apiMode === "real" ? "Real API" : "Mock"}
-              </Badge>
+          <div className="flex flex-wrap items-center gap-2">
               <Button size="sm" variant="outline" onClick={handleCreateDemoRun} disabled={isCreatingDemoRun}>
                 {isCreatingDemoRun ? "Creating demo run..." : "Create Demo Agent Run"}
               </Button>
@@ -654,7 +643,6 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
               >
                 {submittingRunner === "tradingagents" ? "Submitting TradingAgents..." : "Submit TradingAgents PoC Task"}
               </Button>
-            </div>
           </div>
           {demoRunMessage ? <p className="text-xs text-muted-foreground">{demoRunMessage}</p> : null}
           {demoRunError ? <p className="text-xs text-destructive">Agent task failed: {demoRunError}</p> : null}
@@ -845,54 +833,9 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
         </CardHeader>
       </Card>
 
-      <Card className="border-slate-200 bg-slate-50/80">
-        <CardHeader className="pb-3">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="space-y-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <CardTitle className="text-lg">Agent Runner Test Panel</CardTitle>
-                <Badge variant={apiMode === "real" ? "default" : "outline"}>
-                  {apiMode === "real" ? "Real API Mode" : "Mock Mode"}
-                </Badge>
-              </div>
-              <CardDescription>
-                使用后端 `/api/alpha-trace/agent-runs/submit` 验证 runnerType。Qwen 模式会复用原 Hyper AI 的后端模型配置。
-              </CardDescription>
-              <p className="text-xs text-muted-foreground">
-                真实 Qwen 调用需要前端以 Real API mode 启动，并且旧 Hyper AI 已保存 Provider=qwen / Model=qwen-plus / Base URL / API Key。
-                TradingAgents PoC 需要前端指向当前本地后端 8813，并启用 ALPHATRACE_TRADINGAGENTS_ENABLED=true、TRADINGAGENTS_REPO_PATH 和后端 Qwen API Key。
-              </p>
-            </div>
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <Button variant="outline" onClick={() => handleSubmitAgentTask("stub")} disabled={Boolean(submittingRunner)}>
-                {submittingRunner === "stub" ? "Submitting Stub..." : "Submit Stub Agent Task"}
-              </Button>
-              <Button
-                onClick={() => handleSubmitAgentTask("qwen")}
-                disabled={Boolean(submittingRunner) || Boolean(qwenSubmitBlockedReason)}
-                title={qwenSubmitBlockedReason ?? undefined}
-              >
-                {submittingRunner === "qwen" ? "Submitting Qwen..." : "Submit Qwen Agent Task"}
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => handleSubmitAgentTask("tradingagents")}
-                disabled={Boolean(submittingRunner) || Boolean(tradingAgentsSubmitBlockedReason)}
-                title={tradingAgentsSubmitBlockedReason ?? undefined}
-              >
-                {submittingRunner === "tradingagents" ? "Submitting TradingAgents..." : "Submit TradingAgents PoC Task"}
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-      </Card>
-
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Draft Agent Task</CardTitle>
-          <CardDescription>
-            显式选择 runner / task / asset 后提交。这里不会自动 fallback；选择 TradingAgents 就会按 TradingAgents PoC 路径执行或返回明确错误。
-          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 text-xs">
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -1113,7 +1056,6 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
         <Card>
           <CardContent className="py-12 text-center space-y-2">
             <p className="text-base font-medium">暂无匹配 Agent Run</p>
-            <p className="text-xs text-muted-foreground">请调整状态、资产类型、任务类型或时间范围</p>
           </CardContent>
         </Card>
       ) : (

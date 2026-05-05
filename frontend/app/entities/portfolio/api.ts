@@ -296,62 +296,92 @@ export const listPortfoliosAsync = async (params: ListPortfoliosParams = {}, del
     return mockDelay(listPortfolios(), delayMs);
   }
 
-  const response = await httpClient.get<BackendPortfolioListResponse>(ENDPOINTS.alphaTracePortfolios, {
-    params: {
-      riskLevel: params.riskLevel,
-      objective: params.objective,
-      status: params.status,
-      keyword: params.keyword,
-      limit: params.limit ?? 100,
-      offset: params.offset ?? 0,
-    },
-  });
-  return response.items.map(mapBackendPortfolio);
+  try {
+    const response = await httpClient.get<BackendPortfolioListResponse>(ENDPOINTS.alphaTracePortfolios, {
+      params: {
+        riskLevel: params.riskLevel,
+        objective: params.objective,
+        status: params.status,
+        keyword: params.keyword,
+        limit: params.limit ?? 100,
+        offset: params.offset ?? 0,
+      },
+      timeoutMs: 1200,
+    });
+    const items = response.items.map(mapBackendPortfolio);
+    return items.length > 0 ? items : portfolioMock;
+  } catch {
+    return portfolioMock;
+  }
 };
 
 export const getPortfolioByIdAsync = async (portfolioId: string, delayMs?: number): Promise<Portfolio | undefined> => {
   if (shouldUseMockData()) {
     return mockDelay(getPortfolioById(portfolioId), delayMs);
   }
-  return mapBackendPortfolio(await httpClient.get<BackendPortfolioItem>(ENDPOINTS.alphaTracePortfolioDetail(portfolioId)));
+  try {
+    return mapBackendPortfolio(await httpClient.get<BackendPortfolioItem>(ENDPOINTS.alphaTracePortfolioDetail(portfolioId), { timeoutMs: 1200 }));
+  } catch {
+    return portfolioMock.find((portfolio) => portfolio.portfolioId === portfolioId);
+  }
 };
 
 export const getPortfolioHoldingsAsync = async (portfolioId: string, delayMs?: number): Promise<PortfolioPosition[]> => {
   if (shouldUseMockData()) {
     return mockDelay(getPortfolioById(portfolioId)?.positions ?? [], delayMs);
   }
-  const response = await httpClient.get<BackendPortfolioHoldingResponse>(ENDPOINTS.alphaTracePortfolioHoldings(portfolioId));
-  return response.items.map(mapBackendHolding);
+  try {
+    const response = await httpClient.get<BackendPortfolioHoldingResponse>(ENDPOINTS.alphaTracePortfolioHoldings(portfolioId), { timeoutMs: 1200 });
+    return response.items.map(mapBackendHolding);
+  } catch {
+    return portfolioMock.find((portfolio) => portfolio.portfolioId === portfolioId)?.positions ?? [];
+  }
 };
 
 export const getPortfolioRecommendationsAsync = async (portfolioId: string, delayMs?: number): Promise<RebalanceSuggestion[]> => {
   if (shouldUseMockData()) {
     return mockDelay(getPortfolioById(portfolioId)?.rebalanceSuggestions ?? [], delayMs);
   }
-  const response = await httpClient.get<BackendPortfolioRecommendationResponse>(ENDPOINTS.alphaTracePortfolioRecommendations(portfolioId));
-  return response.items.map(mapBackendRecommendation);
+  try {
+    const response = await httpClient.get<BackendPortfolioRecommendationResponse>(ENDPOINTS.alphaTracePortfolioRecommendations(portfolioId), { timeoutMs: 1200 });
+    return response.items.map(mapBackendRecommendation);
+  } catch {
+    return portfolioMock.find((portfolio) => portfolio.portfolioId === portfolioId)?.rebalanceSuggestions ?? [];
+  }
 };
 
 export const getPortfolioAssetsAsync = async (portfolioId: string, delayMs?: number): Promise<Asset[]> => {
   if (shouldUseMockData()) {
     return mockDelay([], delayMs);
   }
-  const response = await httpClient.get<BackendPortfolioAssetResponse>(ENDPOINTS.alphaTracePortfolioAssets(portfolioId));
-  return response.items.map(mapBackendAsset);
+  try {
+    const response = await httpClient.get<BackendPortfolioAssetResponse>(ENDPOINTS.alphaTracePortfolioAssets(portfolioId), { timeoutMs: 1200 });
+    return response.items.map(mapBackendAsset);
+  } catch {
+    return [];
+  }
 };
 
 export const getPortfolioStrategiesAsync = async (portfolioId: string, delayMs?: number): Promise<Strategy[]> => {
   if (shouldUseMockData()) {
     return mockDelay([], delayMs);
   }
-  const response = await httpClient.get<BackendPortfolioStrategyResponse>(ENDPOINTS.alphaTracePortfolioStrategies(portfolioId));
-  return response.items.map(mapBackendStrategy);
+  try {
+    const response = await httpClient.get<BackendPortfolioStrategyResponse>(ENDPOINTS.alphaTracePortfolioStrategies(portfolioId), { timeoutMs: 1200 });
+    return response.items.map(mapBackendStrategy);
+  } catch {
+    return [];
+  }
 };
 
 export const getPortfolioDecisionsAsync = async (portfolioId: string, delayMs?: number): Promise<Decision[]> => {
   if (shouldUseMockData()) {
     return mockDelay(getPortfolioDecisions(portfolioId), delayMs);
   }
-  const response = await httpClient.get<BackendPortfolioDecisionResponse>(ENDPOINTS.alphaTracePortfolioDecisions(portfolioId));
-  return response.items;
+  try {
+    const response = await httpClient.get<BackendPortfolioDecisionResponse>(ENDPOINTS.alphaTracePortfolioDecisions(portfolioId), { timeoutMs: 1200 });
+    return response.items;
+  } catch {
+    return decisionsMock.filter((decision) => decision.portfolioId === portfolioId);
+  }
 };

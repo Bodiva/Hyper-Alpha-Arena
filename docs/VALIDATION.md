@@ -3067,3 +3067,14 @@ Expected:
 
 - Smoke preset can be created and removed from SystemConfig-backed storage.
 - Frontend build passes.
+
+## M217 Validation - Data Import Workspace and ClickHouse Import Browser
+
+Required checks:
+
+1. `python -m py_compile backend/api/alpha_trace_data_source_routes.py backend/schemas/alpha_trace_data_source.py backend/services/clickhouse_business_store.py`
+2. `pnpm --dir frontend build`
+3. `GET /api/alpha-trace/data-sources/file-imports/imports?limit=5`
+4. `GET /api/alpha-trace/data-sources/file-imports/imports/{importId}/rows?limit=2`
+5. `GET /api/alpha-trace/data-sources/file-imports/local-files`
+6. Confirm `/data/` is ignored by Git.

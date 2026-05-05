@@ -122,7 +122,6 @@ export default function LeaderboardPage() {
   const initialRouteParams = useMemo(() => getCurrentHashQueryParams(), []);
   const linkedAssetId = initialRouteParams.get("assetId") ?? undefined;
   const linkedStrategyId = initialRouteParams.get("strategyId") ?? undefined;
-  const linkedDecisionId = initialRouteParams.get("decisionId") ?? undefined;
   const routeAssetType = initialRouteParams.get("assetType");
 
   const linkedAssetType = useMemo(() => {
@@ -286,58 +285,34 @@ export default function LeaderboardPage() {
   return (
     <div className="flex flex-col gap-4 h-full overflow-auto">
       <ResearchWorkspaceNav />
-
-      <Card>
-        <CardContent className="pt-6">
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 items-stretch">
-            <div className="xl:col-span-2 space-y-2">
-              <h2 className="text-2xl font-semibold">Leaderboard 策略排行榜</h2>
-              <Badge variant={apiMode === "real" ? "default" : "secondary"}>
-                Data Mode: {apiMode === "real" ? "Real API / Runtime Quality Leaderboard" : "Mock"}
-              </Badge>
-              <p className="text-sm text-muted-foreground">
-                多 AI 交易员 / 多策略 / 多观点的运行质量对比中心
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {isRealMode
-                  ? "当前为 Agent Runtime 质量排行，不是真实收益回测排行；指标来自 Agent Run、Decision、Evidence 与 Report。"
-                  : "支持 ETF、基金、期货及多资产组合策略的收益、风险、证据质量和风控表现评估。"}
-              </p>
-              {linkedDecisionId ? (
-                <p className="text-xs text-muted-foreground">当前从决策链路进入：decisionId={linkedDecisionId}</p>
-              ) : null}
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardDescription>AI 交易员数量</CardDescription>
-                  <CardTitle className="text-lg">{totalTraderCount}</CardTitle>
-                </CardHeader>
-              </Card>
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardDescription>策略数量</CardDescription>
-                  <CardTitle className="text-lg">{strategyCount}</CardTitle>
-                </CardHeader>
-              </Card>
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardDescription>覆盖资产类型</CardDescription>
-                  <CardTitle className="text-lg">{coverageTypes.size}</CardTitle>
-                </CardHeader>
-              </Card>
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardDescription>平均证据/风控评分</CardDescription>
-                  <CardTitle className="text-lg">
-                    {avgEvidenceScore.toFixed(1)} / {avgRiskScore.toFixed(1)}
-                  </CardTitle>
-                </CardHeader>
-              </Card>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>AI 交易员数量</CardDescription>
+            <CardTitle className="text-lg">{totalTraderCount}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>策略数量</CardDescription>
+            <CardTitle className="text-lg">{strategyCount}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>覆盖资产类型</CardDescription>
+            <CardTitle className="text-lg">{coverageTypes.size}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>平均证据/风控评分</CardDescription>
+            <CardTitle className="text-lg">
+              {avgEvidenceScore.toFixed(1)} / {avgRiskScore.toFixed(1)}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+      </div>
 
       {isLoadingLeaderboard ? (
         <Card>
@@ -429,7 +404,6 @@ export default function LeaderboardPage() {
         <Card>
           <CardContent className="py-12 text-center space-y-2">
             <p className="text-base font-medium">暂无匹配策略</p>
-            <p className="text-xs text-muted-foreground">请调整资产类型、策略风格或时间区间</p>
           </CardContent>
         </Card>
       ) : (
@@ -456,7 +430,6 @@ export default function LeaderboardPage() {
               </CardHeader>
               <CardContent className="text-xs text-muted-foreground">
                 <p>{isRealMode ? leaders!.topCompletedRuns.traderName : leaders!.minDrawdown.traderName}</p>
-                <p>{isRealMode ? "完成运行样本最多" : "风格稳定性较好"}</p>
               </CardContent>
             </Card>
             <Card>
@@ -468,7 +441,6 @@ export default function LeaderboardPage() {
               </CardHeader>
               <CardContent className="text-xs text-muted-foreground">
                 <p>{isRealMode ? leaders!.topConfidence.traderName : leaders!.topSharpe.traderName}</p>
-                <p>{isRealMode ? "来自 Agent Decision 置信度" : "收益风险性价比最佳"}</p>
               </CardContent>
             </Card>
             <Card>
@@ -478,7 +450,6 @@ export default function LeaderboardPage() {
               </CardHeader>
               <CardContent className="text-xs text-muted-foreground">
                 <p>{leaders!.topEvidence.strategyName}</p>
-                <p>证据质量完整度突出</p>
               </CardContent>
             </Card>
             <Card>
@@ -488,7 +459,6 @@ export default function LeaderboardPage() {
               </CardHeader>
               <CardContent className="text-xs text-muted-foreground">
                 <p>{leaders!.topRisk.strategyName}</p>
-                <p>风险控制表现领先</p>
               </CardContent>
             </Card>
           </div>
@@ -498,11 +468,6 @@ export default function LeaderboardPage() {
               <CardTitle className="text-base">
                 {isRealMode ? "Agent Runtime 质量排行榜" : "策略排行榜（综合评分排序）"}
               </CardTitle>
-              <CardDescription>
-                {isRealMode
-                  ? "运行质量评分 = 完成度 + 置信度 + 证据 + 报告 - 失败和风险警告；当前不代表真实收益回测。"
-                  : "综合评分 = 收益 + Sharpe + 证据 + 风控 - 回撤（标准化后）"}
-              </CardDescription>
             </CardHeader>
             <CardContent>
               <Table>
@@ -784,7 +749,7 @@ export default function LeaderboardPage() {
                 </div>
               </div>
               <div className="space-y-2">
-                <p className="text-xs text-muted-foreground">投资逻辑 summary</p>
+                <p className="text-xs text-muted-foreground">Summary</p>
                 <p className="text-xs">{topStrategy!.summary}</p>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-1 gap-3">

@@ -82,3 +82,38 @@ class LocalImportFile(BaseModel):
 class LocalImportFileListResponse(BaseModel):
     basePath: str
     items: List[LocalImportFile] = Field(default_factory=list)
+
+
+class ImportedFileBatch(BaseModel):
+    importId: str
+    sourceName: str
+    fileName: str
+    rows: int
+    assetSymbol: str = ""
+    assetName: str = ""
+    minTradeDate: Optional[str] = None
+    maxTradeDate: Optional[str] = None
+    importedAt: str
+
+
+class ImportedFileBatchListResponse(BaseModel):
+    items: List[ImportedFileBatch] = Field(default_factory=list)
+    total: int
+    limit: int
+    offset: int = 0
+
+
+class ImportedFileRow(BaseModel):
+    rowNumber: int
+    assetSymbol: str = ""
+    assetName: str = ""
+    tradeDate: Optional[str] = None
+    payload: Dict[str, Any] = Field(default_factory=dict)
+
+
+class ImportedFileRowsResponse(BaseModel):
+    importId: str
+    items: List[ImportedFileRow] = Field(default_factory=list)
+    total: int
+    limit: int
+    offset: int = 0

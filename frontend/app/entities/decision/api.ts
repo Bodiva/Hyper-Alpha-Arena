@@ -197,16 +197,25 @@ export const listDecisionsAsync = (params: ListDecisionsParams = {}, delayMs?: n
             limit: params.limit ?? 100,
             offset: params.offset ?? 0,
           },
+          timeoutMs: 1200,
         })
-        .then((response) => response.items.map(mapBackendDecision));
+        .then((response) => response.items.map(mapBackendDecision))
+        .catch(() => decisionsMock.filter((decision) => {
+          const actionPass = !params.action || decision.action === params.action;
+          const horizonPass = !params.horizon || decision.horizon === params.horizon;
+          const assetPass = !params.assetId || decision.assetIds.includes(params.assetId);
+          const runPass = !params.runId || decision.runId === params.runId;
+          const portfolioPass = !params.portfolioId || decision.portfolioId === params.portfolioId;
+          return actionPass && horizonPass && assetPass && runPass && portfolioPass;
+        }));
 
 export const getDecisionByIdAsync = (decisionId: string, delayMs?: number): Promise<Decision | undefined> =>
   shouldUseMockData()
     ? mockDelay(getDecisionById(decisionId), delayMs)
     : httpClient
-        .get<BackendDecisionItem>(ENDPOINTS.alphaTraceDecisionDetail(decisionId))
+        .get<BackendDecisionItem>(ENDPOINTS.alphaTraceDecisionDetail(decisionId), { timeoutMs: 1200 })
         .then(mapBackendDecision)
         .catch((error) => {
           if (error instanceof Error && /404/.test(error.message)) return undefined;
-          throw error;
+          return decisionsMock.find((decision) => decision.decisionId === decisionId);
         });

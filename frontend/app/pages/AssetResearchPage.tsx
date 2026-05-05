@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { Asset, AssetType } from "@/entities/asset/model";
 import type { Evidence } from "@/entities/evidence/model";
 import { listAssetsAsync } from "@/entities/asset/api";
@@ -7,9 +8,9 @@ import { listAgentRuns } from "@/entities/agent/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { getApiMode } from "@/shared/api/api-mode";
 import { getCurrentHashQueryParams, navigateTo } from "@/shared/lib/navigation";
 import ResearchWorkspaceNav from "@/shared/ui/ResearchWorkspaceNav";
+import ResearchAssetChart from "@/shared/ui/ResearchAssetChart";
 
 interface AssetResearchPageProps {
   onOpenAsset?: (assetId: string) => void;
@@ -86,7 +87,8 @@ const renderAssetKeyMetrics = (asset: Asset) => {
 };
 
 export default function AssetResearchPage({ onOpenAsset }: AssetResearchPageProps) {
-  const apiMode = getApiMode();
+  const { i18n } = useTranslation();
+  const isZh = i18n.language?.startsWith("zh");
   const [assets, setAssets] = useState<Asset[]>([]);
   const [evidenceItems, setEvidenceItems] = useState<Evidence[]>([]);
   const [isLoadingAssets, setIsLoadingAssets] = useState(true);
@@ -110,6 +112,31 @@ export default function AssetResearchPage({ onOpenAsset }: AssetResearchPageProp
   const [marketFilter, setMarketFilter] = useState<MarketFilter>("ALL");
   const [tagFilter, setTagFilter] = useState<TagFilter>("ALL");
   const [searchKeyword, setSearchKeyword] = useState(querySource ?? "");
+  const [chartAssetId, setChartAssetId] = useState<string | null>(queryAssetId);
+  const text = {
+    all: isZh ? "全部" : "All",
+    type: isZh ? "类型" : "Type",
+    market: isZh ? "市场" : "Market",
+    tags: isZh ? "标签" : "Tags",
+    search: isZh ? "搜索" : "Search",
+    total: isZh ? "资产" : "Assets",
+    etf: "ETF",
+    fund: isZh ? "基金" : "Funds",
+    future: isZh ? "期货" : "Futures",
+    index: isZh ? "指数" : "Index",
+    evidence: isZh ? "证据" : "Evidence",
+    runs: "Agent Runs",
+    empty: isZh ? "无匹配资产" : "No assets",
+    detail: isZh ? "详情" : "Detail",
+    agent: isZh ? "Agent 分析" : "Agent",
+    portfolio: isZh ? "加入组合" : "Portfolio",
+    relatedEvidence: isZh ? "证据" : "Evidence",
+    attribution: isZh ? "归因" : "Attribution",
+    strategy: isZh ? "策略" : "Strategy",
+    metrics: isZh ? "指标" : "Metrics",
+    loading: isZh ? "加载资产..." : "Loading assets...",
+  };
+  const optionLabel = (value: string) => (value === "ALL" ? text.all : value);
 
   useEffect(() => {
     let cancelled = false;
@@ -196,27 +223,18 @@ export default function AssetResearchPage({ onOpenAsset }: AssetResearchPageProp
     );
   }, [agentRuns, assets, evidenceItems]);
 
+  const chartFocusAsset = useMemo(() => {
+    if (filteredAssets.length === 0) return undefined;
+    return filteredAssets.find((asset) => asset.id === chartAssetId) ?? filteredAssets[0];
+  }, [chartAssetId, filteredAssets]);
+
   return (
     <div className="flex flex-col gap-4 h-full overflow-auto">
       <ResearchWorkspaceNav />
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-xl">Asset Research 资产研究</CardTitle>
-          <CardDescription>面向 ETF / 基金 / 期货 / 指数的资产画像、证据追踪与 Agent 分析入口</CardDescription>
-          <p className="text-xs text-muted-foreground">从资产理解出发，连接证据、策略、组合和多 Agent 投研。</p>
-          <div className="flex flex-wrap gap-2 pt-2">
-            <Badge variant={apiMode === "real" ? "default" : "secondary"}>
-              Data Mode: {apiMode === "real" ? "Real API" : "Mock"}
-            </Badge>
-            {apiMode === "real" ? <Badge variant="outline">Static Asset Store</Badge> : null}
-          </div>
-        </CardHeader>
-      </Card>
-
       {isLoadingAssets ? (
         <Card>
-          <CardContent className="py-4 text-sm text-muted-foreground">Loading assets...</CardContent>
+          <CardContent className="py-4 text-sm text-muted-foreground">{text.loading}</CardContent>
         </Card>
       ) : null}
 
@@ -229,43 +247,43 @@ export default function AssetResearchPage({ onOpenAsset }: AssetResearchPageProp
       <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3">
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>资产总数</CardDescription>
+            <CardDescription>{text.total}</CardDescription>
             <CardTitle className="text-lg">{stats.total}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>ETF 数量</CardDescription>
+            <CardDescription>{text.etf}</CardDescription>
             <CardTitle className="text-lg">{stats.etf}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>基金数量</CardDescription>
+            <CardDescription>{text.fund}</CardDescription>
             <CardTitle className="text-lg">{stats.fund}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>期货数量</CardDescription>
+            <CardDescription>{text.future}</CardDescription>
             <CardTitle className="text-lg">{stats.future}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>指数数量</CardDescription>
+            <CardDescription>{text.index}</CardDescription>
             <CardTitle className="text-lg">{stats.index}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>已关联证据数量</CardDescription>
+            <CardDescription>{text.evidence}</CardDescription>
             <CardTitle className="text-lg">{stats.evidenceCount}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>已关联 Agent Run 数量</CardDescription>
+            <CardDescription>{text.runs}</CardDescription>
             <CardTitle className="text-lg">{stats.runCount}</CardTitle>
           </CardHeader>
         </Card>
@@ -273,11 +291,11 @@ export default function AssetResearchPage({ onOpenAsset }: AssetResearchPageProp
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">筛选条件</CardTitle>
+          <CardTitle className="text-base">{isZh ? "筛选" : "Filters"}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="space-y-2">
-            <p className="text-xs font-medium">资产类型</p>
+            <p className="text-xs font-medium">{text.type}</p>
             <div className="flex flex-wrap gap-2">
               {ASSET_FILTERS.map((item) => (
                 <Button
@@ -286,14 +304,14 @@ export default function AssetResearchPage({ onOpenAsset }: AssetResearchPageProp
                   variant={assetFilter === item ? "default" : "outline"}
                   onClick={() => setAssetFilter(item)}
                 >
-                  {item}
+                  {optionLabel(item)}
                 </Button>
               ))}
             </div>
           </div>
 
           <div className="space-y-2">
-            <p className="text-xs font-medium">市场</p>
+            <p className="text-xs font-medium">{text.market}</p>
             <div className="flex flex-wrap gap-2">
               {MARKET_FILTERS.map((item) => (
                 <Button
@@ -302,40 +320,50 @@ export default function AssetResearchPage({ onOpenAsset }: AssetResearchPageProp
                   variant={marketFilter === item ? "default" : "outline"}
                   onClick={() => setMarketFilter(item)}
                 >
-                  {item}
+                  {optionLabel(item)}
                 </Button>
               ))}
             </div>
           </div>
 
           <div className="space-y-2">
-            <p className="text-xs font-medium">标签</p>
+            <p className="text-xs font-medium">{text.tags}</p>
             <div className="flex flex-wrap gap-2">
               {TAG_FILTERS.map((item) => (
                 <Button key={item} size="sm" variant={tagFilter === item ? "default" : "outline"} onClick={() => setTagFilter(item)}>
-                  {item}
+                  {optionLabel(item)}
                 </Button>
               ))}
             </div>
           </div>
 
           <div className="space-y-2">
-            <p className="text-xs font-medium">搜索</p>
+            <p className="text-xs font-medium">{text.search}</p>
             <input
               value={searchKeyword}
               onChange={(event) => setSearchKeyword(event.target.value)}
-              placeholder="搜索 symbol / name / tag"
+              placeholder={isZh ? "代码 / 名称 / 标签" : "Symbol / name / tag"}
               className="w-full md:max-w-md h-9 rounded-md border bg-background px-3 text-sm"
             />
           </div>
         </CardContent>
       </Card>
 
+      {chartFocusAsset ? (
+        <ResearchAssetChart
+          asset={chartFocusAsset}
+          assetOptions={filteredAssets}
+          selectedAssetId={chartFocusAsset.id}
+          onSelectAsset={setChartAssetId}
+          onOpenAsset={() => handleOpenAsset(chartFocusAsset.id)}
+          onStartAgentAnalysis={() => navigateTo("/agent-lab", { assetId: chartFocusAsset.id })}
+        />
+      ) : null}
+
       {filteredAssets.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center space-y-2">
-            <p className="text-base font-medium">暂无匹配资产</p>
-            <p className="text-xs text-muted-foreground">请调整资产类型、市场、标签或搜索关键词</p>
+            <p className="text-base font-medium">{text.empty}</p>
           </CardContent>
         </Card>
       ) : (
@@ -355,10 +383,10 @@ export default function AssetResearchPage({ onOpenAsset }: AssetResearchPageProp
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-                    <p>Market: {displayMarket(asset.market)}</p>
-                    <p>Currency: {asset.currency}</p>
-                    <p>Evidence: {relatedStats.relatedEvidenceCount}</p>
-                    <p>Agent Runs: {relatedStats.relatedRunCount}</p>
+                    <p>{text.market}: {displayMarket(asset.market)}</p>
+                    <p>CCY: {asset.currency}</p>
+                    <p>{text.evidence}: {relatedStats.relatedEvidenceCount}</p>
+                    <p>{text.runs}: {relatedStats.relatedRunCount}</p>
                   </div>
                   <p className="text-xs text-muted-foreground">{asset.description}</p>
                   <div className="flex flex-wrap gap-2">
@@ -370,28 +398,28 @@ export default function AssetResearchPage({ onOpenAsset }: AssetResearchPageProp
                   </div>
 
                   <div className="rounded border bg-muted/20 p-2">
-                    <p className="text-xs font-medium mb-1">关键指标摘要</p>
+                    <p className="text-xs font-medium mb-1">{text.metrics}</p>
                     {renderAssetKeyMetrics(asset)}
                   </div>
 
                   <div className="flex flex-wrap gap-2 pt-1">
                     <Button size="sm" variant="default" onClick={() => handleOpenAsset(asset.id)}>
-                      查看详情
+                      {text.detail}
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => navigateTo("/agent-lab", { assetId: asset.id })}>
-                      发起 Agent 分析
+                      {text.agent}
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => navigateTo("/portfolio", { assetId: asset.id })}>
-                      加入组合
+                      {text.portfolio}
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => navigateTo("/evidence", { assetId: asset.id })}>
-                      查看相关证据
+                      {text.relatedEvidence}
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => navigateTo("/decision-attribution", { assetId: asset.id })}>
-                      查看决策归因
+                      {text.attribution}
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => navigateTo("/leaderboard", { assetId: asset.id })}>
-                      策略参考
+                      {text.strategy}
                     </Button>
                   </div>
                 </CardContent>
@@ -401,29 +429,6 @@ export default function AssetResearchPage({ onOpenAsset }: AssetResearchPageProp
         </div>
       )}
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">资产类型研究说明</CardTitle>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-muted-foreground">
-          <div className="rounded border p-2">
-            <p className="font-medium text-foreground">ETF</p>
-            <p>关注跟踪指数、流动性、折溢价、跟踪误差、持仓暴露。</p>
-          </div>
-          <div className="rounded border p-2">
-            <p className="font-medium text-foreground">基金</p>
-            <p>关注基金经理、持仓、风格漂移、净值回撤、同类排名。</p>
-          </div>
-          <div className="rounded border p-2">
-            <p className="font-medium text-foreground">期货</p>
-            <p>关注主力合约、基差、期限结构、持仓量、库存和产业事件。</p>
-          </div>
-          <div className="rounded border p-2">
-            <p className="font-medium text-foreground">指数</p>
-            <p>关注成分、行业暴露、风格暴露、宏观和政策敏感性。</p>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }

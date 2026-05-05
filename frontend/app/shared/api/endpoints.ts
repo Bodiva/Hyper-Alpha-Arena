@@ -92,6 +92,8 @@ export const ENDPOINTS = {
   alphaTraceDataSources: "/alpha-trace/data-sources",
   alphaTraceDataApiCatalog: "/alpha-trace/data-sources/api-catalog",
   alphaTraceDataSourceFileImports: "/alpha-trace/data-sources/file-imports",
+  alphaTraceDataSourceImportBatches: "/alpha-trace/data-sources/file-imports/imports",
+  alphaTraceDataSourceImportRows: (importId = ":importId") => `/alpha-trace/data-sources/file-imports/imports/${importId}/rows`,
   alphaTraceDataSourceLocalImportFiles: "/alpha-trace/data-sources/file-imports/local-files",
   alphaTraceDataSourceLocalImport: "/alpha-trace/data-sources/file-imports/local-files/import",
   alphaTraceDataSourceDetail: (sourceId = ":sourceId") => `/alpha-trace/data-sources/${sourceId}`,
@@ -191,6 +193,8 @@ export const ALPHA_TRACE_DECISION_AGENT_RUN = ENDPOINTS.alphaTraceDecisionAgentR
 export const ALPHA_TRACE_DATA_SOURCES = ENDPOINTS.alphaTraceDataSources;
 export const ALPHA_TRACE_DATA_API_CATALOG = ENDPOINTS.alphaTraceDataApiCatalog;
 export const ALPHA_TRACE_DATA_SOURCE_FILE_IMPORTS = ENDPOINTS.alphaTraceDataSourceFileImports;
+export const ALPHA_TRACE_DATA_SOURCE_IMPORT_BATCHES = ENDPOINTS.alphaTraceDataSourceImportBatches;
+export const ALPHA_TRACE_DATA_SOURCE_IMPORT_ROWS = ENDPOINTS.alphaTraceDataSourceImportRows;
 export const ALPHA_TRACE_DATA_SOURCE_LOCAL_IMPORT_FILES = ENDPOINTS.alphaTraceDataSourceLocalImportFiles;
 export const ALPHA_TRACE_DATA_SOURCE_LOCAL_IMPORT = ENDPOINTS.alphaTraceDataSourceLocalImport;
 export const ALPHA_TRACE_DATA_SOURCE_DETAIL = ENDPOINTS.alphaTraceDataSourceDetail;

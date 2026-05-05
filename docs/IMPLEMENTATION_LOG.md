@@ -5201,3 +5201,34 @@ Notes:
 
 Next:
 - Continue with M217: commit the remaining AlphaTrace frontend shell/Data Import/navigation batch or split it into smaller reviewable commits.
+
+## 2026-05-05 - M217 Data Import Workspace and ClickHouse Import Browser
+
+Goal:
+- Make ClickHouse ETF/index file import visible and reviewable from the AlphaTrace frontend.
+
+Changes:
+- Added `/dashboard#data-import` route and navigation entries.
+- Added `DataImportPage` for upload, local `data/test` import, imported batch listing, and row inspection.
+- Added imported batch and imported row backend endpoints backed by ClickHouse.
+- Added frontend data-source helpers for import upload/local import/batches/rows.
+- Added `/data/` to `.gitignore` so local Excel fixtures are not committed.
+- Restored a transient dirty `docker-compose.yml` drift back to the committed MySQL/ClickHouse direction; no compose change is part of this milestone.
+
+Validation:
+- `python -m py_compile backend/api/alpha_trace_data_source_routes.py backend/schemas/alpha_trace_data_source.py backend/services/clickhouse_business_store.py`: passed.
+- `pnpm --dir frontend build`: passed with existing chunk/browserslist warnings.
+- `GET /api/alpha-trace/data-sources/file-imports/local-files`: passed; returned local Excel import candidates.
+- `GET /api/alpha-trace/data-sources/file-imports/imports?limit=5` on 8802: passed; returned ClickHouse import batches.
+- `GET /api/alpha-trace/data-sources/file-imports/imports/etf_import_859f23d3f7da4d589cf3071fcd744062/rows?limit=2`: passed; returned two smoke payload rows.
+- Same imported batch endpoint through 8805 proxy: passed.
+
+Result:
+- M217 is complete. ClickHouse imported data can now be browsed from the AlphaTrace workspace.
+
+Notes:
+- `/data/` is local-only and ignored by Git.
+- This does not yet write AgentRun projections into ClickHouse; it only browses file imports.
+
+Next:
+- Continue with M218: audit and group the remaining frontend workspace simplification/API fallback batch, or split backend MySQL/runtime store hardening into a separate commit if it is coherent.

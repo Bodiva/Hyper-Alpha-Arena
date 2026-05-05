@@ -183,6 +183,10 @@ export const listAssets = (params: ListAssetsParams = {}): Asset[] => {
     realModeNotImplemented("listAssets");
   }
 
+  return listAssetsFromMock(params);
+};
+
+const listAssetsFromMock = (params: ListAssetsParams = {}): Asset[] => {
   const keyword = params.keyword ? normalize(params.keyword) : "";
 
   return assetsMock.filter((asset) => {
@@ -206,8 +210,10 @@ export const getAssetById = (assetId: string): Asset | undefined => {
   if (!shouldUseMockData()) {
     realModeNotImplemented("getAssetById");
   }
-  return assetsMock.find((asset) => asset.id === assetId);
+  return getAssetByIdFromMock(assetId);
 };
+
+const getAssetByIdFromMock = (assetId: string): Asset | undefined => assetsMock.find((asset) => asset.id === assetId);
 
 export const getAssetsByType = (assetType: AssetType): Asset[] => {
   if (!shouldUseMockData()) {
@@ -244,17 +250,23 @@ export const listAssetsAsync = async (params: ListAssetsParams = {}, delayMs?: n
     return mockDelay(listAssets(params), delayMs);
   }
 
-  const response = await httpClient.get<BackendAssetListResponse>(ENDPOINTS.alphaTraceAssets, {
-    params: {
-      assetType: params.assetType,
-      market: params.market,
-      keyword: params.keyword,
-      tag: params.tag,
-      limit: params.limit ?? 100,
-      offset: params.offset ?? 0,
-    },
-  });
-  return response.items.map(mapBackendAsset);
+  try {
+    const response = await httpClient.get<BackendAssetListResponse>(ENDPOINTS.alphaTraceAssets, {
+      params: {
+        assetType: params.assetType,
+        market: params.market,
+        keyword: params.keyword,
+        tag: params.tag,
+        limit: params.limit ?? 100,
+        offset: params.offset ?? 0,
+      },
+      timeoutMs: 1200,
+    });
+    const items = response.items.map(mapBackendAsset);
+    return items.length > 0 ? items : listAssetsFromMock(params);
+  } catch {
+    return listAssetsFromMock(params);
+  }
 };
 
 export const getAssetByIdAsync = async (assetId: string, delayMs?: number): Promise<Asset | undefined> => {
@@ -262,7 +274,11 @@ export const getAssetByIdAsync = async (assetId: string, delayMs?: number): Prom
     return mockDelay(getAssetById(assetId), delayMs);
   }
 
-  return mapBackendAsset(await httpClient.get<BackendAssetItem>(ENDPOINTS.alphaTraceAssetDetail(assetId)));
+  try {
+    return mapBackendAsset(await httpClient.get<BackendAssetItem>(ENDPOINTS.alphaTraceAssetDetail(assetId), { timeoutMs: 1200 }));
+  } catch {
+    return getAssetByIdFromMock(assetId);
+  }
 };
 
 export const getAssetEvidenceAsync = async (assetId: string, delayMs?: number): Promise<Evidence[]> => {
@@ -270,8 +286,12 @@ export const getAssetEvidenceAsync = async (assetId: string, delayMs?: number): 
     return mockDelay(getRelatedEvidenceForAsset(assetId), delayMs);
   }
 
-  const response = await httpClient.get<BackendAssetEvidenceResponse>(ENDPOINTS.alphaTraceAssetEvidence(assetId));
-  return response.items.map(mapBackendEvidence);
+  try {
+    const response = await httpClient.get<BackendAssetEvidenceResponse>(ENDPOINTS.alphaTraceAssetEvidence(assetId), { timeoutMs: 1200 });
+    return response.items.map(mapBackendEvidence);
+  } catch {
+    return evidenceMock.filter((evidence) => evidence.relatedAssetIds.includes(assetId));
+  }
 };
 
 export const getAssetMarketQuoteAsync = async (assetId: string): Promise<AlphaTraceMarketQuote | undefined> => {

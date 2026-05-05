@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { listAssetsAsync } from "@/entities/asset/api";
@@ -8,23 +9,11 @@ import { listEvidenceAsync } from "@/entities/evidence/api";
 import { listDecisionsAsync } from "@/entities/decision/api";
 import { listPortfoliosAsync } from "@/entities/portfolio/api";
 import { listDataSourcesAsync } from "@/entities/data-source/api";
-import {
-  BRAND_BADGE,
-  PRODUCT_CN_FULL_NAME,
-  PRODUCT_CN_SUBTITLE,
-  PRODUCT_DESCRIPTION,
-} from "@/shared/lib/product-branding";
 import { navigateTo } from "@/shared/lib/navigation";
 import ResearchWorkspaceNav from "@/shared/ui/ResearchWorkspaceNav";
 
 interface DashboardPageProps {
   onNavigate?: (path: string) => void;
-}
-
-interface CapabilityCard {
-  title: string;
-  description: string;
-  path: string;
 }
 
 interface DashboardCounts {
@@ -49,55 +38,27 @@ const EMPTY_COUNTS: DashboardCounts = {
   leaderboard: 0,
 };
 
-const WORKFLOW = [
-  { title: "Data Sources", desc: "外部数据接入与同步监控", path: "/data-sources" },
-  { title: "Evidence Center", desc: "证据抽取、质量评分与追溯", path: "/evidence" },
-  { title: "Asset Research", desc: "资产画像、研究入口与标签筛选", path: "/assets" },
-  { title: "Agent Lab", desc: "多 Agent 投研过程与工具调用", path: "/agent-lab" },
-  { title: "Strategy Lab", desc: "规则策略与 Agent 生成策略实验", path: "/strategy-lab" },
-  { title: "Decision Attribution", desc: "建议验证、归因与复盘学习", path: "/decision-attribution" },
-  { title: "Portfolio Workspace", desc: "组合配置、暴露与调仓建议", path: "/portfolio" },
-  { title: "Leaderboard", desc: "多策略量化结果对比中心", path: "/leaderboard" },
+const FLOW = [
+  { en: "Sources", zh: "数据源", path: "/data-sources" },
+  { en: "Evidence", zh: "证据", path: "/evidence" },
+  { en: "Assets", zh: "资产", path: "/assets" },
+  { en: "Agents", zh: "Agent", path: "/agent-lab" },
+  { en: "Strategies", zh: "策略", path: "/strategy-lab" },
+  { en: "Attribution", zh: "归因", path: "/decision-attribution" },
+  { en: "Portfolio", zh: "组合", path: "/portfolio" },
+  { en: "Rank", zh: "排行", path: "/leaderboard" },
 ];
 
-const CAPABILITIES: CapabilityCard[] = [
-  { title: "外部数据接入", description: "管理 API、爬虫、文件导入和同步状态", path: "/data-sources" },
-  { title: "证据链追踪", description: "从来源到证据再到决策的可追溯链路", path: "/evidence" },
-  { title: "多 Agent 投研", description: "分析、辩论、风险提示和决策生成", path: "/agent-lab" },
-  { title: "策略实验室", description: "ETF 轮动、基金筛选、期货择时、多资产配置", path: "/strategy-lab" },
-  { title: "组合工作台", description: "持仓、暴露、风险预算和调仓建议", path: "/portfolio" },
-  { title: "决策归因", description: "建议、证据、结果与错误复盘闭环", path: "/decision-attribution" },
-  { title: "多策略排行榜", description: "多 AI 交易员 / 多策略量化对比", path: "/leaderboard" },
-];
-
-const MOBILE_MARKET_VIEWS = [
-  {
-    title: "ETF / 指数观察",
-    description: "宽基、行业和主题 ETF 的研究入口",
-    metric: "510300.SH",
-    path: "/assets/asset_etf_510300",
-  },
-  {
-    title: "基金净值跟踪",
-    description: "基金风格、回撤和组合适配观察",
-    metric: "000001.OF",
-    path: "/assets/asset_fund_000001",
-  },
-  {
-    title: "期货结构观察",
-    description: "趋势、持仓量、期限结构和风险提示",
-    metric: "IF 主连",
-    path: "/assets/asset_future_if_main",
-  },
-  {
-    title: "Agent 观点",
-    description: "进入 Agent Lab 查看投研过程",
-    metric: "Qwen Runtime",
-    path: "/agent-lab",
-  },
+const MOBILE_SHORTCUTS = [
+  { en: "ETF / Index", zh: "ETF / 指数", metric: "510300.SH", path: "/assets/asset_etf_510300" },
+  { en: "Funds", zh: "基金", metric: "000001.OF", path: "/assets/asset_fund_000001" },
+  { en: "Futures", zh: "期货", metric: "IF MAIN", path: "/assets/asset_future_if_main" },
+  { en: "Agents", zh: "Agent", metric: "Qwen", path: "/agent-lab" },
 ];
 
 export default function DashboardPage({ onNavigate }: DashboardPageProps) {
+  const { i18n } = useTranslation();
+  const isZh = i18n.language?.startsWith("zh");
   const [counts, setCounts] = useState<DashboardCounts>(EMPTY_COUNTS);
   const [isLoadingCounts, setIsLoadingCounts] = useState(true);
   const [countsError, setCountsError] = useState<string | null>(null);
@@ -154,101 +115,57 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
 
   const stats = useMemo(
     () => [
-      { label: "资产数量", value: counts.assets },
-      { label: "证据数量", value: counts.evidence },
-      { label: "Agent Run 数量", value: counts.agentRuns },
-      { label: "策略数量", value: counts.strategies },
-      { label: "组合数量", value: counts.portfolios },
-      { label: "决策数量", value: counts.decisions },
-      { label: "数据源数量", value: counts.dataSources },
-      { label: "Leaderboard 策略数量", value: counts.leaderboard },
+      { label: isZh ? "资产" : "Assets", value: counts.assets },
+      { label: isZh ? "证据" : "Evidence", value: counts.evidence },
+      { label: "Agent Runs", value: counts.agentRuns },
+      { label: isZh ? "策略" : "Strategies", value: counts.strategies },
+      { label: isZh ? "组合" : "Portfolios", value: counts.portfolios },
+      { label: isZh ? "决策" : "Decisions", value: counts.decisions },
+      { label: isZh ? "数据源" : "Sources", value: counts.dataSources },
+      { label: isZh ? "排行" : "Rank", value: counts.leaderboard },
     ],
-    [counts],
+    [counts, isZh],
   );
 
-  return (
-    <div className="flex flex-col gap-4 h-full overflow-auto">
-      <ResearchWorkspaceNav />
+  const label = (item: { en: string; zh: string }) => (isZh ? item.zh : item.en);
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-2xl">{PRODUCT_CN_FULL_NAME}</CardTitle>
-          <CardDescription>{PRODUCT_CN_SUBTITLE}</CardDescription>
-          <p className="text-xs text-muted-foreground">{PRODUCT_DESCRIPTION}</p>
-          <p className="text-xs text-muted-foreground">{BRAND_BADGE}</p>
-        </CardHeader>
-      </Card>
+  return (
+    <div className="flex h-full flex-col gap-4 overflow-auto">
+      <ResearchWorkspaceNav />
 
       <Card className="md:hidden overflow-hidden">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Mobile Market View</CardTitle>
-          <CardDescription>ETF / 基金 / 期货研究入口，不接实时行情</CardDescription>
+          <CardTitle className="text-base">{isZh ? "市场" : "Market"}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="rounded-xl border bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 p-4 text-white">
-            <p className="text-xs text-slate-300">AlphaTrace Market Snapshot</p>
-            <p className="mt-2 text-2xl font-semibold">资产研究视图</p>
-            <p className="mt-1 text-xs text-slate-300">静态资产画像 + Evidence + Agent 观点入口</p>
-            <div className="mt-4 h-16 rounded-lg bg-white/10 p-2">
+          <div className="rounded-lg border bg-slate-950 p-4 text-white">
+            <p className="text-2xl font-semibold">AlphaTrace</p>
+            <div className="mt-4 h-16 rounded-md bg-white/10 p-2">
               <div className="flex h-full items-end gap-1">
                 {[32, 48, 40, 58, 54, 68, 62, 76, 72, 84].map((height, index) => (
-                  <span
-                    key={index}
-                    className="flex-1 rounded-sm bg-emerald-300/80"
-                    style={{ height: `${height}%` }}
-                  />
+                  <span key={index} className="flex-1 rounded-sm bg-emerald-300/80" style={{ height: `${height}%` }} />
                 ))}
               </div>
             </div>
           </div>
           <div className="grid grid-cols-1 gap-2">
-            {MOBILE_MARKET_VIEWS.map((item) => (
+            {MOBILE_SHORTCUTS.map((item) => (
               <button
-                key={item.title}
-                className="rounded-lg border p-3 text-left transition hover:bg-muted/60"
+                key={item.path}
+                className="rounded-md border p-3 text-left transition hover:bg-muted/60"
                 onClick={() => handleNavigate(item.path)}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <p className="font-medium">{item.title}</p>
-                  <span className="rounded-full bg-muted px-2 py-1 text-[11px] text-muted-foreground">{item.metric}</span>
+                  <p className="font-medium">{label(item)}</p>
+                  <span className="rounded-md bg-muted px-2 py-1 text-[11px] text-muted-foreground">{item.metric}</span>
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground">{item.description}</p>
               </button>
             ))}
           </div>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">核心工作流</CardTitle>
-          <CardDescription>
-            Data Sources → Evidence Center → Asset Research → Agent Lab → Strategy Lab → Decision Attribution → Portfolio Workspace → Leaderboard
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2">
-            {WORKFLOW.map((step, index) => (
-              <div key={step.title} className="rounded border p-2 text-xs space-y-2">
-                <p className="font-medium">{step.title}</p>
-                <p className="text-muted-foreground">{step.desc}</p>
-                <div className="flex items-center justify-between gap-2">
-                  <Button size="sm" variant="outline" onClick={() => handleNavigate(step.path)}>
-                    进入
-                  </Button>
-                  {index < WORKFLOW.length - 1 ? (
-                    <span className="text-muted-foreground">→ {WORKFLOW[index + 1].title}</span>
-                  ) : (
-                    <span className="text-muted-foreground">闭环完成</span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         {stats.map((item) => (
           <Card key={item.label}>
             <CardHeader className="pb-2">
@@ -262,22 +179,19 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">关键能力卡片</CardTitle>
+          <CardTitle className="text-base">{isZh ? "流程" : "Flow"}</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-            {CAPABILITIES.map((item) => (
-              <Card key={item.title}>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base">{item.title}</CardTitle>
-                  <CardDescription>{item.description}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Button size="sm" variant="outline" className="w-full" onClick={() => handleNavigate(item.path)}>
-                    打开
-                  </Button>
-                </CardContent>
-              </Card>
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-4">
+            {FLOW.map((step, index) => (
+              <div key={step.path} className="rounded-md border p-2 text-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <button type="button" className="font-medium hover:text-primary" onClick={() => handleNavigate(step.path)}>
+                    {label(step)}
+                  </button>
+                  <span className="text-muted-foreground">{index + 1}</span>
+                </div>
+              </div>
             ))}
           </div>
         </CardContent>
@@ -285,14 +199,14 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">推荐下一步操作</CardTitle>
+          <CardTitle className="text-base">{isZh ? "快捷入口" : "Shortcuts"}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
-          <Button size="sm" onClick={() => handleNavigate("/assets")}>查看资产研究</Button>
-          <Button size="sm" variant="outline" onClick={() => handleNavigate("/agent-lab")}>查看 Agent Lab</Button>
-          <Button size="sm" variant="outline" onClick={() => handleNavigate("/evidence")}>查看证据中心</Button>
-          <Button size="sm" variant="outline" onClick={() => handleNavigate("/strategy-lab")}>查看策略中心</Button>
-          <Button size="sm" variant="outline" onClick={() => handleNavigate("/portfolio")}>查看组合工作台</Button>
+          <Button size="sm" onClick={() => handleNavigate("/assets")}>{isZh ? "资产" : "Assets"}</Button>
+          <Button size="sm" variant="outline" onClick={() => handleNavigate("/agent-lab")}>Agent</Button>
+          <Button size="sm" variant="outline" onClick={() => handleNavigate("/evidence")}>{isZh ? "证据" : "Evidence"}</Button>
+          <Button size="sm" variant="outline" onClick={() => handleNavigate("/strategy-lab")}>{isZh ? "策略" : "Strategies"}</Button>
+          <Button size="sm" variant="outline" onClick={() => handleNavigate("/portfolio")}>{isZh ? "组合" : "Portfolio"}</Button>
         </CardContent>
       </Card>
     </div>

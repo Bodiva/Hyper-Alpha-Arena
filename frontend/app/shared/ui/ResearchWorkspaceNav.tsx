@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { goBackOrDashboard, navigateTo, parseAlphaTraceRoute } from "@/shared/lib/navigation";
-import { BRAND_OWNER, PRODUCT_NAME } from "@/shared/lib/product-branding";
 
 interface NavItem {
   key: string;
-  label: string;
+  labelEn: string;
+  labelZh: string;
   path: string;
 }
 
@@ -14,23 +15,24 @@ interface ResearchWorkspaceNavProps {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { key: "dashboard", label: "Dashboard", path: "/dashboard" },
-  { key: "asset-research", label: "Assets", path: "/assets" },
-  { key: "agent-lab", label: "Agents", path: "/agent-lab" },
-  { key: "strategy-lab", label: "Strategies", path: "/strategy-lab" },
-  { key: "evidence-center", label: "Evidence", path: "/evidence" },
-  { key: "decision-attribution", label: "Decisions", path: "/decision-attribution" },
-  { key: "portfolio-workspace", label: "Portfolio", path: "/portfolio" },
-  { key: "leaderboard", label: "Leaderboard", path: "/leaderboard" },
-  { key: "data-sources", label: "Data Sources", path: "/data-sources" },
-  { key: "settings-workbench", label: "Settings", path: "/settings" },
+  { key: "dashboard", labelEn: "Dashboard", labelZh: "总览", path: "/dashboard" },
+  { key: "asset-research", labelEn: "Assets", labelZh: "资产", path: "/assets" },
+  { key: "agent-lab", labelEn: "Agents", labelZh: "Agent", path: "/agent-lab" },
+  { key: "strategy-lab", labelEn: "Strategies", labelZh: "策略", path: "/strategy-lab" },
+  { key: "evidence-center", labelEn: "Evidence", labelZh: "证据", path: "/evidence" },
+  { key: "decision-attribution", labelEn: "Decisions", labelZh: "归因", path: "/decision-attribution" },
+  { key: "portfolio-workspace", labelEn: "Portfolio", labelZh: "组合", path: "/portfolio" },
+  { key: "leaderboard", labelEn: "Rank", labelZh: "排行", path: "/leaderboard" },
+  { key: "data-sources", labelEn: "Sources", labelZh: "数据源", path: "/data-sources" },
+  { key: "data-import", labelEn: "Import", labelZh: "导入", path: "/data-import" },
+  { key: "settings-workbench", labelEn: "Settings", labelZh: "设置", path: "/settings" },
 ];
 
 const MOBILE_NAV_ITEMS: NavItem[] = [
-  { key: "dashboard", label: "Home", path: "/dashboard" },
-  { key: "asset-research", label: "Market", path: "/assets" },
-  { key: "agent-lab", label: "Agent", path: "/agent-lab" },
-  { key: "portfolio-workspace", label: "Portfolio", path: "/portfolio" },
+  { key: "dashboard", labelEn: "Home", labelZh: "总览", path: "/dashboard" },
+  { key: "asset-research", labelEn: "Assets", labelZh: "资产", path: "/assets" },
+  { key: "agent-lab", labelEn: "Agent", labelZh: "Agent", path: "/agent-lab" },
+  { key: "portfolio-workspace", labelEn: "Portfolio", labelZh: "组合", path: "/portfolio" },
 ];
 
 const getCurrentHashPage = (): string => {
@@ -44,7 +46,9 @@ const getCurrentHashPage = (): string => {
 };
 
 export default function ResearchWorkspaceNav({ className }: ResearchWorkspaceNavProps) {
+  const { i18n } = useTranslation();
   const [currentPage, setCurrentPage] = useState<string>(getCurrentHashPage());
+  const isZh = i18n.language?.startsWith("zh");
 
   useEffect(() => {
     const syncCurrentPage = () => setCurrentPage(getCurrentHashPage());
@@ -64,44 +68,41 @@ export default function ResearchWorkspaceNav({ className }: ResearchWorkspaceNav
 
   return (
     <>
-      <div className={`rounded-lg border bg-muted/20 p-3 ${className ?? ""}`}>
-        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-          <p className="text-xs font-medium">{PRODUCT_NAME} · {BRAND_OWNER}</p>
-          <div className="flex flex-wrap items-center gap-2">
-            {normalizedCurrentPage !== "dashboard" ? (
+      <div className={`rounded-md border bg-card px-3 py-2 shadow-sm ${className ?? ""}`}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap gap-1.5">
+            {NAV_ITEMS.map((item) => (
+              <Button
+                key={item.key}
+                size="sm"
+                variant={normalizedCurrentPage === item.key ? "default" : "ghost"}
+                className="h-8 px-3 text-xs"
+                onClick={() => navigateTo(item.path)}
+              >
+                {isZh ? item.labelZh : item.labelEn}
+              </Button>
+            ))}
+          </div>
+          {normalizedCurrentPage !== "dashboard" ? (
+            <div className="flex items-center gap-1.5">
               <Button
                 size="sm"
                 variant="outline"
-                className="h-7 px-2 text-[11px]"
+                className="h-8 px-2 text-xs"
                 onClick={goBackOrDashboard}
               >
-                返回上一页
+                {isZh ? "返回" : "Back"}
               </Button>
-            ) : null}
-            {normalizedCurrentPage !== "dashboard" ? (
               <Button
                 size="sm"
                 variant="ghost"
-                className="h-7 px-2 text-[11px]"
+                className="h-8 px-2 text-xs"
                 onClick={() => navigateTo("/dashboard")}
               >
-                返回 Dashboard
+                Dashboard
               </Button>
-            ) : null}
-            <p className="text-[11px] text-muted-foreground">统一新工作台入口</p>
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {NAV_ITEMS.map((item) => (
-            <Button
-              key={item.key}
-              size="sm"
-              variant={normalizedCurrentPage === item.key ? "default" : "outline"}
-              onClick={() => navigateTo(item.path)}
-            >
-              {item.label}
-            </Button>
-          ))}
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -116,7 +117,7 @@ export default function ResearchWorkspaceNav({ className }: ResearchWorkspaceNav
               className="h-10 px-1 text-[11px]"
               onClick={() => navigateTo(item.path)}
             >
-              {item.label}
+              {isZh ? item.labelZh : item.labelEn}
             </Button>
           ))}
         </div>

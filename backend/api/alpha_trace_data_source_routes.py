@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -12,9 +14,14 @@ from schemas.alpha_trace_data_source import (
     AlphaTraceDataSourceTask,
     DataSourceListResponse,
     FileImportResponse,
+    ImportedFileBatch,
+    ImportedFileBatchListResponse,
+    ImportedFileRow,
+    ImportedFileRowsResponse,
     LocalImportFile,
     LocalImportFileListResponse,
 )
+from services.clickhouse_business_store import get_clickhouse_business_store, get_etf_import_table_name
 from services.data_api import get_data_api_catalog
 from services.data_source_store import get_data_source_store
 from services.etf_file_import_service import (
@@ -37,6 +44,28 @@ _SUPPORTED_IMPORT_SUFFIXES = {
     ".xls",
     ".parquet",
 }
+_SAFE_IMPORT_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def _quote_ch_string(value: str) -> str:
+    return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
+
+
+def _quote_table_name(table_name: str) -> str:
+    parts = [part.strip() for part in table_name.split(".") if part.strip()]
+    if not 1 <= len(parts) <= 2 or any(not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", part) for part in parts):
+        raise HTTPException(status_code=500, detail=f"Invalid ClickHouse table name: {table_name}")
+    return ".".join(f"`{part}`" for part in parts)
+
+
+def _parse_payload_json(value: object) -> dict[str, object]:
+    if not isinstance(value, str) or not value:
+        return {}
+    try:
+        payload = json.loads(value)
+    except json.JSONDecodeError:
+        return {"raw": value}
+    return payload if isinstance(payload, dict) else {"value": payload}
 
 
 def _get_local_import_dir() -> Path:
@@ -167,6 +196,130 @@ def import_alpha_trace_local_etf_file(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ClickHouseStoreError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.get("/file-imports/imports", response_model=ImportedFileBatchListResponse)
+def list_alpha_trace_file_import_batches(
+    sourceName: Optional[str] = Query(None),
+    fileName: Optional[str] = Query(None),
+    limit: int = Query(20, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+):
+    table_name = _quote_table_name(get_etf_import_table_name())
+    conditions: list[str] = []
+    if sourceName:
+        conditions.append(f"source_name = {_quote_ch_string(sourceName)}")
+    if fileName:
+        conditions.append(f"file_name = {_quote_ch_string(fileName)}")
+    where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    store = get_clickhouse_business_store()
+    try:
+        store.ensure_etf_import_table(get_etf_import_table_name())
+        total_payload = store.query_json(
+            f"""
+            SELECT count() AS total
+            FROM
+            (
+                SELECT import_id
+                FROM {table_name}
+                {where}
+                GROUP BY import_id
+            )
+            FORMAT JSON
+            """
+        )
+        payload = store.query_json(
+            f"""
+            SELECT
+                import_id,
+                any(source_name) AS source_name,
+                any(file_name) AS file_name,
+                count() AS rows,
+                any(asset_symbol) AS asset_symbol,
+                any(asset_name) AS asset_name,
+                min(trade_date) AS min_trade_date,
+                max(trade_date) AS max_trade_date,
+                max(imported_at) AS imported_at
+            FROM {table_name}
+            {where}
+            GROUP BY import_id
+            ORDER BY imported_at DESC
+            LIMIT {limit}
+            OFFSET {offset}
+            FORMAT JSON
+            """
+        )
+    except ClickHouseStoreError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    items = [
+        ImportedFileBatch(
+            importId=str(row.get("import_id", "")),
+            sourceName=str(row.get("source_name", "")),
+            fileName=str(row.get("file_name", "")),
+            rows=int(row.get("rows") or 0),
+            assetSymbol=str(row.get("asset_symbol", "")),
+            assetName=str(row.get("asset_name", "")),
+            minTradeDate=row.get("min_trade_date") or None,
+            maxTradeDate=row.get("max_trade_date") or None,
+            importedAt=str(row.get("imported_at", "")),
+        )
+        for row in payload.get("data", [])
+        if isinstance(row, dict)
+    ]
+    total_rows = total_payload.get("data", [{}])
+    total = int(total_rows[0].get("total") or 0) if total_rows and isinstance(total_rows[0], dict) else len(items)
+    return ImportedFileBatchListResponse(items=items, total=total, limit=limit, offset=offset)
+
+
+@router.get("/file-imports/imports/{import_id}/rows", response_model=ImportedFileRowsResponse)
+def list_alpha_trace_file_import_rows(
+    import_id: str,
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+):
+    if not _SAFE_IMPORT_ID_RE.match(import_id):
+        raise HTTPException(status_code=400, detail="Invalid import_id.")
+    table_name = _quote_table_name(get_etf_import_table_name())
+    import_id_sql = _quote_ch_string(import_id)
+    store = get_clickhouse_business_store()
+    try:
+        total_payload = store.query_json(
+            f"""
+            SELECT count() AS total
+            FROM {table_name}
+            WHERE import_id = {import_id_sql}
+            FORMAT JSON
+            """
+        )
+        payload = store.query_json(
+            f"""
+            SELECT row_number, asset_symbol, asset_name, trade_date, payload_json
+            FROM {table_name}
+            WHERE import_id = {import_id_sql}
+            ORDER BY row_number ASC
+            LIMIT {limit}
+            OFFSET {offset}
+            FORMAT JSON
+            """
+        )
+    except ClickHouseStoreError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    items = [
+        ImportedFileRow(
+            rowNumber=int(row.get("row_number") or 0),
+            assetSymbol=str(row.get("asset_symbol", "")),
+            assetName=str(row.get("asset_name", "")),
+            tradeDate=row.get("trade_date") or None,
+            payload=_parse_payload_json(row.get("payload_json")),
+        )
+        for row in payload.get("data", [])
+        if isinstance(row, dict)
+    ]
+    total_rows = total_payload.get("data", [{}])
+    total = int(total_rows[0].get("total") or 0) if total_rows and isinstance(total_rows[0], dict) else len(items)
+    return ImportedFileRowsResponse(importId=import_id, items=items, total=total, limit=limit, offset=offset)
 
 
 @router.get("/{source_id}", response_model=AlphaTraceDataSourceItem)

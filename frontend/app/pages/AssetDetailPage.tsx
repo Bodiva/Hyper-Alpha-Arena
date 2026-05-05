@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { Asset, ETFAsset, FundAsset, FuturesAsset, IndexAsset } from "@/entities/asset/model";
 import type { Evidence, EvidenceType } from "@/entities/evidence/model";
 import type { AgentRun, AgentRunStatus, AgentRunTaskType } from "@/entities/agent/model";
@@ -22,6 +23,7 @@ import { listStrategies } from "@/entities/strategy/api";
 import { getApiMode } from "@/shared/api/api-mode";
 import { goBackOrDashboard, navigateTo } from "@/shared/lib/navigation";
 import ResearchWorkspaceNav from "@/shared/ui/ResearchWorkspaceNav";
+import ResearchAssetChart from "@/shared/ui/ResearchAssetChart";
 
 interface AssetDetailPageProps {
   assetId?: string;
@@ -307,6 +309,8 @@ const renderStructurePanel = (asset: Asset) => {
 };
 
 export default function AssetDetailPage({ assetId }: AssetDetailPageProps) {
+  const { i18n } = useTranslation();
+  const isZh = i18n.language?.startsWith("zh");
   const apiMode = getApiMode();
   const [asset, setAsset] = useState<Asset | undefined>(undefined);
   const [relatedEvidence, setRelatedEvidence] = useState<Evidence[]>([]);
@@ -448,6 +452,20 @@ export default function AssetDetailPage({ assetId }: AssetDetailPageProps) {
       return [];
     }
   })();
+  const text = {
+    back: isZh ? "返回" : "Back",
+    dashboard: "Dashboard",
+    agent: isZh ? "Agent 分析" : "Agent",
+    portfolio: isZh ? "加入组合" : "Portfolio",
+    watch: isZh ? "自选" : "Watch",
+    strategy: isZh ? "策略" : "Strategy",
+    profile: isZh ? "画像" : "Profile",
+    metrics: isZh ? "指标" : "Metrics",
+    exposure: isZh ? "结构" : "Structure",
+    evidence: isZh ? "证据" : "Evidence",
+    runs: "Agent Runs",
+    actions: isZh ? "动作" : "Actions",
+  };
 
   const handleStartAgentAnalysis = async () => {
     setIsCreatingDemoRun(true);
@@ -525,31 +543,27 @@ export default function AssetDetailPage({ assetId }: AssetDetailPageProps) {
               <div className="flex flex-wrap items-center gap-2">
                 <CardTitle className="text-xl">{asset.symbol}</CardTitle>
                 <Badge variant="secondary">{asset.assetType}</Badge>
-                <Badge variant={apiMode === "real" ? "default" : "outline"}>
-                  Data Mode: {apiMode === "real" ? "Real API" : "Mock"}
-                </Badge>
               </div>
               <CardDescription>{asset.name}</CardDescription>
-              <p className="text-xs text-muted-foreground">{asset.description}</p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant="outline" onClick={goBackOrDashboard}>返回上一页</Button>
-              <Button size="sm" variant="outline" onClick={() => navigateTo("/dashboard")}>返回 Dashboard</Button>
+              <Button size="sm" variant="outline" onClick={goBackOrDashboard}>{text.back}</Button>
+              <Button size="sm" variant="outline" onClick={() => navigateTo("/dashboard")}>{text.dashboard}</Button>
               <Button size="sm" onClick={handleStartAgentAnalysis} disabled={isCreatingDemoRun}>
-                {isCreatingDemoRun ? "正在创建 Demo Run..." : "发起 Agent 分析"}
+                {isCreatingDemoRun ? "..." : text.agent}
               </Button>
-              <Button size="sm" variant="outline" onClick={() => navigateTo("/portfolio", { assetId: asset.id })}>加入组合</Button>
-              <Button size="sm" variant="outline">加入自选</Button>
-              <Button size="sm" variant="outline" onClick={() => navigateTo("/leaderboard", { assetId: asset.id })}>查看策略</Button>
+              <Button size="sm" variant="outline" onClick={() => navigateTo("/portfolio", { assetId: asset.id })}>{text.portfolio}</Button>
+              <Button size="sm" variant="outline">{text.watch}</Button>
+              <Button size="sm" variant="outline" onClick={() => navigateTo("/leaderboard", { assetId: asset.id })}>{text.strategy}</Button>
             </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-2">
           {demoRunError ? <p className="text-xs text-destructive">Demo Agent Run 创建失败：{demoRunError}</p> : null}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs text-muted-foreground">
-            <p>Market: {asset.market}</p>
-            <p>Currency: {asset.currency}</p>
-            <p>UpdatedAt: {formatDateTime(asset.updatedAt)}</p>
+            <p>{isZh ? "市场" : "Market"}: {asset.market}</p>
+            <p>CCY: {asset.currency}</p>
+            <p>{isZh ? "更新" : "Updated"}: {formatDateTime(asset.updatedAt)}</p>
           </div>
           <div className="flex flex-wrap gap-2">
             {asset.tags.map((tag) => (
@@ -563,50 +577,57 @@ export default function AssetDetailPage({ assetId }: AssetDetailPageProps) {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Asset Profile 资产画像</CardTitle>
+          <CardTitle className="text-base">{text.profile}</CardTitle>
         </CardHeader>
         <CardContent>{renderProfilePanel(asset)}</CardContent>
       </Card>
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Key Metrics 指标区</CardTitle>
+          <CardTitle className="text-base">{text.metrics}</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-2 text-xs">
           <div className="rounded border p-2">
-            <p className="text-muted-foreground">收益</p>
-            <p className="font-medium">{metricsSummary.totalReturn == null ? "占位" : formatPercent(metricsSummary.totalReturn, 1)}</p>
+            <p className="text-muted-foreground">{isZh ? "收益" : "Return"}</p>
+            <p className="font-medium">{metricsSummary.totalReturn == null ? "-" : formatPercent(metricsSummary.totalReturn, 1)}</p>
           </div>
           <div className="rounded border p-2">
-            <p className="text-muted-foreground">波动</p>
-            <p className="font-medium">{metricsSummary.volatility == null ? "占位" : formatPercent(metricsSummary.volatility, 1)}</p>
+            <p className="text-muted-foreground">{isZh ? "波动" : "Vol"}</p>
+            <p className="font-medium">{metricsSummary.volatility == null ? "-" : formatPercent(metricsSummary.volatility, 1)}</p>
           </div>
           <div className="rounded border p-2">
-            <p className="text-muted-foreground">回撤</p>
-            <p className="font-medium">{metricsSummary.drawdown == null ? "占位" : formatPercent(metricsSummary.drawdown, 1)}</p>
+            <p className="text-muted-foreground">{isZh ? "回撤" : "Drawdown"}</p>
+            <p className="font-medium">{metricsSummary.drawdown == null ? "-" : formatPercent(metricsSummary.drawdown, 1)}</p>
           </div>
           <div className="rounded border p-2">
-            <p className="text-muted-foreground">流动性</p>
+            <p className="text-muted-foreground">{isZh ? "流动性" : "Liquidity"}</p>
             <p className="font-medium">{metricsSummary.liquidity}</p>
           </div>
           <div className="rounded border p-2">
-            <p className="text-muted-foreground">风险等级</p>
+            <p className="text-muted-foreground">{isZh ? "风险" : "Risk"}</p>
             <p className="font-medium">{metricsSummary.riskLevel}</p>
           </div>
           <div className="rounded border p-2">
-            <p className="text-muted-foreground">相关性/暴露</p>
+            <p className="text-muted-foreground">{isZh ? "暴露" : "Exposure"}</p>
             <p className="font-medium">{metricsSummary.exposure}</p>
           </div>
           <div className="rounded border p-2">
-            <p className="text-muted-foreground">证据数量</p>
+            <p className="text-muted-foreground">{text.evidence}</p>
             <p className="font-medium">{metricsSummary.evidenceCount}</p>
           </div>
           <div className="rounded border p-2">
-            <p className="text-muted-foreground">Agent Run 数量</p>
+            <p className="text-muted-foreground">{text.runs}</p>
             <p className="font-medium">{metricsSummary.runCount}</p>
           </div>
         </CardContent>
       </Card>
+
+      <ResearchAssetChart
+        asset={asset}
+        marketQuote={marketQuote}
+        marketSnapshot={marketSnapshot}
+        onStartAgentAnalysis={handleStartAgentAnalysis}
+      />
 
       {apiMode === "real" ? (
         <Card>
@@ -614,7 +635,6 @@ export default function AssetDetailPage({ assetId }: AssetDetailPageProps) {
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
                 <CardTitle className="text-base">AlphaTrace Market Data v1</CardTitle>
-                <CardDescription>后端 static market-data seed；不是 legacy BTC feed，也不是实时行情。</CardDescription>
               </div>
               <Badge variant="outline">Static Seed</Badge>
             </div>
@@ -713,7 +733,7 @@ export default function AssetDetailPage({ assetId }: AssetDetailPageProps) {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Holdings / Constituents / Exposure</CardTitle>
+          <CardTitle className="text-base">{text.exposure}</CardTitle>
         </CardHeader>
         <CardContent>{renderStructurePanel(asset)}</CardContent>
       </Card>
@@ -721,8 +741,7 @@ export default function AssetDetailPage({ assetId }: AssetDetailPageProps) {
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Related Evidence 相关证据</CardTitle>
-            <CardDescription>证据追踪与引用来源</CardDescription>
+            <CardTitle className="text-base">{text.evidence}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
             {relatedEvidence.length === 0 ? (
@@ -759,8 +778,7 @@ export default function AssetDetailPage({ assetId }: AssetDetailPageProps) {
 
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Related Agent Runs 相关 Agent 分析</CardTitle>
-            <CardDescription>关联任务状态与结论</CardDescription>
+            <CardTitle className="text-base">{text.runs}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
             {relatedRuns.length === 0 ? (
@@ -795,8 +813,7 @@ export default function AssetDetailPage({ assetId }: AssetDetailPageProps) {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Related Strategies 相关策略</CardTitle>
-          <CardDescription>按资产类型与标签匹配策略入口</CardDescription>
+          <CardTitle className="text-base">{text.strategy}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
           {relatedStrategies.length === 0 ? (
@@ -828,7 +845,7 @@ export default function AssetDetailPage({ assetId }: AssetDetailPageProps) {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Research Actions 研究动作</CardTitle>
+          <CardTitle className="text-base">{text.actions}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
           <Button size="sm" onClick={handleStartAgentAnalysis} disabled={isCreatingDemoRun}>

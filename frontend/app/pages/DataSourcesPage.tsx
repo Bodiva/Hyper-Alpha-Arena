@@ -283,16 +283,6 @@ export default function DataSourcesPage() {
     <div className="flex flex-col gap-4 h-full overflow-auto">
       <ResearchWorkspaceNav />
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-xl">Data Sources 数据源中心</CardTitle>
-          <CardDescription>统一管理外部 API、爬虫、文件导入、第三方数据服务与数据质量</CardDescription>
-          <p className="text-xs text-muted-foreground">
-            让每一条证据和每一个资产画像都能追溯到数据源、同步状态和质量评分。
-          </p>
-        </CardHeader>
-      </Card>
-
       {isLoading ? (
         <Card>
           <CardContent className="py-4 text-sm text-muted-foreground">正在读取数据源视图...</CardContent>
@@ -401,7 +391,6 @@ export default function DataSourcesPage() {
         <Card>
           <CardContent className="py-12 text-center space-y-2">
             <p className="text-base font-medium">暂无匹配数据源</p>
-            <p className="text-xs text-muted-foreground">请调整类型、状态、资产类型或评分筛选。</p>
           </CardContent>
         </Card>
       ) : (
@@ -485,7 +474,6 @@ export default function DataSourcesPage() {
                       <p className="font-medium">数据质量</p>
                       <p className="text-muted-foreground">qualityScore: {selected.source.qualityScore}</p>
                       <p className="text-muted-foreground">reliabilityScore: {selected.source.reliabilityScore}</p>
-                      <p className="text-muted-foreground">最近质量变化：占位（可接历史评分趋势）</p>
                       <p className="text-muted-foreground">字段完整性：{Math.min(98, selected.source.qualityScore + 6)}%</p>
                       <p className="text-muted-foreground">时效性：{Math.min(97, selected.source.reliabilityScore + 4)}%</p>
                       <p className="text-muted-foreground">去重质量：{Math.min(96, selected.source.qualityScore + 3)}%</p>
@@ -519,7 +507,6 @@ export default function DataSourcesPage() {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">同步任务监控区</CardTitle>
-              <CardDescription>任务状态、耗时、抓取记录与重试计划</CardDescription>
             </CardHeader>
             <CardContent>
               <Table>
@@ -625,29 +612,6 @@ export default function DataSourcesPage() {
         </>
       ) : null}
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">数据质量说明区</CardTitle>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-muted-foreground">
-          <div className="rounded border p-2">
-            <p className="font-medium text-foreground">Quality Score</p>
-            <p>表示字段完整性、时效性、去重质量、结构化质量和可用性。</p>
-          </div>
-          <div className="rounded border p-2">
-            <p className="font-medium text-foreground">Reliability Score</p>
-            <p>表示来源稳定性、可信度、历史成功率和异常率。</p>
-          </div>
-          <div className="rounded border p-2">
-            <p className="font-medium text-foreground">Sync Status</p>
-            <p>表示当前数据接入和调度任务是否正常（正常/同步中/警告/失败/暂停）。</p>
-          </div>
-          <div className="rounded border p-2">
-            <p className="font-medium text-foreground">Evidence Linkage</p>
-            <p>表示该数据源产出的数据或证据如何被 Agent Run 和 Decision 使用。</p>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }

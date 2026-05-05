@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import os
 import re
+import json
 from dataclasses import dataclass
-from typing import Iterable, Mapping, Optional
+from typing import Any, Optional
 
 import requests
 
@@ -55,6 +56,16 @@ class ClickHouseBusinessStore:
         except requests.RequestException as exc:
             detail = getattr(exc.response, "text", "") if getattr(exc, "response", None) is not None else ""
             raise ClickHouseStoreError(f"ClickHouse query failed: {exc} {detail}".strip()) from exc
+
+    def query_json(self, query: str) -> dict[str, Any]:
+        text = self.execute(query)
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise ClickHouseStoreError(f"ClickHouse returned invalid JSON: {text[:200]}") from exc
+        if not isinstance(payload, dict):
+            raise ClickHouseStoreError("ClickHouse returned a non-object JSON payload.")
+        return payload
 
     def insert_json_each_row(self, table_name: str, json_lines: str) -> None:
         database, table = _split_table_name(table_name)

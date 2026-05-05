@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ReactDOM from 'react-dom/client'
+import { useTranslation } from 'react-i18next'
 import './index.css'
 import './i18n' // Initialize i18n
 import { Toaster, toast } from 'react-hot-toast'
@@ -52,6 +53,7 @@ import LeaderboardPage from '@/pages/LeaderboardPage'
 import PortfolioWorkspacePage from '@/pages/PortfolioWorkspacePage'
 import EvidenceCenterPage from '@/pages/EvidenceCenterPage'
 import DataSourcesPage from '@/pages/DataSourcesPage'
+import DataImportPage from '@/pages/DataImportPage'
 import DecisionAttributionPage from '@/pages/DecisionAttributionPage'
 import WorkbenchSettingsPage from '@/pages/SettingsPage'
 import { createHashUrl, parseAlphaTraceRoute } from '@/shared/lib/navigation'
@@ -101,10 +103,12 @@ const PAGE_TITLES: Record<string, string> = {
   'agent-lab': 'Agent Lab',
   'agent-run-detail': 'Agent Run Detail',
   'strategy-lab': 'Strategy Lab',
+  'strategy-radar': 'Strategy Radar',
   leaderboard: 'Leaderboard',
   'portfolio-workspace': 'Portfolio Workspace',
   'evidence-center': 'Evidence Center',
   'data-sources': 'Data Sources',
+  'data-import': 'Data Import',
   'decision-attribution': 'Decision Attribution',
   'settings-workbench': 'Settings',
   comprehensive: 'Dashboard',
@@ -119,6 +123,37 @@ const PAGE_TITLES: Record<string, string> = {
   'klines': 'K-Line Charts',
   'model-chat': 'Model Chat',
   'settings': 'Settings',
+  'arena-assets': 'Arena Assets',
+}
+
+const PAGE_TITLES_ZH: Record<string, string> = {
+  'hyper-ai': 'Hyper AI',
+  dashboard: 'Dashboard',
+  'asset-research': '资产研究',
+  'asset-detail': '资产详情',
+  'agent-lab': 'Agent Lab',
+  'agent-run-detail': 'Agent Run',
+  'strategy-lab': '策略实验',
+  'strategy-radar': '策略雷达',
+  leaderboard: '排行榜',
+  'portfolio-workspace': '组合',
+  'evidence-center': '证据',
+  'data-sources': '数据源',
+  'data-import': '数据导入',
+  'decision-attribution': '归因',
+  'settings-workbench': '设置',
+  comprehensive: 'Dashboard',
+  'system-logs': '系统日志',
+  'prompt-management': 'Prompt',
+  'program-trader': 'Programs',
+  'signal-management': '信号',
+  attribution: '归因分析',
+  'factor-library': '因子库',
+  'trader-management': 'AI Trader',
+  hyperliquid: '手动交易',
+  klines: 'K 线',
+  'model-chat': 'Model Chat',
+  settings: '设置',
   'arena-assets': 'Arena Assets',
 }
 
@@ -139,11 +174,15 @@ const resolvePathToRoute = (pathname: string): RouteTarget | null => {
   if (normalizedPath === '/assets') return { page: 'asset-research' }
   if (normalizedPath === '/agent-lab') return { page: 'agent-lab' }
   if (normalizedPath === '/strategy-lab') return { page: 'strategy-lab' }
+  if (normalizedPath === '/strategy-radar') return { page: 'strategy-radar' }
   if (normalizedPath === '/leaderboard') return { page: 'leaderboard' }
   if (normalizedPath === '/portfolio') return { page: 'portfolio-workspace' }
   if (normalizedPath === '/evidence') return { page: 'evidence-center' }
   if (normalizedPath === '/data-sources' || normalizedPath === '/data-source' || normalizedPath === '/datasource') {
     return { page: 'data-sources' }
+  }
+  if (normalizedPath === '/data-import' || normalizedPath === '/data-imports') {
+    return { page: 'data-import' }
   }
   if (normalizedPath === '/decision-attribution') return { page: 'decision-attribution' }
   if (normalizedPath === '/settings') return { page: 'settings-workbench' }
@@ -208,6 +247,8 @@ const getUnknownHashFallback = (hash: string, pathname: string): RouteTarget => 
       'data-sources',
       'data-source',
       'datasource',
+      'data-import',
+      'data-imports',
       'settings',
     ].some((prefix) => normalizedHash === prefix || normalizedHash.startsWith(`${prefix}/`))
 
@@ -229,8 +270,20 @@ const ALPHA_TRACE_PAGE_KEYS = new Set([
   'portfolio-workspace',
   'evidence-center',
   'data-sources',
+  'data-import',
   'decision-attribution',
   'settings-workbench',
+])
+
+const TRADING_CONTEXT_PAGE_KEYS = new Set([
+  'comprehensive',
+  'trader-management',
+  'program-trader',
+  'signal-management',
+  'attribution',
+  'factor-library',
+  'hyperliquid',
+  'klines',
 ])
 
 const resolveRouteFromLocation = (pathname: string, hash: string): RouteTarget | null => {
@@ -246,6 +299,7 @@ const isAlphaTraceRouteTarget = (target: RouteTarget | null): boolean => {
 }
 
 function App() {
+  const { i18n } = useTranslation()
   const { tradingMode } = useTradingMode()
   const { setUser: setAuthUser } = useAuth()
   const initialRouteTarget = useMemo(() => {
@@ -946,7 +1000,9 @@ function App() {
     }
 
     return (
-      <main className={`flex-1 overflow-hidden flex flex-col min-h-0 min-w-0 ${currentPage === 'hyper-ai' ? '' : 'p-4'}`}>
+      <main className={`flex-1 overflow-hidden flex flex-col min-h-0 min-w-0 ${
+        currentPage === 'hyper-ai' || currentPage === 'strategy-radar' ? 'bg-background' : 'bg-muted/30 p-3 md:p-5'
+      }`}>
 
         {currentPage === 'hyper-ai' && (
           <HyperAiPage />
@@ -994,6 +1050,10 @@ function App() {
 
         {currentPage === 'data-sources' && (
           <DataSourcesPage />
+        )}
+
+        {currentPage === 'data-import' && (
+          <DataImportPage />
         )}
 
         {currentPage === 'decision-attribution' && (
@@ -1100,11 +1160,14 @@ function App() {
     )
   }
 
-  const pageTitle = PAGE_TITLES[currentPage] ?? PAGE_TITLES.comprehensive
+  const pageTitle = i18n.language?.startsWith('zh')
+    ? (PAGE_TITLES_ZH[currentPage] ?? PAGE_TITLES_ZH.comprehensive)
+    : (PAGE_TITLES[currentPage] ?? PAGE_TITLES.comprehensive)
+  const isTradingContextPage = TRADING_CONTEXT_PAGE_KEYS.has(currentPage)
 
   return (
     <>
-      <div className="h-screen flex overflow-hidden">
+      <div className="h-screen flex overflow-hidden bg-muted/30">
         <Sidebar
           currentPage={currentPage}
           onPageChange={handlePageChange}
@@ -1115,6 +1178,8 @@ function App() {
             title={pageTitle}
             currentAccount={account}
             showAccountSelector={currentPage === 'comprehensive'}
+            showExchangeStatus={isTradingContextPage}
+            showRuntimeStatus={!isTradingContextPage}
           />
           {renderMainContent()}
         </div>

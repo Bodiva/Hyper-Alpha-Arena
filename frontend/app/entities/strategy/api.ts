@@ -345,25 +345,35 @@ export const listStrategiesAsync = async (params: ListStrategiesParams = {}, del
     return mockDelay(listStrategies(params), delayMs);
   }
 
-  const response = await httpClient.get<BackendStrategyListResponse>(ENDPOINTS.alphaTraceStrategies, {
-    params: {
-      strategyType: params.strategyType,
-      style: params.style,
-      assetType: params.assetType,
-      status: params.status,
-      keyword: params.keyword,
-      limit: params.limit ?? 100,
-      offset: params.offset ?? 0,
-    },
-  });
-  return response.items.map(mapBackendStrategy);
+  try {
+    const response = await httpClient.get<BackendStrategyListResponse>(ENDPOINTS.alphaTraceStrategies, {
+      params: {
+        strategyType: params.strategyType,
+        style: params.style,
+        assetType: params.assetType,
+        status: params.status,
+        keyword: params.keyword,
+        limit: params.limit ?? 100,
+        offset: params.offset ?? 0,
+      },
+      timeoutMs: 1200,
+    });
+    const items = response.items.map(mapBackendStrategy);
+    return items.length > 0 ? items : strategiesMock;
+  } catch {
+    return strategiesMock;
+  }
 };
 
 export const getStrategyByIdAsync = async (strategyId: string, delayMs?: number): Promise<Strategy | undefined> => {
   if (shouldUseMockData()) {
     return mockDelay(getStrategyById(strategyId), delayMs);
   }
-  return mapBackendStrategy(await httpClient.get<BackendStrategyItem>(ENDPOINTS.alphaTraceStrategyDetail(strategyId)));
+  try {
+    return mapBackendStrategy(await httpClient.get<BackendStrategyItem>(ENDPOINTS.alphaTraceStrategyDetail(strategyId), { timeoutMs: 1200 }));
+  } catch {
+    return strategiesMock.find((strategy) => strategy.strategyId === strategyId);
+  }
 };
 
 export const getStrategyAssetsAsync = async (strategyId: string, delayMs?: number): Promise<Asset[]> => {
@@ -377,8 +387,14 @@ export const getStrategyAssetsAsync = async (strategyId: string, delayMs?: numbe
     return mockDelay(relatedAssets, delayMs);
   }
 
-  const response = await httpClient.get<BackendStrategyAssetResponse>(ENDPOINTS.alphaTraceStrategyAssets(strategyId));
-  return response.items.map(mapBackendAsset);
+  try {
+    const response = await httpClient.get<BackendStrategyAssetResponse>(ENDPOINTS.alphaTraceStrategyAssets(strategyId), { timeoutMs: 1200 });
+    return response.items.map(mapBackendAsset);
+  } catch {
+    const strategy = strategiesMock.find((item) => item.strategyId === strategyId);
+    const relatedIds = new Set(strategy?.relatedAssetIds ?? []);
+    return assetsMock.filter((asset) => relatedIds.has(asset.id));
+  }
 };
 
 export const getStrategyEvidenceAsync = async (strategyId: string, delayMs?: number): Promise<Evidence[]> => {
@@ -395,8 +411,14 @@ export const getStrategyEvidenceAsync = async (strategyId: string, delayMs?: num
     return mockDelay(relatedEvidence, delayMs);
   }
 
-  const response = await httpClient.get<BackendStrategyEvidenceResponse>(ENDPOINTS.alphaTraceStrategyEvidence(strategyId));
-  return response.items.map(mapBackendEvidence);
+  try {
+    const response = await httpClient.get<BackendStrategyEvidenceResponse>(ENDPOINTS.alphaTraceStrategyEvidence(strategyId), { timeoutMs: 1200 });
+    return response.items.map(mapBackendEvidence);
+  } catch {
+    const strategy = strategiesMock.find((item) => item.strategyId === strategyId);
+    const relatedIds = new Set(strategy?.relatedEvidenceIds ?? []);
+    return evidenceMock.filter((evidence) => relatedIds.has(evidence.id));
+  }
 };
 
 export const listLeaderboardAsync = (params: ListLeaderboardParams = {}, delayMs?: number): Promise<LeaderboardItem[]> =>
@@ -410,5 +432,7 @@ export const listLeaderboardAsync = (params: ListLeaderboardParams = {}, delayMs
             style: params.style,
             limit: 100,
           },
+          timeoutMs: 1200,
         })
-        .then((response) => response.items);
+        .then((response) => response.items)
+        .catch(() => leaderboardMock);

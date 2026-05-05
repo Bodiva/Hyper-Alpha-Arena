@@ -382,21 +382,6 @@ export default function StrategyLabPage() {
     <div className="flex flex-col gap-4 h-full overflow-auto">
       <ResearchWorkspaceNav />
 
-      <Card>
-        <CardHeader>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <CardTitle className="text-xl">Strategy Lab 策略中心</CardTitle>
-            <Badge variant={apiMode === "real" ? "default" : "secondary"}>
-              Data Mode: {apiMode === "real" ? "Real API / Static Strategy Store" : "Mock"}
-            </Badge>
-          </div>
-          <CardDescription>连接规则策略、Agent 生成策略、回测摘要、证据链和组合应用</CardDescription>
-          <p className="text-xs text-muted-foreground">
-            从 Program Trader 能力升级为面向 ETF / 基金 / 期货的策略研究与配置实验室。
-          </p>
-        </CardHeader>
-      </Card>
-
       {isLoadingStrategies ? (
         <Card>
           <CardContent className="py-4 text-sm text-muted-foreground">正在加载策略数据...</CardContent>
@@ -485,7 +470,6 @@ export default function StrategyLabPage() {
         <Card>
           <CardContent className="py-12 text-center space-y-2">
             <p className="text-base font-medium">暂无匹配策略</p>
-            <p className="text-xs text-muted-foreground">请调整策略类型、资产类型、风格或状态筛选</p>
           </CardContent>
         </Card>
       ) : (
@@ -821,33 +805,6 @@ export default function StrategyLabPage() {
         </>
       ) : null}
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">策略类型说明区</CardTitle>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 text-xs text-muted-foreground">
-          <div className="rounded border p-2">
-            <p className="font-medium text-foreground">ETF 轮动</p>
-            <p>用于在宽基、行业、主题、红利、成长等 ETF 之间动态切换。</p>
-          </div>
-          <div className="rounded border p-2">
-            <p className="font-medium text-foreground">基金筛选</p>
-            <p>用于基于风格、持仓、基金经理、回撤和同类排名筛选基金。</p>
-          </div>
-          <div className="rounded border p-2">
-            <p className="font-medium text-foreground">期货择时</p>
-            <p>用于结合趋势、基差、期限结构、库存和宏观事件判断期货配置时点。</p>
-          </div>
-          <div className="rounded border p-2">
-            <p className="font-medium text-foreground">多资产配置</p>
-            <p>用于股、债、商品、现金等组合权重管理。</p>
-          </div>
-          <div className="rounded border p-2 md:col-span-2 xl:col-span-2">
-            <p className="font-medium text-foreground">Agent 生成策略</p>
-            <p>由多 Agent 分析、证据链和历史复盘共同生成或优化。</p>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }

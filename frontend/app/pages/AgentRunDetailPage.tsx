@@ -1284,7 +1284,6 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
         <Card>
           <CardContent className="py-12 text-center space-y-2">
             <p className="text-base font-medium">正在加载 Agent Run 数据</p>
-            <p className="text-xs text-muted-foreground">Data Mode: {apiMode === "real" ? "Real API" : "Mock"}</p>
           </CardContent>
         </Card>
       </div>
@@ -1298,7 +1297,6 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
         <Card>
           <CardHeader>
             <CardTitle className="text-xl">Agent Run 数据加载失败</CardTitle>
-            <CardDescription>Data Mode: {apiMode === "real" ? "Real API" : "Mock"}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-destructive">{runLoadError}</p>
@@ -1318,7 +1316,6 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
         <Card>
           <CardHeader>
             <CardTitle className="text-xl">未找到对应 Agent Run</CardTitle>
-            <CardDescription>runId: {runId}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">请返回 Agent Lab 选择有效任务。</p>
@@ -1338,7 +1335,6 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
         <Card>
           <CardContent className="py-12 text-center space-y-2">
             <p className="text-base font-medium">暂无 Agent Run 数据</p>
-            <p className="text-xs text-muted-foreground">请先在 Agent Runtime API 或 mock service 中配置 Agent Run。</p>
           </CardContent>
         </Card>
       </div>
@@ -1360,11 +1356,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="space-y-2">
               <CardTitle className="text-xl">Agent Run Detail · {run.runId}</CardTitle>
-              <CardDescription>{run.name}</CardDescription>
               <div className="flex flex-wrap gap-2">
-                <Badge variant={apiMode === "real" ? "secondary" : "outline"}>
-                  Data Mode: {apiMode === "real" ? "Real API" : "Mock"}
-                </Badge>
                 {apiMode === "real" ? (
                   <>
                     <Badge variant={RUN_STATUS_BADGE[run.status]}>Run Status: {run.status}</Badge>
@@ -1462,9 +1454,6 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">TradingAgents Agent Flow</CardTitle>
-            <CardDescription>
-              LangGraph chunk → AlphaTrace RuntimeEvent。当前展示的是可观测流程，不直接暴露 TradingAgents internal state。
-            </CardDescription>
           </CardHeader>
           <CardContent className="overflow-x-auto text-xs">
             <div className="flex min-w-max items-stretch gap-2 pr-1">
@@ -1513,16 +1502,8 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
         <Card className="xl:col-span-12">
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Agent Progress Board</CardTitle>
-            <CardDescription>
-              TradingAgents-style Progress · Logical DAG · {derived?.completedAgents}/{run.agents.length} completed
-            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="rounded border bg-muted/20 p-2 text-[11px] text-muted-foreground">
-              <p className="font-medium text-foreground">Logical Agent Flow</p>
-              <p>Evidence Retrieval → Market View → Bull View / Bear View 并行 → Risk Review → Final Decision</p>
-              <p>当前为 Qwen 单次调用拆分的模拟研究工作流，不代表真实并行计算。</p>
-            </div>
             <div className="h-2 rounded bg-muted overflow-hidden">
               <div className="h-full rounded bg-blue-500" style={{ width: `${Math.max(derived?.progressPercent ?? 0, 4)}%` }} />
             </div>
@@ -1551,7 +1532,6 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Current Report / Research Report</CardTitle>
-              <CardDescription>按 Market / Bull / Bear / Risk / Decision 分区查看输出</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 text-xs">
               {smoothLiveReportText.trim() && (run.status === "RUNNING" || run.status === "FAILED") ? (
@@ -1623,7 +1603,6 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Agent Debate Panel</CardTitle>
-              <CardDescription>Bull / Bear 的实时输出和最终观点集中展示在这里</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 text-xs">
               <div className="flex flex-col gap-3">
@@ -1702,7 +1681,6 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Final Decision Card</CardTitle>
-              <CardDescription>结构化展示最终建议、核心逻辑、风险、观察指标与证据</CardDescription>
             </CardHeader>
             <CardContent>
               <FinalDecisionView
@@ -1720,7 +1698,6 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
           <Card className="order-2">
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Tool Calls Timeline</CardTitle>
-              <CardDescription>工具调用、参数、结果和状态</CardDescription>
             </CardHeader>
             <CardContent className="max-h-[24rem] overflow-auto space-y-2 pr-1 text-[11px]">
               {derived?.sortedToolCalls.length || derived?.runtimeToolActivities.length ? (
@@ -1823,7 +1800,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
                   ))}
                 </>
               ) : (
-                <p className="text-muted-foreground">暂无独立工具调用记录。Qwen 分析过程会优先展示在 Agent DAG 和 Runtime Event Stream 中。</p>
+                <p className="text-muted-foreground">暂无独立工具调用记录。</p>
               )}
             </CardContent>
           </Card>
@@ -1831,7 +1808,6 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
           <Card className="order-1">
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Evidence Used</CardTitle>
-              <CardDescription>证据引用链路（可追溯、可引用）</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2 text-xs">
               {derived?.usedEvidence.length ? (
@@ -1879,7 +1855,6 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
           <Card className="order-3">
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Data Context</CardTitle>
-              <CardDescription>本次运行使用的数据类别</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-2">
               {derived?.dataContext.map((item) => (
@@ -1895,7 +1870,6 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Runtime Metrics</CardTitle>
-          <CardDescription>运行指标与风险提示</CardDescription>
         </CardHeader>
         <CardContent className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-10 gap-2 text-xs">
           <div className="rounded border p-2">
@@ -1942,9 +1916,6 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
             <p className="text-muted-foreground">Risk Warnings</p>
             <p className="font-medium">{derived?.riskWarningCount}</p>
           </div>
-          <div className="rounded border p-2 md:col-span-2 xl:col-span-10 text-muted-foreground">
-            Token 统计为运行期估算值，随 SSE `metric.updated` 实时刷新，并在 run 完成后写入持久化 metrics。
-          </div>
         </CardContent>
       </Card>
 
@@ -1953,11 +1924,6 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <CardTitle className="text-base">Runtime Event Stream</CardTitle>
-              <CardDescription>
-                {apiMode === "real"
-                  ? "Real mode：通过 EventSource 连接后端 runtime SSE，Qwen / TradingAgents PoC events 都会进入这里。"
-                  : "Streaming mode 占位：当前使用前端 mock replay，不连接真实 SSE / WebSocket。"}
-              </CardDescription>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="outline">Runtime Mode: {apiMode === "real" ? "Real API Events" : "Mock Replay"}</Badge>
@@ -2027,9 +1993,6 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <CardTitle className="text-base">Worker Runtime Artifacts</CardTitle>
-              <CardDescription>
-                当前 run 的 AlphaTrace Orchestrator / subprocess worker 产物。Qwen 和 Stub run 通常没有 worker 目录。
-              </CardDescription>
             </div>
             <Button size="sm" variant="outline" onClick={refreshWorkerArtifacts} disabled={isLoadingWorkerArtifacts}>
               {isLoadingWorkerArtifacts ? "Loading..." : "Refresh Worker"}
@@ -2114,9 +2077,6 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <CardTitle className="text-base">Backend Runtime Log</CardTitle>
-              <CardDescription>
-                全局本地后端日志 tail，可能包含 legacy BTC / Hyperliquid 后台服务；默认只显示 AlphaTrace 相关日志。
-              </CardDescription>
             </div>
             <Button size="sm" variant="outline" onClick={refreshBackendLogs} disabled={isLoadingBackendLogs}>
               {isLoadingBackendLogs ? "Loading..." : "Refresh Logs"}
@@ -2166,19 +2126,6 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
                   </ul>
                 </details>
               ) : null}
-              {backendLogFilter === "all" ? (
-                <p className="text-muted-foreground">
-                  当前显示全局原始日志，可能包含 legacy BTC fetch、Hyperliquid strategy refresh、Binance collector 等非当前 Agent Run 信息。
-                </p>
-              ) : backendLogFilter === "current_run" ? (
-                <p className="text-muted-foreground">
-                  当前只显示包含 runId 的全局日志行；完整执行过程仍以 Runtime Event Stream 为准。
-                </p>
-              ) : (
-                <p className="text-muted-foreground">
-                  当前隐藏 legacy market stream / Hyperliquid 噪音；如需排查旧交易后端，请切换到 All Global Logs。
-                </p>
-              )}
               {filteredBackendLogLines.length ? (
                 <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded bg-slate-950 p-3 text-[11px] leading-relaxed text-slate-100">
                   {filteredBackendLogLines.join("\n")}
@@ -2198,7 +2145,6 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Agent Timeline</CardTitle>
-          <CardDescription>聚合后的关键决策链事件流；原始 chunk 保留在 Runtime Event Stream 中</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2 text-xs">
           {derived?.timelineItems.length ? (
@@ -2230,7 +2176,6 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Risk Warnings</CardTitle>
-            <CardDescription>风险团队提示与监控要点</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 text-xs">
             {derived.riskWarnings.map((warning, index) => {

@@ -55,6 +55,9 @@ const resolvePathToRouteTarget = (pathname: string): RouteTarget | null => {
   if (normalizedPath === "/data-sources" || normalizedPath === "/data-source" || normalizedPath === "/datasource") {
     return { page: "data-sources" };
   }
+  if (normalizedPath === "/data-import" || normalizedPath === "/data-imports") {
+    return { page: "data-import" };
+  }
   if (normalizedPath === "/decision-attribution" || normalizedPath === "/decisions") {
     return { page: "decision-attribution" };
   }
@@ -125,6 +128,9 @@ export const parseAlphaTraceRoute = (value?: string): RouteTarget | null => {
   if (normalizedRoute === "data-sources" || normalizedRoute === "data-source" || normalizedRoute === "datasource") {
     return createTarget("data-sources", undefined, hashQuery);
   }
+  if (normalizedRoute === "data-import" || normalizedRoute === "data-imports") {
+    return createTarget("data-import", undefined, hashQuery);
+  }
   if (normalizedRoute === "decision-attribution" || normalizedRoute === "decisions") {
     return createTarget("decision-attribution", undefined, hashQuery);
   }
@@ -162,6 +168,7 @@ export const routeTargetToAlphaTraceHash = (target: RouteTarget): string => {
     "portfolio-workspace": "portfolio",
     "evidence-center": "evidence",
     "data-sources": "data-sources",
+    "data-import": "data-import",
     "decision-attribution": "decision-attribution",
     "settings-workbench": "settings",
   };

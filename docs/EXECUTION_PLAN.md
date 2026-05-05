@@ -6981,3 +6981,41 @@ Validation:
 Rollback:
 
 Remove the settings module preset routes/helpers/page usage and dependency additions.
+
+## M217 - Data Import Workspace and ClickHouse Import Browser
+
+Status: Completed
+
+Goal:
+
+Expose the ClickHouse ETF/index file import workflow as a first-class AlphaTrace workspace page and allow imported batches/rows to be reviewed from the frontend.
+
+Scope:
+
+1. Add Data Import route/navigation entries.
+2. Add Data Import page for upload, local file import, imported batch listing, and imported row inspection.
+3. Add backend endpoints for imported batch and row queries from ClickHouse.
+4. Add frontend data-source API helpers for file import, local import, imported batches, and imported rows.
+5. Ignore local `/data/` sample files so large Excel fixtures are not committed.
+6. Do not change runner behavior, MySQL config behavior, or legacy BTC/Hyperliquid services.
+
+Acceptance:
+
+1. Backend data-source route/schema/store py_compile passes.
+2. Frontend build passes.
+3. `GET /api/alpha-trace/data-sources/file-imports/imports` returns imported ClickHouse batches.
+4. `GET /api/alpha-trace/data-sources/file-imports/imports/{importId}/rows` returns parsed payload rows.
+5. `GET /api/alpha-trace/data-sources/file-imports/local-files` still lists local import candidates.
+6. `/data/` is ignored by Git.
+
+Validation:
+
+1. `python -m py_compile backend/api/alpha_trace_data_source_routes.py backend/schemas/alpha_trace_data_source.py backend/services/clickhouse_business_store.py`.
+2. `pnpm --dir frontend build`.
+3. `GET http://127.0.0.1:8802/api/alpha-trace/data-sources/file-imports/imports?limit=5`.
+4. `GET http://127.0.0.1:8802/api/alpha-trace/data-sources/file-imports/imports/etf_import_859f23d3f7da4d589cf3071fcd744062/rows?limit=2`.
+5. `GET http://127.0.0.1:8805/api/alpha-trace/data-sources/file-imports/imports?limit=5`.
+
+Rollback:
+
+Remove DataImportPage, route/navigation additions, import batch/row API helpers, backend batch/row endpoints, and the `/data/` ignore rule.

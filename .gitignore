@@ -349,4 +349,5 @@ backend/scripts/
 # AlphaTrace local run artifacts
 /IMPLEMENTATION_LOG.md
 /last_*.txt
+/data/
 

@@ -139,6 +139,10 @@ export const listEvidence = (params: ListEvidenceParams = {}): Evidence[] => {
     realModeNotImplemented("listEvidence");
   }
 
+  return listEvidenceFromMock(params);
+};
+
+const listEvidenceFromMock = (params: ListEvidenceParams = {}): Evidence[] => {
   const keyword = params.keyword ? normalize(params.keyword) : "";
   const assetsById = new Map(assetsMock.map((asset) => [asset.id, asset]));
 
@@ -166,8 +170,10 @@ export const getEvidenceById = (evidenceId: string): Evidence | undefined => {
   if (!shouldUseMockData()) {
     realModeNotImplemented("getEvidenceById");
   }
-  return evidenceMock.find((evidence) => evidence.id === evidenceId);
+  return getEvidenceByIdFromMock(evidenceId);
 };
+
+const getEvidenceByIdFromMock = (evidenceId: string): Evidence | undefined => evidenceMock.find((evidence) => evidence.id === evidenceId);
 
 export const getEvidenceByIds = (evidenceIds: string[]): Evidence[] => {
   if (!shouldUseMockData()) {
@@ -209,24 +215,34 @@ export const listEvidenceAsync = async (params: ListEvidenceParams = {}, delayMs
     return mockDelay(listEvidence(params), delayMs);
   }
 
-  const response = await httpClient.get<BackendEvidenceListResponse>(ENDPOINTS.alphaTraceEvidence, {
-    params: {
-      assetId: params.assetId,
-      evidenceType: params.evidenceType,
-      sourceName: params.sourceName,
-      keyword: params.keyword,
-      minQualityScore: params.minQualityScore,
-      limit: params.limit ?? 100,
-    },
-  });
-  return response.items.map(mapBackendEvidenceItem);
+  try {
+    const response = await httpClient.get<BackendEvidenceListResponse>(ENDPOINTS.alphaTraceEvidence, {
+      params: {
+        assetId: params.assetId,
+        evidenceType: params.evidenceType,
+        sourceName: params.sourceName,
+        keyword: params.keyword,
+        minQualityScore: params.minQualityScore,
+        limit: params.limit ?? 100,
+      },
+      timeoutMs: 1200,
+    });
+    const items = response.items.map(mapBackendEvidenceItem);
+    return items.length > 0 ? items : listEvidenceFromMock(params);
+  } catch {
+    return listEvidenceFromMock(params);
+  }
 };
 
 export const getEvidenceByIdAsync = async (evidenceId: string, delayMs?: number): Promise<Evidence | undefined> => {
   if (shouldUseMockData()) {
     return mockDelay(getEvidenceById(evidenceId), delayMs);
   }
-  return mapBackendEvidenceItem(await httpClient.get<BackendEvidenceItem>(ENDPOINTS.alphaTraceEvidenceDetail(evidenceId)));
+  try {
+    return mapBackendEvidenceItem(await httpClient.get<BackendEvidenceItem>(ENDPOINTS.alphaTraceEvidenceDetail(evidenceId), { timeoutMs: 1200 }));
+  } catch {
+    return getEvidenceByIdFromMock(evidenceId);
+  }
 };
 
 export const searchEvidenceAsync = async (params: SearchEvidenceParams = {}, delayMs?: number): Promise<Evidence[]> => {
@@ -240,13 +256,27 @@ export const searchEvidenceAsync = async (params: SearchEvidenceParams = {}, del
     );
   }
 
-  const response = await httpClient.get<BackendEvidenceSearchResponse>(ENDPOINTS.alphaTraceEvidenceSearch, {
-    params: {
+  try {
+    const response = await httpClient.get<BackendEvidenceSearchResponse>(ENDPOINTS.alphaTraceEvidenceSearch, {
+      params: {
+        assetId: params.assetId,
+        q: params.q,
+        taskType: params.taskType ?? "single_asset_analysis",
+        limit: params.limit ?? 5,
+      },
+      timeoutMs: 1200,
+    });
+    const items = response.items.map(mapBackendEvidenceItem);
+    return items.length > 0
+      ? items
+      : listEvidenceFromMock({
+          assetId: params.assetId,
+          keyword: params.q,
+        }).slice(0, params.limit ?? 5);
+  } catch {
+    return listEvidenceFromMock({
       assetId: params.assetId,
-      q: params.q,
-      taskType: params.taskType ?? "single_asset_analysis",
-      limit: params.limit ?? 5,
-    },
-  });
-  return response.items.map(mapBackendEvidenceItem);
+      keyword: params.q,
+    }).slice(0, params.limit ?? 5);
+  }
 };

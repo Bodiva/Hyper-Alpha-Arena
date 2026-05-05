@@ -8,7 +8,6 @@ import { listDecisionsAsync } from "@/entities/decision/api";
 import { listAssetsAsync } from "@/entities/asset/api";
 import { listEvidenceAsync } from "@/entities/evidence/api";
 import { listAgentRunsAsync } from "@/entities/agent/api";
-import { getApiMode } from "@/shared/api/api-mode";
 import { getCurrentHashQueryParams, navigateTo } from "@/shared/lib/navigation";
 import ResearchWorkspaceNav from "@/shared/ui/ResearchWorkspaceNav";
 
@@ -111,7 +110,6 @@ const getErrorMessage = (error: unknown): string => {
 };
 
 export default function DecisionAttributionPage() {
-  const apiMode = getApiMode();
   const [decisions, setDecisions] = useState<Decision[]>([]);
   const [assets, setAssets] = useState<Awaited<ReturnType<typeof listAssetsAsync>>>([]);
   const [evidenceItems, setEvidenceItems] = useState<Awaited<ReturnType<typeof listEvidenceAsync>>>([]);
@@ -334,19 +332,6 @@ export default function DecisionAttributionPage() {
     <div className="flex flex-col gap-4 h-full overflow-auto">
       <ResearchWorkspaceNav />
 
-      <Card>
-        <CardHeader>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <CardTitle className="text-xl">Decision Attribution 决策归因</CardTitle>
-            <Badge variant={apiMode === "real" ? "default" : "secondary"}>
-              Data Mode: {apiMode === "real" ? "Real API / AgentRun Decision Store" : "Mock"}
-            </Badge>
-          </div>
-          <CardDescription>连接投资建议、证据链、Agent Run、实际结果与复盘结论</CardDescription>
-          <p className="text-xs text-muted-foreground">让每一次投资判断都能被追踪、解释、复盘和持续改进。</p>
-        </CardHeader>
-      </Card>
-
       {isLoadingDecisions ? (
         <Card>
           <CardContent className="py-4 text-sm text-muted-foreground">正在加载决策归因数据...</CardContent>
@@ -444,7 +429,6 @@ export default function DecisionAttributionPage() {
         <Card>
           <CardContent className="py-12 text-center space-y-2">
             <p className="text-base font-medium">暂无匹配决策</p>
-            <p className="text-xs text-muted-foreground">请调整筛选条件或搜索关键词。</p>
           </CardContent>
         </Card>
       ) : (
@@ -717,7 +701,6 @@ export default function DecisionAttributionPage() {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Traceability Panel 追溯链路</CardTitle>
-          <CardDescription>Asset → Evidence → Agent Run → Decision → Actual Outcome → Attribution / Learning</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 text-xs">
           {!selected ? (

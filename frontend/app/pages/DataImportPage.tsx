@@ -1,0 +1,509 @@
+import { useEffect, useMemo, useState } from "react";
+import { CheckCircle2, Database, FileUp, FolderOpen, RefreshCw } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  importLocalEtfFileAsync,
+  listImportedFileBatchesAsync,
+  listImportedFileRowsAsync,
+  listLocalEtfImportFilesAsync,
+  uploadEtfFileImportAsync,
+  type FileImportResponse,
+  type ImportedFileBatch,
+  type ImportedFileRow,
+  type LocalImportFile,
+} from "@/entities/data-source/api";
+import ResearchWorkspaceNav from "@/shared/ui/ResearchWorkspaceNav";
+
+const MAX_DISPLAY_COLUMNS = 12;
+
+const formatBytes = (bytes: number): string => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+};
+
+export default function DataImportPage() {
+  const [file, setFile] = useState<File | null>(null);
+  const [sourceName, setSourceName] = useState("ETF File Upload");
+  const [dataCategory, setDataCategory] = useState("MARKET_DATA");
+  const [dryRun, setDryRun] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [result, setResult] = useState<FileImportResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [localFiles, setLocalFiles] = useState<LocalImportFile[]>([]);
+  const [localBasePath, setLocalBasePath] = useState("");
+  const [isLoadingLocalFiles, setIsLoadingLocalFiles] = useState(false);
+  const [importBatches, setImportBatches] = useState<ImportedFileBatch[]>([]);
+  const [selectedImport, setSelectedImport] = useState<ImportedFileBatch | null>(null);
+  const [importRows, setImportRows] = useState<ImportedFileRow[]>([]);
+  const [isLoadingImportedData, setIsLoadingImportedData] = useState(false);
+
+  const visibleColumns = useMemo(() => result?.columns.slice(0, MAX_DISPLAY_COLUMNS) ?? [], [result]);
+
+  const loadLocalFiles = async () => {
+    setIsLoadingLocalFiles(true);
+    try {
+      const response = await listLocalEtfImportFilesAsync();
+      setLocalFiles(response.items);
+      setLocalBasePath(response.basePath);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : String(loadError));
+    } finally {
+      setIsLoadingLocalFiles(false);
+    }
+  };
+
+  const loadImportedData = async () => {
+    setIsLoadingImportedData(true);
+    try {
+      const response = await listImportedFileBatchesAsync();
+      setImportBatches(response.items);
+      if (!selectedImport && response.items.length > 0) {
+        setSelectedImport(response.items[0]);
+      }
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : String(loadError));
+    } finally {
+      setIsLoadingImportedData(false);
+    }
+  };
+
+  useEffect(() => {
+    loadLocalFiles();
+    loadImportedData();
+  }, []);
+
+  useEffect(() => {
+    if (!selectedImport) {
+      setImportRows([]);
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoadingImportedData(true);
+    listImportedFileRowsAsync(selectedImport.importId)
+      .then((response) => {
+        if (!cancelled) setImportRows(response.items);
+      })
+      .catch((loadError) => {
+        if (!cancelled) setError(loadError instanceof Error ? loadError.message : String(loadError));
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingImportedData(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedImport]);
+
+  const handleImport = async () => {
+    if (!file) {
+      setError("请选择一个文件。");
+      return;
+    }
+
+    setIsImporting(true);
+    setError(null);
+    setResult(null);
+    try {
+      const response = await uploadEtfFileImportAsync({
+        file,
+        sourceName,
+        dataCategory,
+        dryRun,
+        previewLimit: 8,
+      });
+      setResult(response);
+      if (!response.dryRun) {
+        await loadImportedData();
+        setSelectedImport({
+          importId: response.importId,
+          sourceName: response.sourceName,
+          fileName: response.fileName,
+          rows: response.recordsSucceeded,
+          assetSymbol: response.previewRows[0]?.assetSymbol ?? "",
+          assetName: response.previewRows[0]?.assetName ?? "",
+          minTradeDate: response.previewRows[0]?.tradeDate ?? null,
+          maxTradeDate: response.previewRows[0]?.tradeDate ?? null,
+          importedAt: new Date().toISOString(),
+        });
+      }
+    } catch (importError) {
+      setError(importError instanceof Error ? importError.message : String(importError));
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const handleImportLocalFile = async (relativePath: string) => {
+    setIsImporting(true);
+    setError(null);
+    setResult(null);
+    try {
+      const response = await importLocalEtfFileAsync({
+        relativePath,
+        sourceName: "data/test ETF Files",
+        dataCategory,
+        dryRun,
+        previewLimit: 8,
+      });
+      setResult(response);
+      if (!response.dryRun) {
+        await loadImportedData();
+        setSelectedImport({
+          importId: response.importId,
+          sourceName: response.sourceName,
+          fileName: response.fileName,
+          rows: response.recordsSucceeded,
+          assetSymbol: response.previewRows[0]?.assetSymbol ?? "",
+          assetName: response.previewRows[0]?.assetName ?? "",
+          minTradeDate: response.previewRows[0]?.tradeDate ?? null,
+          maxTradeDate: response.previewRows[0]?.tradeDate ?? null,
+          importedAt: new Date().toISOString(),
+        });
+      }
+    } catch (importError) {
+      setError(importError instanceof Error ? importError.message : String(importError));
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  return (
+    <div className="flex h-full flex-col gap-4 overflow-auto">
+      <ResearchWorkspaceNav />
+
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-5">
+        <Card className="xl:col-span-2">
+          <CardHeader className="pb-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <CardTitle className="text-base">上传 ETF 数据文件</CardTitle>
+                <CardDescription>导入后写入 ClickHouse 的 ETF 文件导入表</CardDescription>
+              </div>
+              <Database className="h-5 w-5 text-muted-foreground" />
+            </div>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="etf-file">文件</Label>
+              <Input
+                id="etf-file"
+                type="file"
+                accept=".csv,.tsv,.txt,.json,.jsonl,.ndjson,.xlsx,.xls,.parquet"
+                onChange={(event) => {
+                  setFile(event.target.files?.[0] ?? null);
+                  setResult(null);
+                  setError(null);
+                }}
+              />
+              {file ? (
+                <p className="text-xs text-muted-foreground">
+                  {file.name} · {formatBytes(file.size)}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="source-name">数据源名称</Label>
+              <Input
+                id="source-name"
+                value={sourceName}
+                onChange={(event) => setSourceName(event.target.value)}
+                placeholder="ETF File Upload"
+              />
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="data-category">数据分类</Label>
+              <Input
+                id="data-category"
+                value={dataCategory}
+                onChange={(event) => setDataCategory(event.target.value)}
+                placeholder="MARKET_DATA"
+              />
+            </div>
+
+            <label className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+              <input
+                type="checkbox"
+                checked={dryRun}
+                onChange={(event) => setDryRun(event.target.checked)}
+                className="h-4 w-4"
+              />
+              仅解析预览，不写入 ClickHouse
+            </label>
+
+            <Button onClick={handleImport} disabled={!file || isImporting}>
+              {isImporting ? (
+                <RefreshCw className="h-4 w-4 animate-spin" data-icon="inline-start" />
+              ) : (
+                <FileUp className="h-4 w-4" data-icon="inline-start" />
+              )}
+              {dryRun ? "解析预览" : "导入到 ClickHouse"}
+            </Button>
+
+            {error ? (
+              <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                {error}
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+
+        <Card className="xl:col-span-3">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">导入结果</CardTitle>
+            <CardDescription>服务端会保留原始行 JSON，并抽取 symbol、name、date 等索引字段</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            {!result ? (
+              <div className="rounded-md border border-dashed py-12 text-center text-sm text-muted-foreground">
+                上传文件后这里会显示导入结果和前几行预览。
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                  <div className="rounded-md border p-3">
+                    <p className="text-xs text-muted-foreground">状态</p>
+                    <div className="mt-1 flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-primary" />
+                      <span className="text-sm font-medium">{result.status}</span>
+                    </div>
+                  </div>
+                  <div className="rounded-md border p-3">
+                    <p className="text-xs text-muted-foreground">读取行数</p>
+                    <p className="mt-1 text-sm font-medium">{result.recordsFetched}</p>
+                  </div>
+                  <div className="rounded-md border p-3">
+                    <p className="text-xs text-muted-foreground">成功行数</p>
+                    <p className="mt-1 text-sm font-medium">{result.recordsSucceeded}</p>
+                  </div>
+                  <div className="rounded-md border p-3">
+                    <p className="text-xs text-muted-foreground">失败行数</p>
+                    <p className="mt-1 text-sm font-medium">{result.recordsFailed}</p>
+                  </div>
+                </div>
+
+                <div className="rounded-md border p-3 text-xs text-muted-foreground">
+                  <p>importId: {result.importId}</p>
+                  <p>tableName: {result.tableName}</p>
+                  <p>fileName: {result.fileName}</p>
+                  <p>message: {result.message}</p>
+                </div>
+
+                <div className="flex flex-wrap gap-1.5">
+                  {visibleColumns.map((column) => (
+                    <Badge key={column} variant="outline">
+                      {column}
+                    </Badge>
+                  ))}
+                  {result.columns.length > MAX_DISPLAY_COLUMNS ? (
+                    <Badge variant="secondary">+{result.columns.length - MAX_DISPLAY_COLUMNS}</Badge>
+                  ) : null}
+                </div>
+
+                <div className="overflow-auto rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>row</TableHead>
+                        <TableHead>symbol</TableHead>
+                        <TableHead>name</TableHead>
+                        <TableHead>date</TableHead>
+                        <TableHead>payload</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {result.previewRows.map((row) => (
+                        <TableRow key={row.rowNumber}>
+                          <TableCell>{row.rowNumber}</TableCell>
+                          <TableCell>{row.assetSymbol || "-"}</TableCell>
+                          <TableCell>{row.assetName || "-"}</TableCell>
+                          <TableCell>{row.tradeDate || "-"}</TableCell>
+                          <TableCell className="max-w-[440px] truncate">
+                            {JSON.stringify(row.payload)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-base">项目 data/test 文件</CardTitle>
+              <CardDescription>{localBasePath || "后端未返回本地导入目录"}</CardDescription>
+            </div>
+            <Button size="sm" variant="outline" onClick={loadLocalFiles} disabled={isLoadingLocalFiles}>
+              <RefreshCw className={isLoadingLocalFiles ? "h-4 w-4 animate-spin" : "h-4 w-4"} data-icon="inline-start" />
+              刷新
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {localFiles.length === 0 ? (
+            <div className="rounded-md border border-dashed py-8 text-center text-sm text-muted-foreground">
+              当前未发现可导入文件。
+            </div>
+          ) : (
+            <div className="overflow-auto rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>文件</TableHead>
+                    <TableHead>大小</TableHead>
+                    <TableHead>更新时间</TableHead>
+                    <TableHead>操作</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {localFiles.map((localFile) => (
+                    <TableRow key={localFile.relativePath}>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <FolderOpen className="h-4 w-4 text-muted-foreground" />
+                          <span>{localFile.relativePath}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>{formatBytes(localFile.sizeBytes)}</TableCell>
+                      <TableCell>{new Date(localFile.modifiedAt).toLocaleString("zh-CN", { hour12: false })}</TableCell>
+                      <TableCell>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={isImporting}
+                          onClick={() => handleImportLocalFile(localFile.relativePath)}
+                        >
+                          {dryRun ? "预览" : "导入"}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-base">已导入 ClickHouse 数据</CardTitle>
+              <CardDescription>点击导入批次查看前 100 行原始 payload</CardDescription>
+            </div>
+            <Button size="sm" variant="outline" onClick={loadImportedData} disabled={isLoadingImportedData}>
+              <RefreshCw className={isLoadingImportedData ? "h-4 w-4 animate-spin" : "h-4 w-4"} data-icon="inline-start" />
+              刷新
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 gap-3 xl:grid-cols-5">
+          <div className="xl:col-span-2 overflow-auto rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>文件</TableHead>
+                  <TableHead>行数</TableHead>
+                  <TableHead>操作</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {importBatches.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={3} className="py-8 text-center text-sm text-muted-foreground">
+                      暂无导入记录。
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  importBatches.map((batch) => (
+                    <TableRow key={batch.importId}>
+                      <TableCell>
+                        <div className="flex flex-col gap-1">
+                          <span className="font-medium">{batch.fileName}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {batch.assetSymbol || "-"} · {batch.assetName || "-"}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {batch.minTradeDate || "-"} ~ {batch.maxTradeDate || "-"}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>{batch.rows}</TableCell>
+                      <TableCell>
+                        <Button size="sm" variant={selectedImport?.importId === batch.importId ? "default" : "outline"} onClick={() => setSelectedImport(batch)}>
+                          查看数据
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+
+          <div className="xl:col-span-3 overflow-auto rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>row</TableHead>
+                  <TableHead>symbol</TableHead>
+                  <TableHead>name</TableHead>
+                  <TableHead>date</TableHead>
+                  <TableHead>payload</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {!selectedImport ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
+                      请选择一个导入批次。
+                    </TableCell>
+                  </TableRow>
+                ) : importRows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
+                      {isLoadingImportedData ? "正在读取..." : "暂无数据。"}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  importRows.map((row) => (
+                    <TableRow key={`${selectedImport.importId}-${row.rowNumber}`}>
+                      <TableCell>{row.rowNumber}</TableCell>
+                      <TableCell>{row.assetSymbol || "-"}</TableCell>
+                      <TableCell>{row.assetName || "-"}</TableCell>
+                      <TableCell>{row.tradeDate || "-"}</TableCell>
+                      <TableCell className="max-w-[520px] truncate">{JSON.stringify(row.payload)}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

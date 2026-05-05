@@ -444,15 +444,6 @@ export default function PortfolioWorkspacePage() {
       <div className="flex flex-col gap-4 h-full overflow-auto">
         <ResearchWorkspaceNav />
         <Card>
-          <CardHeader>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <CardTitle className="text-xl">Portfolio Workspace 组合工作台</CardTitle>
-              <Badge variant={apiMode === "real" ? "default" : "secondary"}>
-                Data Mode: {apiMode === "real" ? "Real API / Static Portfolio Store" : "Mock"}
-              </Badge>
-            </div>
-            <CardDescription>连接资产研究、Agent 决策、风险暴露和调仓建议</CardDescription>
-          </CardHeader>
           <CardContent className="py-12 text-center space-y-2">
             <p className="text-base font-medium">
               {isLoadingPortfolios ? "正在加载组合数据" : "暂无组合数据"}
@@ -469,19 +460,6 @@ export default function PortfolioWorkspacePage() {
   return (
     <div className="flex flex-col gap-4 h-full overflow-auto">
       <ResearchWorkspaceNav />
-
-      <Card>
-        <CardHeader>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <CardTitle className="text-xl">Portfolio Workspace 组合工作台</CardTitle>
-            <Badge variant={apiMode === "real" ? "default" : "secondary"}>
-              Data Mode: {apiMode === "real" ? "Real API / Static Portfolio Store" : "Mock"}
-            </Badge>
-          </div>
-          <CardDescription>连接资产研究、Agent 决策、风险暴露和调仓建议</CardDescription>
-          <p className="text-xs text-muted-foreground">从单资产判断升级到组合层面的配置、风险和复盘闭环。</p>
-        </CardHeader>
-      </Card>
 
       {isLoadingPortfolios ? (
         <Card>
@@ -589,7 +567,6 @@ export default function PortfolioWorkspacePage() {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">持仓表</CardTitle>
-          <CardDescription>持仓权重、收益贡献与风险贡献</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
@@ -769,7 +746,6 @@ export default function PortfolioWorkspacePage() {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">风险指标区</CardTitle>
-          <CardDescription>风险预算与集中度诊断</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 text-xs">
           <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-2">
@@ -802,7 +778,6 @@ export default function PortfolioWorkspacePage() {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">调仓建议区</CardTitle>
-          <CardDescription>调仓动作、依据与风险影响</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2 text-xs">
           {selectedPortfolio.rebalanceSuggestions.map((item) => {
@@ -823,8 +798,8 @@ export default function PortfolioWorkspacePage() {
                   {formatPercent((item.toWeight - item.fromWeight) * 100, 1)}
                 </p>
                 <p className="text-muted-foreground">reason: {item.reason}</p>
-                <p className="text-muted-foreground">expectedImpact: {item.expectedImpact ?? "占位"}</p>
-                <p className="text-muted-foreground">riskImpact: {item.riskImpact ?? "占位"}</p>
+                <p className="text-muted-foreground">expectedImpact: {item.expectedImpact ?? "-"}</p>
+                <p className="text-muted-foreground">riskImpact: {item.riskImpact ?? "-"}</p>
                 <div className="flex flex-wrap gap-1">
                   {(item.evidenceIds ?? []).map((id) => (
                     <Button key={`${item.assetId}-${id}`} size="sm" variant="outline" onClick={() => navigateTo("/evidence", { evidenceId: id })}>
@@ -910,7 +885,6 @@ export default function PortfolioWorkspacePage() {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">组合诊断区</CardTitle>
-          <CardDescription>组合优势、风险与下一步 Agent 组合分析建议</CardDescription>
         </CardHeader>
         <CardContent className="grid grid-cols-1 xl:grid-cols-2 gap-3 text-xs">
           <div className="rounded border p-2 space-y-1">
