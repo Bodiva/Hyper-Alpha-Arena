@@ -4975,3 +4975,33 @@ Validation:
 Rollback:
 
 Remove the facade and route additions; restore `/runners/status` local config checks.
+
+## M150 - In-Process Async Task Scheduler Boundary
+
+Status: Completed
+
+Goal:
+
+Add a minimal scheduler abstraction for future AgentRun worker migration without changing current submit behavior.
+
+Scope:
+
+1. Add `MemoryAsyncTaskStore` for local smoke/fallback.
+2. Add `InProcessAsyncTaskScheduler` with `submit`, `submit_callable`, `get`, and `cancel`.
+3. Persist completed/failed/timed_out/cancelled snapshots through the store boundary.
+4. Do not wire this into `/submit` yet.
+
+Acceptance:
+
+1. Backend py_compile passes.
+2. Local smoke completes one callable and records one failed callable.
+3. Existing AgentRun runtime behavior remains unchanged.
+
+Validation:
+
+1. `python -m py_compile backend/services/async_tasks/base.py backend/services/async_tasks/memory_store.py backend/services/async_tasks/in_process_scheduler.py backend/services/async_tasks/__init__.py`.
+2. Local Python smoke for completed and failed in-process tasks.
+
+Rollback:
+
+Remove the scheduler/memory store files and exports. Current AgentRun submit remains unaffected.

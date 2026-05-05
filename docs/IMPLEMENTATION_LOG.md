@@ -3783,3 +3783,25 @@ Validation:
 
 Next:
 - M150 should make the Qwen provider adapter reuse RuntimeConfigFacade for source consistency, then add a small model adapter smoke that does not call the network when key is missing.
+
+## 2026-05-05 - M150 In-Process Async Task Scheduler Boundary
+
+Goal:
+- Add a minimal scheduler abstraction for future AgentRun worker migration without changing current submit behavior.
+
+Changes:
+- Added `backend/services/async_tasks/memory_store.py`.
+- Added `backend/services/async_tasks/in_process_scheduler.py`.
+- Updated async task exports.
+
+Validation:
+- `python -m py_compile backend/services/async_tasks/base.py backend/services/async_tasks/memory_store.py backend/services/async_tasks/in_process_scheduler.py backend/services/async_tasks/__init__.py`: passed.
+- Local scheduler smoke passed:
+  - callable result persisted as `completed`
+  - raised `ValueError` persisted as `failed`
+
+Notes:
+- Current AgentRun `/submit` is not wired to this scheduler yet. This keeps Qwen/Native/TradingAgents behavior stable while establishing the future execution boundary.
+
+Next:
+- M151 should add a queue/scheduler design doc that maps current AgentRun background threads to `AsyncTaskSpec`, then decide the smallest safe wiring point.

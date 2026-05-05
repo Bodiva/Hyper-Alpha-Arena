@@ -1990,3 +1990,16 @@ Required local smoke:
 ```
 
 The smoke must verify qwen/bocha/tradingagents/langalpha keys are present and obvious secret markers are absent.
+
+### M150 In-Process Async Task Scheduler Boundary
+
+Required backend compile:
+
+```powershell
+python -m py_compile backend/services/async_tasks/base.py backend/services/async_tasks/memory_store.py backend/services/async_tasks/in_process_scheduler.py backend/services/async_tasks/__init__.py
+```
+
+Required local smoke:
+
+- Schedule a callable that returns a small result and verify `completed`.
+- Schedule a callable that raises and verify `failed` with error code.
