@@ -5174,3 +5174,30 @@ Result:
 
 Next:
 - Continue with M216: split or document the broad frontend UX dirty batch before committing it.
+
+## 2026-05-05 - M216 Settings Module Presets and Excel Import Dependencies
+
+Goal:
+- Continue moving configurable product behavior into MySQL/SystemConfig and declare Excel parser dependencies needed by the ClickHouse file import path.
+
+Changes:
+- Added Settings module preset backend APIs under `/api/config/settings-presets/{moduleKey}`.
+- Added frontend Settings API helpers and page integration for module presets.
+- Added `xlrd` and `openpyxl` to backend dependencies for Excel import support after image rebuilds.
+
+Validation:
+- `python -m py_compile backend/api/config_routes.py`: passed.
+- `GET /api/config/settings-presets/riskModel`: passed.
+- `POST /api/config/settings-presets/riskModel` with `Smoke Risk Preset`: passed.
+- `DELETE /api/config/settings-presets/riskModel/custom-smoke-risk-preset`: passed.
+- `pnpm --dir frontend build`: passed. Existing chunk/browserslist warnings remain.
+
+Result:
+- M216 is complete. Settings module presets are persisted through backend config APIs, and Excel import dependencies are declared.
+
+Notes:
+- No raw key values are exposed.
+- The smoke preset was deleted after validation.
+
+Next:
+- Continue with M217: commit the remaining AlphaTrace frontend shell/Data Import/navigation batch or split it into smaller reviewable commits.

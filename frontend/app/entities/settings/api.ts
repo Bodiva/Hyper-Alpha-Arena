@@ -96,12 +96,31 @@ export interface WorkspaceDefaultPresetPayload {
   source?: "builtin" | "database";
 }
 
+export type SettingsModulePresetKey = "riskModel" | "agents" | "dataPolicy" | "pagePreferences";
+
+export interface SettingsModulePresetPayload<TData = Record<string, unknown>> {
+  id?: string;
+  moduleKey?: SettingsModulePresetKey;
+  name: string;
+  description?: string;
+  data: TData;
+  source?: "database";
+}
+
 export interface WorkspacePresetListResponse {
   presets: WorkspaceDefaultPresetPayload[];
 }
 
 export interface WorkspacePresetSaveResponse extends WorkspacePresetListResponse {
   preset: WorkspaceDefaultPresetPayload;
+}
+
+export interface SettingsModulePresetListResponse {
+  presets: SettingsModulePresetPayload[];
+}
+
+export interface SettingsModulePresetSaveResponse extends SettingsModulePresetListResponse {
+  preset: SettingsModulePresetPayload;
 }
 
 export const getRuntimeCredentialStatus = async (): Promise<RuntimeCredentialStatus> => {
@@ -148,3 +167,20 @@ export const saveWorkspaceDefaultPreset = async (
 
 export const deleteWorkspaceDefaultPreset = async (presetId: string): Promise<WorkspacePresetListResponse & { success: boolean }> =>
   httpClient.delete(`/config/workspace-presets/${encodeURIComponent(presetId)}`);
+
+export const getSettingsModulePresets = async (
+  moduleKey: SettingsModulePresetKey,
+): Promise<SettingsModulePresetListResponse> =>
+  httpClient.get(`/config/settings-presets/${encodeURIComponent(moduleKey)}`);
+
+export const saveSettingsModulePreset = async (
+  moduleKey: SettingsModulePresetKey,
+  payload: SettingsModulePresetPayload,
+): Promise<SettingsModulePresetSaveResponse> =>
+  httpClient.post(`/config/settings-presets/${encodeURIComponent(moduleKey)}`, payload);
+
+export const deleteSettingsModulePreset = async (
+  moduleKey: SettingsModulePresetKey,
+  presetId: string,
+): Promise<SettingsModulePresetListResponse & { success: boolean }> =>
+  httpClient.delete(`/config/settings-presets/${encodeURIComponent(moduleKey)}/${encodeURIComponent(presetId)}`);

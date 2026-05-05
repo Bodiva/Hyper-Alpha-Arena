@@ -6946,3 +6946,38 @@ Validation:
 Rollback:
 
 Remove the ClickHouse file import static Data Source entry and restore the previous seed text.
+
+## M216 - Settings Module Presets and Excel Import Dependencies
+
+Status: Completed
+
+Goal:
+
+Move more product configuration into backend SystemConfig/MySQL and declare Excel parser dependencies required by the ClickHouse file import path.
+
+Scope:
+
+1. Add backend settings module preset APIs for `riskModel`, `agents`, `dataPolicy`, and `pagePreferences`.
+2. Add frontend Settings API helpers for module preset CRUD.
+3. Update Settings page to use module preset helpers.
+4. Add `xlrd` and `openpyxl` to backend package dependencies for `.xls/.xlsx` import support after rebuilds.
+5. Do not expose secret values and do not change runner execution behavior.
+
+Acceptance:
+
+1. `config_routes.py` py_compile passes.
+2. `GET /api/config/settings-presets/riskModel` works.
+3. `POST /api/config/settings-presets/riskModel` can save a smoke preset and `DELETE` can remove it.
+4. Frontend build passes.
+
+Validation:
+
+1. `python -m py_compile backend/api/config_routes.py`.
+2. `GET /api/config/settings-presets/riskModel`.
+3. `POST /api/config/settings-presets/riskModel` with a smoke preset.
+4. `DELETE /api/config/settings-presets/riskModel/custom-smoke-risk-preset`.
+5. `pnpm --dir frontend build`.
+
+Rollback:
+
+Remove the settings module preset routes/helpers/page usage and dependency additions.

@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -28,35 +28,28 @@ import {
   LEADERBOARD_SORT_OPTIONS,
   MARKET_OPTIONS,
   TAG_OPTIONS,
+  deleteSettingsModulePreset,
   deleteBochaRuntimeConfig,
   deleteWorkspaceDefaultPreset,
   getRuntimeCredentialStatus,
   getSettings,
+  getSettingsModulePresets,
   getWorkspaceDefaultPresets,
   saveBochaRuntimeConfig,
   saveQwenRuntimeConfig,
+  saveSettingsModulePreset,
   saveWorkspaceDefaultPreset,
   testCurrentQwenRuntimeConfig,
   type DataSourceDefaultStatus,
   type DecisionDefaultStatus,
   type EvidenceQualityThreshold,
   type LeaderboardSortMetric,
+  type SettingsModulePresetKey,
+  type SettingsModulePresetPayload,
   type WorkspaceDefaultPresetPayload,
 } from "@/entities/settings/api";
 import { API_BASE_URL } from "@/shared/api/api-config";
 import { navigateTo } from "@/shared/lib/navigation";
-import {
-  BRAND_BADGE,
-  BRAND_CN_BADGE,
-  BRAND_OWNER,
-  LEGACY_PROJECT_NAME,
-  PRODUCT_ASSET_SCOPE,
-  PRODUCT_CN_NAME,
-  PRODUCT_CN_SUBTITLE,
-  PRODUCT_DESCRIPTION,
-  PRODUCT_NAME,
-  PRODUCT_SUBTITLE,
-} from "@/shared/lib/product-branding";
 import ResearchWorkspaceNav from "@/shared/ui/ResearchWorkspaceNav";
 
 const arrayToggle = (items: string[], value: string): string[] =>
@@ -113,10 +106,20 @@ interface FieldBlockProps {
   children: ReactNode;
 }
 
+type ConnectionStatus = "missing" | "configured" | "testing" | "passed" | "failed";
+type NamedSettingsModuleKey = SettingsModulePresetKey;
+
 interface WorkspaceDefaultPreset extends WorkspaceDefaultPresetPayload {
   id: string;
   description: string;
   source: "builtin" | "database";
+}
+
+interface NamedSettingsPreset extends SettingsModulePresetPayload<Record<string, unknown>> {
+  id: string;
+  moduleKey: NamedSettingsModuleKey;
+  description: string;
+  source: "database";
 }
 
 const SETTINGS_NAV = [
@@ -125,7 +128,7 @@ const SETTINGS_NAV = [
   { id: "risk-model", label: "风险与模型", icon: ShieldAlert },
   { id: "agents", label: "Agent 模板", icon: Bot },
   { id: "data-policy", label: "数据源策略", icon: Database },
-  { id: "preview", label: "预览与操作", icon: MonitorCog },
+  { id: "page-preferences", label: "页面偏好", icon: MonitorCog },
 ];
 
 const WORKSPACE_DEFAULT_PRESETS: WorkspaceDefaultPreset[] = [
@@ -196,11 +199,27 @@ const WORKSPACE_DEFAULT_PRESETS: WorkspaceDefaultPreset[] = [
   },
 ];
 
+const NAMED_SETTINGS_MODULES: NamedSettingsModuleKey[] = ["riskModel", "agents", "dataPolicy", "pagePreferences"];
+
+const EMPTY_NAMED_PRESETS: Record<NamedSettingsModuleKey, NamedSettingsPreset[]> = {
+  riskModel: [],
+  agents: [],
+  dataPolicy: [],
+  pagePreferences: [],
+};
+
+const MODULE_LABELS: Record<NamedSettingsModuleKey, string> = {
+  riskModel: "风险与模型",
+  agents: "Agent 模板",
+  dataPolicy: "数据源策略",
+  pagePreferences: "页面偏好",
+};
+
 const scrollToSection = (id: string) => {
   document.getElementById(`settings-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
 };
 
-const SettingsSection = ({ id, title, description, icon, children, action }: SettingsSectionProps) => (
+const SettingsSection = ({ id, title, icon, children, action }: SettingsSectionProps) => (
   <Card id={`settings-${id}`} className="scroll-mt-4 bg-card/95 shadow-sm">
     <CardHeader className="pb-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -212,7 +231,6 @@ const SettingsSection = ({ id, title, description, icon, children, action }: Set
           ) : null}
           <div className="min-w-0">
             <CardTitle className="text-base">{title}</CardTitle>
-            {description ? <CardDescription className="mt-1">{description}</CardDescription> : null}
           </div>
         </div>
         {action ? <div className="shrink-0">{action}</div> : null}
@@ -222,21 +240,119 @@ const SettingsSection = ({ id, title, description, icon, children, action }: Set
   </Card>
 );
 
-const SummaryTile = ({ label, value, helper }: SummaryTileProps) => (
+const SummaryTile = ({ label, value }: SummaryTileProps) => (
   <div className="rounded-lg border bg-background p-3">
     <div className="text-[11px] font-medium uppercase text-muted-foreground">{label}</div>
     <div className="mt-1 truncate text-lg font-semibold">{value}</div>
-    {helper ? <div className="mt-1 truncate text-[11px] text-muted-foreground">{helper}</div> : null}
   </div>
 );
 
-const FieldBlock = ({ label, helper, children }: FieldBlockProps) => (
+const FieldBlock = ({ label, children }: FieldBlockProps) => (
   <div className="space-y-2">
     <div>
       <p className="text-xs font-medium">{label}</p>
-      {helper ? <p className="mt-0.5 text-[11px] text-muted-foreground">{helper}</p> : null}
     </div>
     {children}
+  </div>
+);
+
+const connectionStatusMeta: Record<ConnectionStatus, { label: string; dot: string; text: string }> = {
+  missing: { label: "未配置", dot: "bg-slate-300", text: "text-muted-foreground" },
+  configured: { label: "已配置", dot: "bg-emerald-500", text: "text-emerald-700" },
+  testing: { label: "测试中", dot: "bg-amber-500", text: "text-amber-700" },
+  passed: { label: "联通正常", dot: "bg-emerald-500", text: "text-emerald-700" },
+  failed: { label: "联通失败", dot: "bg-red-500", text: "text-red-700" },
+};
+
+const ConnectionIndicator = ({ status }: { status: ConnectionStatus }) => {
+  const meta = connectionStatusMeta[status];
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full border bg-background px-2 py-1 text-[11px] font-medium ${meta.text}`}>
+      <span className={`h-2 w-2 rounded-full ${meta.dot}`} />
+      {meta.label}
+    </span>
+  );
+};
+
+interface NamedPresetPanelProps {
+  moduleKey: NamedSettingsModuleKey;
+  name: string;
+  onNameChange: (value: string) => void;
+  presets: NamedSettingsPreset[];
+  activePresetId?: string;
+  saving: boolean;
+  loading: boolean;
+  onSave: () => void;
+  onRefresh: () => void;
+  onApply: (preset: NamedSettingsPreset) => void;
+  onDelete: (preset: NamedSettingsPreset) => void;
+}
+
+const NamedPresetPanel = ({
+  moduleKey,
+  name,
+  onNameChange,
+  presets,
+  activePresetId,
+  saving,
+  loading,
+  onSave,
+  onRefresh,
+  onApply,
+  onDelete,
+}: NamedPresetPanelProps) => (
+  <div className="rounded-md border bg-muted/20 p-3">
+    <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+      <div>
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-sm font-semibold">{MODULE_LABELS[moduleKey]}方案</h2>
+          <Badge variant="outline">{presets.length} 个</Badge>
+        </div>
+      </div>
+      <div className="flex flex-col gap-2 md:flex-row md:items-center">
+        <Input
+          value={name}
+          onChange={(event) => onNameChange(event.target.value)}
+          placeholder={`输入${MODULE_LABELS[moduleKey]}方案名称`}
+          className="md:w-64"
+        />
+        <Button size="sm" onClick={onSave} disabled={saving}>
+          <Save className="h-4 w-4" />
+          {saving ? "保存中..." : "保存为方案"}
+        </Button>
+        <Button size="sm" variant="outline" onClick={onRefresh} disabled={loading}>
+          <RefreshCcw className="h-4 w-4" />
+          {loading ? "读取中..." : "刷新"}
+        </Button>
+      </div>
+    </div>
+    {presets.length > 0 ? (
+      <div className="mt-3 flex flex-wrap gap-2">
+        {presets.map((preset) => (
+          <div
+            key={preset.id}
+            className={`inline-flex max-w-full items-center gap-2 rounded-full border px-2.5 py-1.5 text-xs ${
+              activePresetId === preset.id ? "border-primary bg-primary/10 text-primary" : "bg-background"
+            }`}
+          >
+            <button type="button" onClick={() => onApply(preset)} className="max-w-[12rem] truncate font-medium">
+              {preset.name}
+            </button>
+            {activePresetId === preset.id ? <span className="text-[10px] font-semibold">当前</span> : null}
+            <button
+              type="button"
+              className="text-muted-foreground hover:text-destructive"
+              onClick={() => onDelete(preset)}
+              disabled={saving}
+            >
+              删除
+            </button>
+          </div>
+        ))}
+      </div>
+    ) : (
+      <p className="mt-3 text-xs text-muted-foreground">暂无自定义方案。</p>
+    )}
   </div>
 );
 
@@ -283,14 +399,14 @@ export default function SettingsPage() {
   const [workspacePresetName, setWorkspacePresetName] = useState("");
   const [workspacePresetLoading, setWorkspacePresetLoading] = useState(false);
   const [workspacePresetSaving, setWorkspacePresetSaving] = useState(false);
-  const [operationNote, setOperationNote] = useState("当前配置面板已支持 Runtime Credentials 写入后端；其余产品偏好仍为前端本地状态。");
+  const [operationNote, setOperationNote] = useState("Runtime Credentials 和命名方案会写入后端；页面内未标注保存的字段仍是当前会话状态。");
 
   const [runtimeConfigLoading, setRuntimeConfigLoading] = useState(false);
   const [runtimeConfigSaving, setRuntimeConfigSaving] = useState<"qwen" | "bocha" | "delete-bocha" | null>(null);
   const [runtimeConfigMessage, setRuntimeConfigMessage] = useState("Runtime credentials are stored encrypted on the backend. API keys are never stored in frontend state after save.");
   const [qwenConfigured, setQwenConfigured] = useState(false);
   const [qwenApiKeyAvailable, setQwenApiKeyAvailable] = useState(false);
-  const [qwenConfigSource, setQwenConfigSource] = useState("missing");
+  const [, setQwenConfigSource] = useState("missing");
   const [qwenModel, setQwenModel] = useState("qwen-plus");
   const [qwenBaseUrl, setQwenBaseUrl] = useState("https://dashscope.aliyuncs.com/compatible-mode/v1");
   const [qwenApiKey, setQwenApiKey] = useState("");
@@ -298,6 +414,18 @@ export default function SettingsPage() {
   const [bochaApiKeyAvailable, setBochaApiKeyAvailable] = useState(false);
   const [bochaConfigSource, setBochaConfigSource] = useState("missing");
   const [bochaApiKey, setBochaApiKey] = useState("");
+  const [qwenConnectionStatus, setQwenConnectionStatus] = useState<ConnectionStatus>("missing");
+  const [bochaConnectionStatus, setBochaConnectionStatus] = useState<ConnectionStatus>("missing");
+  const [modulePresetNames, setModulePresetNames] = useState<Record<NamedSettingsModuleKey, string>>({
+    riskModel: "",
+    agents: "",
+    dataPolicy: "",
+    pagePreferences: "",
+  });
+  const [modulePresets, setModulePresets] = useState<Record<NamedSettingsModuleKey, NamedSettingsPreset[]>>(EMPTY_NAMED_PRESETS);
+  const [activeModulePresetIds, setActiveModulePresetIds] = useState<Partial<Record<NamedSettingsModuleKey, string>>>({});
+  const [modulePresetLoading, setModulePresetLoading] = useState<Partial<Record<NamedSettingsModuleKey, boolean>>>({});
+  const [modulePresetSaving, setModulePresetSaving] = useState<Partial<Record<NamedSettingsModuleKey, boolean>>>({});
 
   const loadRuntimeCredentials = async () => {
     setRuntimeConfigLoading(true);
@@ -308,10 +436,14 @@ export default function SettingsPage() {
       const qwenHasKey = Boolean(status.profile.llm_api_key_available);
       setQwenApiKeyAvailable(qwenHasKey);
       setQwenConfigSource(status.profile.llm_config_source || "missing");
-      setQwenConfigured(Boolean(status.profile.llm_configured && qwenHasKey && String(status.profile.llm_provider ?? "").toLowerCase() === "qwen"));
+      const nextQwenConfigured = Boolean(status.profile.llm_configured && qwenHasKey && String(status.profile.llm_provider ?? "").toLowerCase() === "qwen");
+      setQwenConfigured(nextQwenConfigured);
+      setQwenConnectionStatus(nextQwenConfigured ? "configured" : "missing");
       setQwenModel(status.profile.llm_model || qwenProvider?.models?.[2] || qwenProvider?.models?.[0] || "qwen-plus");
       setQwenBaseUrl(status.profile.llm_base_url || qwenProvider?.base_url || "https://dashscope.aliyuncs.com/compatible-mode/v1");
-      setBochaConfigured(Boolean(bochaTool?.configured));
+      const nextBochaConfigured = Boolean(bochaTool?.configured);
+      setBochaConfigured(nextBochaConfigured);
+      setBochaConnectionStatus(nextBochaConfigured ? "configured" : "missing");
       setBochaApiKeyAvailable(Boolean(bochaTool?.api_key_available ?? bochaTool?.configured));
       setBochaConfigSource(bochaTool?.config_source || "missing");
       setRuntimeConfigMessage("Runtime credential status loaded from backend.");
@@ -349,20 +481,57 @@ export default function SettingsPage() {
     void loadWorkspacePresets();
   }, []);
 
+  const normalizeModulePreset = (
+    moduleKey: NamedSettingsModuleKey,
+    preset: SettingsModulePresetPayload,
+  ): NamedSettingsPreset => ({
+    id: preset.id || `custom-${preset.name}`,
+    moduleKey,
+    name: preset.name,
+    description: preset.description || "自定义配置方案",
+    data: (preset.data || {}) as Record<string, unknown>,
+    source: "database",
+  });
+
+  const loadModulePresets = async (moduleKey: NamedSettingsModuleKey) => {
+    setModulePresetLoading((prev) => ({ ...prev, [moduleKey]: true }));
+    try {
+      const result = await getSettingsModulePresets(moduleKey);
+      setModulePresets((prev) => ({
+        ...prev,
+        [moduleKey]: (result.presets || []).map((preset) => normalizeModulePreset(moduleKey, preset)),
+      }));
+    } catch (error) {
+      setOperationNote(getErrorMessage(error, `读取${MODULE_LABELS[moduleKey]}方案失败。`));
+    } finally {
+      setModulePresetLoading((prev) => ({ ...prev, [moduleKey]: false }));
+    }
+  };
+
+  useEffect(() => {
+    NAMED_SETTINGS_MODULES.forEach((moduleKey) => {
+      void loadModulePresets(moduleKey);
+    });
+  }, []);
+
   const saveQwenCredentials = async () => {
     if (!qwenApiKey.trim()) {
       setRuntimeConfigMessage("Please enter a Qwen API key before saving.");
       return;
     }
     setRuntimeConfigSaving("qwen");
+    setQwenConnectionStatus("testing");
     try {
       await saveQwenRuntimeConfig({ apiKey: qwenApiKey.trim(), model: qwenModel.trim() || "qwen-plus", baseUrl: qwenBaseUrl.trim() });
       setQwenApiKey("");
       setQwenConfigured(true);
       setQwenApiKeyAvailable(true);
+      setQwenConnectionStatus("passed");
       setRuntimeConfigMessage("Qwen configuration saved and connection test passed. AlphaTrace QwenRunner will reuse this backend config.");
       await loadRuntimeCredentials();
+      setQwenConnectionStatus("passed");
     } catch (error) {
+      setQwenConnectionStatus("failed");
       setRuntimeConfigMessage(getErrorMessage(error, "Failed to save Qwen configuration."));
     } finally {
       setRuntimeConfigSaving(null);
@@ -375,6 +544,7 @@ export default function SettingsPage() {
       return;
     }
     setRuntimeConfigSaving("bocha");
+    setBochaConnectionStatus("testing");
     try {
       const result = await saveBochaRuntimeConfig(bochaApiKey.trim(), true);
       if (result.success === false) {
@@ -383,9 +553,12 @@ export default function SettingsPage() {
       setBochaApiKey("");
       setBochaConfigured(true);
       setBochaApiKeyAvailable(true);
+      setBochaConnectionStatus("passed");
       setRuntimeConfigMessage("Bocha API key saved encrypted on backend. Evidence retrieval will use Bocha when available and fallback to static seed on failure.");
       await loadRuntimeCredentials();
+      setBochaConnectionStatus("passed");
     } catch (error) {
+      setBochaConnectionStatus("failed");
       setRuntimeConfigMessage(getErrorMessage(error, "Failed to save Bocha configuration."));
     } finally {
       setRuntimeConfigSaving(null);
@@ -394,13 +567,17 @@ export default function SettingsPage() {
 
   const testCurrentQwenCredentials = async () => {
     setRuntimeConfigSaving("qwen");
+    setQwenConnectionStatus("testing");
     try {
       const result = await testCurrentQwenRuntimeConfig();
       setQwenConfigured(true);
       setQwenApiKeyAvailable(true);
+      setQwenConnectionStatus("passed");
       setRuntimeConfigMessage(`Current Qwen configuration test passed: ${result.provider}/${result.model}.`);
       await loadRuntimeCredentials();
+      setQwenConnectionStatus("passed");
     } catch (error) {
+      setQwenConnectionStatus("failed");
       setRuntimeConfigMessage(getErrorMessage(error, "Current Qwen configuration test failed."));
     } finally {
       setRuntimeConfigSaving(null);
@@ -415,6 +592,7 @@ export default function SettingsPage() {
       setBochaConfigured(false);
       setBochaApiKeyAvailable(false);
       setBochaConfigSource("missing");
+      setBochaConnectionStatus("missing");
       setRuntimeConfigMessage("Bocha API key removed. Evidence retrieval will use static seed fallback.");
       await loadRuntimeCredentials();
     } catch (error) {
@@ -492,6 +670,85 @@ export default function SettingsPage() {
     }
   };
 
+  const buildModulePresetData = (moduleKey: NamedSettingsModuleKey): Record<string, unknown> => {
+    if (moduleKey === "riskModel") {
+      return { riskThresholds, modelConfig };
+    }
+    if (moduleKey === "agents") {
+      return { agentTemplates };
+    }
+    if (moduleKey === "dataPolicy") {
+      return { dataSourcePolicy };
+    }
+    return { pagePreferences };
+  };
+
+  const applyModulePreset = (moduleKey: NamedSettingsModuleKey, preset: NamedSettingsPreset) => {
+    const data = preset.data as Record<string, any>;
+    if (moduleKey === "riskModel") {
+      if (data.riskThresholds) setRiskThresholds(data.riskThresholds);
+      if (data.modelConfig) setModelConfig(data.modelConfig);
+    }
+    if (moduleKey === "agents" && data.agentTemplates) {
+      setAgentTemplates(data.agentTemplates);
+    }
+    if (moduleKey === "dataPolicy" && data.dataSourcePolicy) {
+      setDataSourcePolicy(data.dataSourcePolicy);
+    }
+    if (moduleKey === "pagePreferences" && data.pagePreferences) {
+      setPagePreferences(data.pagePreferences);
+    }
+    setActiveModulePresetIds((prev) => ({ ...prev, [moduleKey]: preset.id }));
+    setOperationNote(`已套用“${preset.name}”${MODULE_LABELS[moduleKey]}方案。`);
+  };
+
+  const saveNamedModulePreset = async (moduleKey: NamedSettingsModuleKey) => {
+    const name = modulePresetNames[moduleKey].trim();
+    if (!name) {
+      setOperationNote(`请输入${MODULE_LABELS[moduleKey]}方案名称。`);
+      return;
+    }
+    setModulePresetSaving((prev) => ({ ...prev, [moduleKey]: true }));
+    try {
+      const result = await saveSettingsModulePreset(moduleKey, {
+        name,
+        description: `保存于 Settings：${MODULE_LABELS[moduleKey]}`,
+        data: buildModulePresetData(moduleKey),
+      });
+      const nextPresets = (result.presets || []).map((preset) => normalizeModulePreset(moduleKey, preset));
+      setModulePresets((prev) => ({ ...prev, [moduleKey]: nextPresets }));
+      setActiveModulePresetIds((prev) => ({
+        ...prev,
+        [moduleKey]: result.preset.id || nextPresets[0]?.id,
+      }));
+      setModulePresetNames((prev) => ({ ...prev, [moduleKey]: "" }));
+      setOperationNote(`已保存“${result.preset.name}”${MODULE_LABELS[moduleKey]}方案到数据库。`);
+    } catch (error) {
+      setOperationNote(getErrorMessage(error, `保存${MODULE_LABELS[moduleKey]}方案失败。`));
+    } finally {
+      setModulePresetSaving((prev) => ({ ...prev, [moduleKey]: false }));
+    }
+  };
+
+  const removeNamedModulePreset = async (moduleKey: NamedSettingsModuleKey, preset: NamedSettingsPreset) => {
+    setModulePresetSaving((prev) => ({ ...prev, [moduleKey]: true }));
+    try {
+      const result = await deleteSettingsModulePreset(moduleKey, preset.id);
+      setModulePresets((prev) => ({
+        ...prev,
+        [moduleKey]: (result.presets || []).map((item) => normalizeModulePreset(moduleKey, item)),
+      }));
+      if (activeModulePresetIds[moduleKey] === preset.id) {
+        setActiveModulePresetIds((prev) => ({ ...prev, [moduleKey]: undefined }));
+      }
+      setOperationNote(`已删除“${preset.name}”${MODULE_LABELS[moduleKey]}方案。`);
+    } catch (error) {
+      setOperationNote(getErrorMessage(error, `删除${MODULE_LABELS[moduleKey]}方案失败。`));
+    } finally {
+      setModulePresetSaving((prev) => ({ ...prev, [moduleKey]: false }));
+    }
+  };
+
   const previewSummary = useMemo(
     () => ({
       assetScopeSummary: `资产类型 ${defaultAssetTypes.join(" / ")}；市场 ${defaultMarkets.join(" / ")}；标签 ${defaultTags.join(" / ")}`,
@@ -527,22 +784,9 @@ export default function SettingsPage() {
       <section className="rounded-xl border bg-card p-5 shadow-sm">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="max-w-3xl space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-semibold tracking-tight">Settings 工作台设置</h1>
-              <Badge variant="secondary">AlphaTrace</Badge>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              统一管理 {PRODUCT_NAME} 的运行时接入、默认资产范围、筛选偏好、风险阈值、Agent 模板和数据源策略。
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Runtime Credentials 会写入后端加密配置；其余工作台偏好当前仍是前端本地状态。
-            </p>
+            <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" onClick={() => setOperationNote("保存配置占位：当前仅更新前端本地状态，未写入后端。")}>
-              <Save className="h-4 w-4" />
-              保存本地偏好
-            </Button>
             <Button size="sm" variant="outline" onClick={resetSettings}>
               <RotateCcw className="h-4 w-4" />
               重置默认
@@ -551,10 +795,16 @@ export default function SettingsPage() {
         </div>
 
         <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <SummaryTile label="Qwen Runtime" value={qwenConfigured ? "已配置" : "未配置"} helper={`source: ${qwenConfigSource}`} />
-          <SummaryTile label="Bocha Search" value={bochaConfigured ? "已配置" : "未配置"} helper={`source: ${bochaConfigSource}`} />
-          <SummaryTile label="资产样本" value={assets.length} helper={PRODUCT_CN_NAME} />
-          <SummaryTile label="数据源样本" value={dataSources.length} helper={`Runtime API: ${API_BASE_URL}`} />
+          <div className="rounded-lg border bg-background p-3">
+            <div className="text-[11px] font-medium uppercase text-muted-foreground">Qwen Runtime</div>
+            <div className="mt-2"><ConnectionIndicator status={qwenConnectionStatus} /></div>
+          </div>
+          <div className="rounded-lg border bg-background p-3">
+            <div className="text-[11px] font-medium uppercase text-muted-foreground">Bocha Search</div>
+            <div className="mt-2"><ConnectionIndicator status={bochaConnectionStatus} /></div>
+          </div>
+          <SummaryTile label="资产样本" value={assets.length} />
+          <SummaryTile label="数据源样本" value={dataSources.length} />
         </div>
       </section>
 
@@ -596,8 +846,8 @@ export default function SettingsPage() {
           >
             <div className="space-y-4">
               <div className="flex flex-wrap items-center gap-2 text-xs">
-                <Badge variant={qwenConfigured ? "default" : "outline"}>Qwen {qwenConfigured ? "configured" : "not configured"}</Badge>
-                <Badge variant={bochaConfigured ? "default" : "outline"}>Bocha {bochaConfigured ? "configured" : "not configured"}</Badge>
+                <ConnectionIndicator status={qwenConnectionStatus} />
+                <ConnectionIndicator status={bochaConnectionStatus} />
                 <Badge variant="outline">Qwen key: {qwenApiKeyAvailable ? "available" : "missing"}</Badge>
                 <Badge variant="outline">Bocha key: {bochaApiKeyAvailable ? "available" : "missing"}</Badge>
                 <Badge variant="outline">Runtime API: {API_BASE_URL}</Badge>
@@ -608,9 +858,8 @@ export default function SettingsPage() {
                   <div className="mb-4 flex items-start justify-between gap-3">
                     <div>
                       <h2 className="text-sm font-semibold">Qwen / DashScope Runtime</h2>
-                      <p className="mt-1 text-xs text-muted-foreground">用于 QwenRunner 和 TradingAgents PoC 的后端 LLM provider。</p>
                     </div>
-                    <Badge variant={qwenConfigured ? "default" : "outline"}>{qwenConfigured ? "ready" : "missing"}</Badge>
+                    <ConnectionIndicator status={qwenConnectionStatus} />
                   </div>
                   <div className="grid gap-3 md:grid-cols-2">
                     <FieldBlock label="Provider">
@@ -626,7 +875,7 @@ export default function SettingsPage() {
                     </FieldBlock>
                   </div>
                   <div className="mt-3">
-                    <FieldBlock label="DASHSCOPE_API_KEY" helper="保存后写入后端加密配置，前端不会持久化明文。">
+                    <FieldBlock label="DASHSCOPE_API_KEY">
                       <Input type="password" value={qwenApiKey} onChange={(event) => setQwenApiKey(event.target.value)} placeholder={qwenConfigured ? "输入新 key 可更新" : "DashScope API key"} autoComplete="off" />
                     </FieldBlock>
                   </div>
@@ -644,9 +893,8 @@ export default function SettingsPage() {
                   <div className="mb-4 flex items-start justify-between gap-3">
                     <div>
                       <h2 className="text-sm font-semibold">Bocha Web Search</h2>
-                      <p className="mt-1 text-xs text-muted-foreground">用于 Evidence Retrieval 的外部网页证据，失败时回退 static seed。</p>
                     </div>
-                    <Badge variant={bochaConfigured ? "default" : "outline"}>{bochaConfigured ? "ready" : "missing"}</Badge>
+                    <ConnectionIndicator status={bochaConnectionStatus} />
                   </div>
                   <div className="grid gap-3 md:grid-cols-2">
                     <SummaryTile label="Config Source" value={bochaConfigSource} />
@@ -836,6 +1084,19 @@ export default function SettingsPage() {
             icon={<ShieldAlert className="h-4 w-4" />}
           >
             <div className="space-y-6">
+              <NamedPresetPanel
+                moduleKey="riskModel"
+                name={modulePresetNames.riskModel}
+                onNameChange={(value) => setModulePresetNames((prev) => ({ ...prev, riskModel: value }))}
+                presets={modulePresets.riskModel}
+                activePresetId={activeModulePresetIds.riskModel}
+                saving={Boolean(modulePresetSaving.riskModel)}
+                loading={Boolean(modulePresetLoading.riskModel)}
+                onSave={() => void saveNamedModulePreset("riskModel")}
+                onRefresh={() => void loadModulePresets("riskModel")}
+                onApply={(preset) => applyModulePreset("riskModel", preset)}
+                onDelete={(preset) => void removeNamedModulePreset("riskModel", preset)}
+              />
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 {[
                   ["最大单资产权重 (%)", "maxSingleAssetWeightPct"],
@@ -864,7 +1125,6 @@ export default function SettingsPage() {
               <div className="rounded-lg border bg-background p-4">
                 <div className="mb-4">
                   <h2 className="text-sm font-semibold">模型偏好</h2>
-                  <p className="mt-1 text-xs text-muted-foreground">当前仍是前端偏好占位；真实运行时 Key 在“运行时接入”配置。</p>
                 </div>
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                   <FieldBlock label="quick thinking model">
@@ -908,7 +1168,20 @@ export default function SettingsPage() {
             description="默认启用哪些 Agent 角色，以及它们关联的工具和输出类型。"
             icon={<Bot className="h-4 w-4" />}
           >
-            <div className="divide-y rounded-lg border bg-background">
+            <NamedPresetPanel
+              moduleKey="agents"
+              name={modulePresetNames.agents}
+              onNameChange={(value) => setModulePresetNames((prev) => ({ ...prev, agents: value }))}
+              presets={modulePresets.agents}
+              activePresetId={activeModulePresetIds.agents}
+              saving={Boolean(modulePresetSaving.agents)}
+              loading={Boolean(modulePresetLoading.agents)}
+              onSave={() => void saveNamedModulePreset("agents")}
+              onRefresh={() => void loadModulePresets("agents")}
+              onApply={(preset) => applyModulePreset("agents", preset)}
+              onDelete={(preset) => void removeNamedModulePreset("agents", preset)}
+            />
+            <div className="mt-4 divide-y rounded-lg border bg-background">
               {agentTemplates.map((template) => (
                 <div key={template.id} className="grid gap-3 p-4 lg:grid-cols-[220px_minmax(0,1fr)_170px] lg:items-center">
                   <div>
@@ -952,6 +1225,19 @@ export default function SettingsPage() {
             }
           >
             <div className="space-y-4">
+              <NamedPresetPanel
+                moduleKey="dataPolicy"
+                name={modulePresetNames.dataPolicy}
+                onNameChange={(value) => setModulePresetNames((prev) => ({ ...prev, dataPolicy: value }))}
+                presets={modulePresets.dataPolicy}
+                activePresetId={activeModulePresetIds.dataPolicy}
+                saving={Boolean(modulePresetSaving.dataPolicy)}
+                loading={Boolean(modulePresetLoading.dataPolicy)}
+                onSave={() => void saveNamedModulePreset("dataPolicy")}
+                onRefresh={() => void loadModulePresets("dataPolicy")}
+                onApply={(preset) => applyModulePreset("dataPolicy", preset)}
+                onDelete={(preset) => void removeNamedModulePreset("dataPolicy", preset)}
+              />
               <FieldBlock label="默认数据源优先级">
                 <div className="flex flex-wrap gap-2">
                   {dataSourcePolicy.priority.map((item, index) => (
@@ -983,16 +1269,28 @@ export default function SettingsPage() {
           </SettingsSection>
 
           <SettingsSection
-            id="preview"
-            title="预览与操作"
-            description="汇总当前本地偏好，明确哪些只是占位操作。"
+            id="page-preferences"
+            title="页面偏好"
+            description="只管理页面打开方式、主题、语言和默认显示项；全局动作集中放在右侧。"
             icon={<MonitorCog className="h-4 w-4" />}
           >
-            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
               <div className="space-y-4">
-                <div className="rounded-lg border bg-background p-4">
-                  <h2 className="mb-3 text-sm font-semibold">页面偏好</h2>
-                  <div className="grid gap-3 md:grid-cols-2">
+                <NamedPresetPanel
+                  moduleKey="pagePreferences"
+                  name={modulePresetNames.pagePreferences}
+                  onNameChange={(value) => setModulePresetNames((prev) => ({ ...prev, pagePreferences: value }))}
+                  presets={modulePresets.pagePreferences}
+                  activePresetId={activeModulePresetIds.pagePreferences}
+                  saving={Boolean(modulePresetSaving.pagePreferences)}
+                  loading={Boolean(modulePresetLoading.pagePreferences)}
+                  onSave={() => void saveNamedModulePreset("pagePreferences")}
+                  onRefresh={() => void loadModulePresets("pagePreferences")}
+                  onApply={(preset) => applyModulePreset("pagePreferences", preset)}
+                  onDelete={(preset) => void removeNamedModulePreset("pagePreferences", preset)}
+                />
+                <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+                  <div className="space-y-4 rounded-md border bg-background p-4">
                     <FieldBlock label="默认首页">
                       <Badge variant="outline">{pagePreferences.defaultHomePage}</Badge>
                     </FieldBlock>
@@ -1016,14 +1314,14 @@ export default function SettingsPage() {
                       </div>
                     </FieldBlock>
                   </div>
-                  <div className="mt-4 grid gap-2 md:grid-cols-2">
+                  <div className="grid gap-2">
                     {[
                       ["默认打开最近一次 Agent Run", "openRecentAgentRunByDefault"],
                       ["默认显示 ResearchWorkspaceNav", "showResearchWorkspaceNav"],
                       ["默认显示风险提示", "showRiskWarnings"],
                       ["默认显示证据链", "showEvidenceTrace"],
                     ].map(([label, key]) => (
-                      <div key={key} className="flex items-center justify-between gap-3 rounded-md border bg-muted/20 px-3 py-2 text-xs">
+                      <div key={key} className="flex items-center justify-between gap-3 rounded-md border bg-background px-3 py-2 text-xs">
                         <span>{label}</span>
                         <Switch
                           checked={Boolean(pagePreferences[key as keyof typeof pagePreferences])}
@@ -1033,47 +1331,25 @@ export default function SettingsPage() {
                     ))}
                   </div>
                 </div>
-
-                <div className="rounded-lg border bg-background p-4 text-xs">
-                  <h2 className="mb-3 text-sm font-semibold">配置预览</h2>
-                  <div className="space-y-2 text-muted-foreground">
-                    <p><span className="font-medium text-foreground">默认资产范围：</span>{previewSummary.assetScopeSummary}</p>
-                    <p><span className="font-medium text-foreground">风险阈值摘要：</span>{previewSummary.riskSummary}</p>
-                    <p><span className="font-medium text-foreground">默认 Agent 模板：</span>{previewSummary.enabledAgentTemplateCount} / {agentTemplates.length}</p>
-                    <p><span className="font-medium text-foreground">数据源策略：</span>{previewSummary.dataSourcePolicySummary}</p>
-                    <p><span className="font-medium text-foreground">页面偏好：</span>{previewSummary.pagePreferenceSummary}</p>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Badge variant="outline">资产样本 {assets.length}</Badge>
-                    <Badge variant="outline">策略样本 {strategies.length}</Badge>
-                    <Badge variant="outline">数据源样本 {dataSources.length}</Badge>
-                    <Badge variant="outline">Decision {decisionStatusLabelMap[decisionDefaultStatus]}</Badge>
-                    <Badge variant="outline">Data Source {statusLabelMap[dataSourceDefaultStatus]}</Badge>
-                  </div>
-                </div>
               </div>
 
               <div className="space-y-4">
-                <div className="rounded-lg border bg-background p-4">
-                  <h2 className="mb-3 text-sm font-semibold">操作</h2>
+                <div className="rounded-md border bg-background p-4">
+                  <h2 className="mb-3 text-sm font-semibold">全局操作</h2>
                   <div className="grid gap-2">
-                    <Button size="sm" onClick={() => setOperationNote("保存配置占位：当前仅更新前端本地状态，未写入后端。")}>
-                      <Save className="h-4 w-4" />
-                      保存配置
-                    </Button>
                     <Button size="sm" variant="outline" onClick={resetSettings}>
                       <RotateCcw className="h-4 w-4" />
                       重置默认
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => setOperationNote("导出配置占位：后续可输出 JSON 配置文件。")}>
+                    <Button size="sm" variant="outline" onClick={() => setOperationNote("导出配置功能待接入。")}>
                       <Upload className="h-4 w-4" />
                       导出配置
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => setOperationNote("导入配置占位：后续将支持 JSON/YAML 导入并校验。")}>
+                    <Button size="sm" variant="outline" onClick={() => setOperationNote("导入配置功能待接入。")}>
                       <Upload className="h-4 w-4" />
                       导入配置
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => setOperationNote("配置变更记录占位：后续将接入审计日志。")}>
+                    <Button size="sm" variant="outline" onClick={() => setOperationNote("配置变更记录功能待接入。")}>
                       <History className="h-4 w-4" />
                       变更记录
                     </Button>
@@ -1081,17 +1357,19 @@ export default function SettingsPage() {
                   <p className="mt-3 rounded-md bg-muted/40 p-3 text-xs text-muted-foreground">{operationNote}</p>
                 </div>
 
-                <div className="rounded-lg border bg-muted/20 p-4 text-xs text-muted-foreground">
-                  <h2 className="mb-2 text-sm font-semibold text-foreground">产品信息</h2>
-                  <p><span className="font-medium text-foreground">产品：</span>{PRODUCT_CN_NAME} / {PRODUCT_NAME}</p>
-                  <p><span className="font-medium text-foreground">副标题：</span>{PRODUCT_SUBTITLE} / {PRODUCT_CN_SUBTITLE}</p>
-                  <p><span className="font-medium text-foreground">定位：</span>{PRODUCT_DESCRIPTION}</p>
-                  <p><span className="font-medium text-foreground">背书：</span>{BRAND_OWNER} · {BRAND_CN_BADGE} · {BRAND_BADGE}</p>
-                  <p><span className="font-medium text-foreground">Legacy：</span>基于原 {LEGACY_PROJECT_NAME} 能力渐进式重构，不作为当前主品牌。</p>
+                <div className="rounded-md border bg-muted/20 p-4 text-xs">
+                  <h2 className="mb-3 text-sm font-semibold">当前摘要</h2>
+                  <div className="space-y-2 text-muted-foreground">
+                    <p><span className="font-medium text-foreground">资产范围：</span>{defaultAssetTypes.length} 类 / {defaultMarkets.length} 市场 / {defaultTags.length} 标签</p>
+                    <p><span className="font-medium text-foreground">风险：</span>单资产 {riskThresholds.maxSingleAssetWeightPct}% · 回撤 {riskThresholds.maxDrawdownAlertPct}%</p>
+                    <p><span className="font-medium text-foreground">Agent：</span>{previewSummary.enabledAgentTemplateCount} / {agentTemplates.length} 启用</p>
+                    <p><span className="font-medium text-foreground">数据源：</span>质量阈值 {dataSourcePolicy.minQualityScore} · {statusLabelMap[dataSourceDefaultStatus]}</p>
+                  </div>
                   <div className="mt-2 flex flex-wrap gap-1">
-                    {PRODUCT_ASSET_SCOPE.map((scope) => (
-                      <Badge key={scope} variant="outline">{scope}</Badge>
-                    ))}
+                    <Badge variant="outline">资产样本 {assets.length}</Badge>
+                    <Badge variant="outline">策略样本 {strategies.length}</Badge>
+                    <Badge variant="outline">数据源样本 {dataSources.length}</Badge>
+                    <Badge variant="outline">Decision {decisionStatusLabelMap[decisionDefaultStatus]}</Badge>
                   </div>
                 </div>
               </div>

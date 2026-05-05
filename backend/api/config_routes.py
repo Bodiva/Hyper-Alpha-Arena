@@ -34,6 +34,8 @@ class ConfigUpdateRequest(BaseModel):
 
 
 WORKSPACE_PRESETS_CONFIG_KEY = "alphatrace_workspace_default_presets"
+SETTINGS_MODULE_PRESET_PREFIX = "alphatrace_settings_module_presets"
+ALLOWED_SETTINGS_MODULES = {"riskModel", "agents", "dataPolicy", "pagePreferences"}
 
 
 class WorkspacePresetRequest(BaseModel):
@@ -49,9 +51,22 @@ class WorkspacePresetRequest(BaseModel):
     dataSourceDefaultStatus: str
 
 
+class SettingsModulePresetRequest(BaseModel):
+    id: Optional[str] = None
+    name: str
+    description: Optional[str] = ""
+    data: Dict[str, Any]
+
+
 def _slugify_preset_id(name: str) -> str:
     slug = re.sub(r"[^a-zA-Z0-9\u4e00-\u9fff]+", "-", name.strip()).strip("-").lower()
     return f"custom-{slug or 'workspace-preset'}"
+
+
+def _settings_module_config_key(module_key: str) -> str:
+    if module_key not in ALLOWED_SETTINGS_MODULES:
+        raise HTTPException(status_code=404, detail="settings module not found")
+    return f"{SETTINGS_MODULE_PRESET_PREFIX}_{module_key}"
 
 
 def _normalize_workspace_preset(raw: Dict[str, Any]) -> Dict[str, Any]:
@@ -117,6 +132,66 @@ def _save_workspace_presets(db: Session, presets: List[Dict[str, Any]]) -> None:
             value=value,
             description="AlphaTrace custom workspace default presets",
         )
+        db.add(config)
+    db.commit()
+
+
+def _normalize_settings_module_preset(raw: Dict[str, Any], module_key: str) -> Dict[str, Any]:
+    name = str(raw.get("name") or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="preset name is required")
+
+    data = raw.get("data")
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=400, detail="preset data must be an object")
+
+    preset_id = str(raw.get("id") or "").strip() or _slugify_preset_id(name)
+    if not preset_id.startswith("custom-"):
+        preset_id = f"custom-{preset_id}"
+
+    return {
+        "id": preset_id,
+        "moduleKey": module_key,
+        "name": name,
+        "description": str(raw.get("description") or "").strip(),
+        "data": data,
+        "source": "database",
+    }
+
+
+def _load_settings_module_presets(db: Session, module_key: str) -> List[Dict[str, Any]]:
+    config_key = _settings_module_config_key(module_key)
+    config = db.query(SystemConfig).filter(SystemConfig.key == config_key).first()
+    if not config or not config.value:
+        return []
+    try:
+        payload = json.loads(config.value)
+    except json.JSONDecodeError:
+        logger.warning("Invalid settings preset JSON in SystemConfig for %s", module_key)
+        return []
+    if not isinstance(payload, list):
+        return []
+
+    presets = []
+    for item in payload:
+        if isinstance(item, dict):
+            try:
+                presets.append(_normalize_settings_module_preset(item, module_key))
+            except HTTPException:
+                logger.warning("Skipping invalid settings module preset: %s", item)
+    return presets
+
+
+def _save_settings_module_presets(db: Session, module_key: str, presets: List[Dict[str, Any]]) -> None:
+    config_key = _settings_module_config_key(module_key)
+    config = db.query(SystemConfig).filter(SystemConfig.key == config_key).first()
+    value = json.dumps(presets, ensure_ascii=False)
+    description = f"AlphaTrace custom settings presets for {module_key}"
+    if config:
+        config.value = value
+        config.description = description
+    else:
+        config = SystemConfig(key=config_key, value=value, description=description)
         db.add(config)
     db.commit()
 
@@ -270,6 +345,56 @@ async def delete_workspace_preset(preset_id: str, db: Session = Depends(get_db))
     except Exception as e:
         logger.error(f"Failed to delete workspace preset: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to delete workspace preset: {str(e)}")
+
+
+@router.get("/settings-presets/{module_key}")
+async def get_settings_module_presets(module_key: str, db: Session = Depends(get_db)):
+    """Get custom named presets for a Settings module."""
+    try:
+        return {"presets": _load_settings_module_presets(db, module_key)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get settings module presets: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get settings module presets: {str(e)}")
+
+
+@router.post("/settings-presets/{module_key}")
+async def upsert_settings_module_preset(
+    module_key: str,
+    payload: SettingsModulePresetRequest,
+    db: Session = Depends(get_db),
+):
+    """Create or update a custom named preset for a Settings module."""
+    try:
+        preset = _normalize_settings_module_preset(payload.dict(), module_key)
+        presets = _load_settings_module_presets(db, module_key)
+        next_presets = [item for item in presets if item.get("id") != preset["id"]]
+        next_presets.insert(0, preset)
+        _save_settings_module_presets(db, module_key, next_presets)
+        return {"preset": preset, "presets": next_presets}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to save settings module preset: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to save settings module preset: {str(e)}")
+
+
+@router.delete("/settings-presets/{module_key}/{preset_id}")
+async def delete_settings_module_preset(module_key: str, preset_id: str, db: Session = Depends(get_db)):
+    """Delete a custom named preset for a Settings module."""
+    try:
+        presets = _load_settings_module_presets(db, module_key)
+        next_presets = [item for item in presets if item.get("id") != preset_id]
+        if len(next_presets) == len(presets):
+            raise HTTPException(status_code=404, detail="settings module preset not found")
+        _save_settings_module_presets(db, module_key, next_presets)
+        return {"success": True, "presets": next_presets}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete settings module preset: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete settings module preset: {str(e)}")
 
 
 # Generic system config update - must be after specific routes to avoid path conflicts

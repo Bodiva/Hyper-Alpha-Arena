@@ -3044,3 +3044,26 @@ Expected:
 
 - Response includes `ds_etf_file_import_clickhouse`.
 - Domain seed text remains MySQL-aligned.
+
+### M216 Settings Module Presets and Excel Import Dependencies
+
+Checks:
+
+```powershell
+python -m py_compile backend/api/config_routes.py
+Invoke-RestMethod http://127.0.0.1:8802/api/config/settings-presets/riskModel
+pnpm --dir frontend build
+```
+
+Smoke mutation:
+
+```powershell
+$body = @{ name = 'Smoke Risk Preset'; description = 'M216 smoke preset'; data = @{ maxDrawdown = 12; riskLevel = 'balanced' } } | ConvertTo-Json -Depth 5
+Invoke-RestMethod -Method Post http://127.0.0.1:8802/api/config/settings-presets/riskModel -ContentType 'application/json' -Body $body
+Invoke-RestMethod -Method Delete http://127.0.0.1:8802/api/config/settings-presets/riskModel/custom-smoke-risk-preset
+```
+
+Expected:
+
+- Smoke preset can be created and removed from SystemConfig-backed storage.
+- Frontend build passes.
