@@ -2,6 +2,14 @@
 
 Date: 2026-05-01
 
+Status update 2026-05-05:
+
+This comparison remains valid for TradingAgents/LangAlpha integration boundaries, but database direction has changed since the original draft. The canonical storage decision is now:
+
+- MySQL 8.0+ for system configuration, credential metadata, task control, and lightweight control-plane state.
+- ClickHouse for structured business facts, market data, runtime/report/evidence/decision analytical projections, and leaderboard/quality facts.
+- JSON store remains a local fallback only.
+
 ## Executive Summary
 
 TradingAgents and LangAlpha should not be treated as interchangeable backends.
@@ -70,7 +78,7 @@ TradingAgents and LangAlpha should not be treated as interchangeable backends.
 
 ### Medium Term
 
-- Move AlphaTrace JSON store to PostgreSQL.
+- Move AlphaTrace control-plane state from JSON fallback toward MySQL, and project structured business/runtime analytics into ClickHouse.
 - Formalize RunnerAdapter contracts and event mappers.
 - Build a TradingAgentsAdapter PoC with better event mapping if operationally useful.
 - Evaluate LangAlpha as an external research workspace service after source checkout and API verification are complete.

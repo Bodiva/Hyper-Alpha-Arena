@@ -5591,3 +5591,26 @@ Recommended next milestones:
 
 Result:
 - M230 is complete.
+
+## 2026-05-05 - M231 Historical Architecture Docs Storage Direction Guardrail
+
+Goal:
+- Prevent older PostgreSQL-oriented design documents from misleading future execution after the MySQL/ClickHouse storage decision.
+
+Changes:
+- Added status-update notes to:
+  - `docs/engineering/25_alphatrace_target_backend_architecture.md`
+  - `docs/engineering/26_alphatrace_backend_implementation_plan.md`
+  - `docs/engineering/28_tradingagents_vs_langalpha_backend_comparison.md`
+  - `docs/engineering/29_langalpha_adapter_design.md`
+- Updated `28_tradingagents_vs_langalpha_backend_comparison.md` medium-term recommendation from PostgreSQL migration to MySQL control-plane + ClickHouse analytics.
+
+Validation:
+- `Select-String` over docs 25/26/28/29 for status-update, MySQL, ClickHouse, and PostgreSQL wording: passed.
+
+Notes:
+- Historical PostgreSQL sections remain for context but are no longer current execution targets.
+- Canonical execution should use `PROJECT_SPEC`, `EXECUTION_PLAN`, `VALIDATION`, and `ARCHITECTURE_OVERVIEW`.
+
+Result:
+- M231 is complete.

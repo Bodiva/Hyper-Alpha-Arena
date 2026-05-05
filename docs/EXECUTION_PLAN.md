@@ -7445,3 +7445,32 @@ Validation:
 Rollback:
 
 Revert only the M230 documentation entries.
+
+## M231 - Historical Architecture Docs Storage Direction Guardrail
+
+Status: Completed
+
+Goal:
+
+Prevent older architecture and implementation-plan documents from conflicting with the current MySQL/ClickHouse storage decision.
+
+Scope:
+
+1. Add status-update notes to historical PostgreSQL-oriented docs.
+2. Update TradingAgents vs LangAlpha comparison medium-term storage recommendation.
+3. Clarify LangAlpha adapter must not introduce PostgreSQL/Redis/sandbox dependencies into AlphaTrace unless deployed as a separate external service.
+4. Do not rewrite historical documents wholesale.
+
+Acceptance:
+
+1. Historical docs explicitly state PostgreSQL sections are context, not current execution target.
+2. Current direction is MySQL for config/task control and ClickHouse for structured business/analytics data.
+3. Canonical docs remain `PROJECT_SPEC`, `EXECUTION_PLAN`, `VALIDATION`, and `ARCHITECTURE_OVERVIEW`.
+
+Validation:
+
+1. `Select-String` confirms status-update notes and MySQL/ClickHouse wording in docs 25, 26, 28, and 29.
+
+Rollback:
+
+Remove the status-update notes and restored comparison wording.

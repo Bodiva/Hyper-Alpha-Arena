@@ -2,6 +2,16 @@
 
 日期：2026-05-01
 
+状态更新：2026-05-05
+
+本文是历史实施计划。下文所有 PostgreSQL 相关阶段保留为当时讨论记录，不再作为当前执行目标。当前 canonical 方向是：
+
+1. MySQL 8.0+：系统配置、密钥元数据、任务控制、轻量控制面状态。
+2. ClickHouse：结构化业务事实、行情数据、Runtime/Report/Evidence/Decision 分析投影、Leaderboard/Quality facts。
+3. JSON store：仅作为本地/MVP fallback。
+
+后续执行以 `docs/PROJECT_SPEC.md`、`docs/EXECUTION_PLAN.md`、`docs/VALIDATION.md`、`docs/ARCHITECTURE_OVERVIEW.md` 为准。
+
 目标：给出 AlphaTrace 商业化后端的分阶段实施计划。
 
 ## 总体路线
@@ -383,4 +393,3 @@
 6. 外部数据源授权范围。
 7. 多租户权限模型。
 8. 是否需要审计日志满足金融机构内控要求。
-

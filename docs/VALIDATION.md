@@ -3402,3 +3402,16 @@ Expected:
 
 - M223-M229 commits are present on the working branch.
 - Remaining dirty files are classified and not accidentally mixed with backend abstraction commits.
+
+## M231 Validation - Historical Architecture Docs Storage Direction Guardrail
+
+Required checks:
+
+```powershell
+Select-String -Path docs/engineering/25_alphatrace_target_backend_architecture.md,docs/engineering/26_alphatrace_backend_implementation_plan.md,docs/engineering/28_tradingagents_vs_langalpha_backend_comparison.md,docs/engineering/29_langalpha_adapter_design.md -Pattern "状态更新|Status update|MySQL|ClickHouse|PostgreSQL" -CaseSensitive:$false
+```
+
+Expected:
+
+- Historical PostgreSQL-oriented documents clearly say PostgreSQL sections are historical context.
+- The active direction is MySQL for control-plane/config and ClickHouse for structured business/analytics data.

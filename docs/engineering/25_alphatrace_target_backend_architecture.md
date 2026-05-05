@@ -2,6 +2,16 @@
 
 日期：2026-05-01
 
+状态更新：2026-05-05
+
+本文写于当前存储方向调整之前。下文所有 PostgreSQL 相关内容保留为历史设计上下文，不再作为当前执行目标。当前 canonical 方向是：
+
+1. MySQL 8.0+：系统配置、密钥元数据、任务控制、轻量控制面状态。
+2. ClickHouse：结构化业务事实、行情数据、Runtime/Report/Evidence/Decision 分析投影、Leaderboard/Quality facts。
+3. JSON store：仅作为本地/MVP fallback。
+
+后续执行以 `docs/PROJECT_SPEC.md`、`docs/EXECUTION_PLAN.md`、`docs/VALIDATION.md`、`docs/ARCHITECTURE_OVERVIEW.md` 为准。
+
 目标：定义 AlphaTrace 自有商业化后端目标架构。
 
 ## 1. 架构原则
@@ -807,4 +817,3 @@ TradingAgentsAdapter 应做：
 3. PostgreSQL 化 AgentRunStore。
 4. 保留 JSON fallback。
 5. TradingAgents 先作为 adapter PoC，不替代主后端。
-

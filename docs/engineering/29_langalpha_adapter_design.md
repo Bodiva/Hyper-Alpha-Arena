@@ -1,5 +1,9 @@
 # LangAlpha Adapter Design
 
+Status update 2026-05-05:
+
+This document is a design reference for a future LangAlpha external-service adapter. The current canonical AlphaTrace persistence direction is MySQL for system config/task control and ClickHouse for structured business/analytics data. LangAlpha should not introduce PostgreSQL/Redis/sandbox dependencies into AlphaTrace unless it is deployed as a separate external service with explicit mapping back into AlphaTrace schemas.
+
 Date: 2026-05-01
 
 ## Status
