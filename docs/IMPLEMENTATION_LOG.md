@@ -4088,3 +4088,24 @@ Notes:
 
 Next:
 - M165 should add a product-owned AgentRun artifact/metrics task persistence model or continue frontend-safe observability cleanup, depending on active runtime stability.
+
+## 2026-05-05 - M165 AgentRun Metrics Snapshot Endpoint
+
+Goal:
+- Provide a single-run metrics snapshot endpoint so frontend/runtime diagnostics can display token and task statistics without treating every `metric.updated` event as primary timeline content.
+
+Changes:
+- Added `backend/services/agent_runtime_metrics.py`.
+- Added `GET /api/alpha-trace/agent-runs/{run_id}/metrics`.
+
+Validation:
+- `python -m py_compile backend/services/agent_runtime_metrics.py backend/api/alpha_trace_agent_runtime_routes.py`: passed.
+- Local missing-run smoke for `get_agent_run_metrics_snapshot`: passed.
+
+Notes:
+- This does not change how QwenRunner emits `metric.updated` events.
+- MySQL deployments already mirror run metrics into `alpha_trace_agent_run_metrics`; this endpoint exposes a cleaner read model.
+- Runtime HTTP validation should be rerun after backend reload.
+
+Next:
+- M166 should either adjust frontend AgentRunDetail to consume the metrics snapshot, or continue backend orchestration abstraction with a formal task scheduler registry.

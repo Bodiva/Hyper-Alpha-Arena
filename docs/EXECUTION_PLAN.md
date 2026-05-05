@@ -5418,3 +5418,33 @@ Validation:
 Rollback:
 
 Remove the catalog package and endpoint. Runner behavior remains unchanged.
+
+## M165 - AgentRun Metrics Snapshot Endpoint
+
+Status: Completed
+
+Goal:
+
+Expose a single-run metrics snapshot so UI and diagnostics do not need to infer token/task statistics from fragmented `metric.updated` timeline events.
+
+Scope:
+
+1. Add a read-only metrics aggregation helper.
+2. Add `GET /api/alpha-trace/agent-runs/{run_id}/metrics`.
+3. Include run metrics, event counts, agent event counts, latest metric event, and persistence metadata.
+4. Do not change Qwen/Native metric update behavior in this milestone.
+
+Acceptance:
+
+1. Backend py_compile passes.
+2. Missing run returns `None` at service level and HTTP 404 at route level.
+3. Response describes `alpha_trace_agent_run_metrics` as the MySQL mirror when MySQL store is active.
+
+Validation:
+
+1. `python -m py_compile backend/services/agent_runtime_metrics.py backend/api/alpha_trace_agent_runtime_routes.py`.
+2. Local smoke for missing-run behavior.
+
+Rollback:
+
+Remove the helper and endpoint. Existing AgentRun metrics and `metric.updated` events remain unchanged.

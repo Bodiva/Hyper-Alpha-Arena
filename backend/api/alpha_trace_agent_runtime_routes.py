@@ -40,6 +40,7 @@ from services.alpha_trace_agent_runtime_service import (
     submit_agent_run,
 )
 from services.agent_runtime_health import find_stale_agent_runs
+from services.agent_runtime_metrics import get_agent_run_metrics_snapshot
 from services.agent_orchestrator.execution_policy import get_runner_execution_policy
 from services.agent_orchestrator.capability_matrix import get_runner_capability, list_runner_capabilities, resolve_recommended_runner
 from services.agent_orchestrator.native_plan import build_alphatrace_native_plan
@@ -594,6 +595,14 @@ def list_agent_run_artifacts_endpoint(run_id: str):
             "error": str(exc),
             "message": "AgentArtifact store could not be queried.",
         }
+
+
+@router.get("/{run_id}/metrics")
+def get_agent_run_metrics_endpoint(run_id: str):
+    snapshot = get_agent_run_metrics_snapshot(run_id)
+    if not snapshot:
+        raise _not_found(run_id)
+    return snapshot
 
 
 @router.get("", response_model=AgentRunListResponse)

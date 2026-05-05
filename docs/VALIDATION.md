@@ -2189,3 +2189,25 @@ Runtime HTTP smoke after backend reload:
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/agent-runs/runtime/model-providers
 ```
+
+### M165 AgentRun Metrics Snapshot Endpoint
+
+Required backend compile:
+
+```powershell
+python -m py_compile backend/services/agent_runtime_metrics.py backend/api/alpha_trace_agent_runtime_routes.py
+```
+
+Required local smoke:
+
+- Missing run returns `None` from `get_agent_run_metrics_snapshot`.
+
+Runtime HTTP smoke after backend reload:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/agent-runs/<runId>/metrics
+```
+
+Expected:
+
+- Response includes `metrics`, `counts`, `eventCounts`, `agentEventCounts`, and `persistence`.
