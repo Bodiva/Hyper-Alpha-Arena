@@ -4865,3 +4865,22 @@ Notes:
 Next:
 - Validate and commit.
 
+
+## 2026-05-05 - M203 Architecture Overview with Directory and Data Flow Diagrams
+
+Goal:
+- Create a concise architecture overview with directory structure and data-flow diagrams.
+
+Changes:
+- Added `docs/ARCHITECTURE_OVERVIEW.md`.
+
+Validation:
+- `Select-String -Path docs/ARCHITECTURE_OVERVIEW.md -Pattern "Overall Architecture","Agent Runtime Data Flow","Current Directory Structure"`: passed.
+
+Notes:
+- Documentation-only milestone requested by user.
+- This document is the quickest entry point for understanding the current backend/frontend architecture and future component integration boundaries.
+
+Next:
+- Validate and commit.
+

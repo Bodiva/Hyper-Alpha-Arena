@@ -2813,3 +2813,15 @@ Select-String -Path docs/ARCHITECTURE.md -Pattern "Architecture Review and Exter
 Expected:
 
 - Architecture document includes backend review endpoints, frontend review components, integration rules, and review workflow.
+
+### M203 Architecture Overview with Directory and Data Flow Diagrams
+
+Documentation-only check:
+
+```powershell
+Select-String -Path docs/ARCHITECTURE_OVERVIEW.md -Pattern "Overall Architecture","Agent Runtime Data Flow","Current Directory Structure"
+```
+
+Expected:
+
+- Overview includes directory structure, overall architecture diagram, runtime data flow, external component decision flow, Data API/evidence flow, review endpoints, and refactor priorities.

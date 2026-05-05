@@ -6533,3 +6533,33 @@ Validation:
 Rollback:
 
 Remove the added architecture section.
+
+## M203 - Architecture Overview with Directory and Data Flow Diagrams
+
+Status: Completed
+
+Goal:
+
+Create a concise architecture overview document with directory structure, architecture diagram, Agent Runtime data flow, external component decision flow, and Data API/evidence flow.
+
+Scope:
+
+1. Add `docs/ARCHITECTURE_OVERVIEW.md`.
+2. Include current directory structure.
+3. Include Mermaid architecture and data-flow diagrams.
+4. Include review endpoints and refactor priorities.
+5. Do not modify business code.
+
+Acceptance:
+
+1. Architecture overview document exists.
+2. Document contains `Overall Architecture`, `Agent Runtime Data Flow`, and `Current Directory Structure` sections.
+3. No build required because this is documentation-only.
+
+Validation:
+
+1. `Select-String -Path docs/ARCHITECTURE_OVERVIEW.md -Pattern "Overall Architecture","Agent Runtime Data Flow","Current Directory Structure"`.
+
+Rollback:
+
+Remove `docs/ARCHITECTURE_OVERVIEW.md`.
