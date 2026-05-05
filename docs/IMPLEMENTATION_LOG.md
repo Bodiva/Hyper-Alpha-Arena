@@ -3765,3 +3765,21 @@ Validation:
 
 Next:
 - M149 can implement `agent/api.ts` client methods for runtime tools/integrations/tasks/native plan when it is safe to touch frontend code.
+
+## 2026-05-05 - M149 Runtime Config Facade
+
+Goal:
+- Centralize sanitized runtime configuration diagnostics for Qwen, Bocha, TradingAgents, and LangAlpha.
+
+Changes:
+- Added `backend/services/runtime_config/facade.py` and package exports.
+- Added `GET /api/alpha-trace/agent-runs/runtime/config`.
+- Updated `GET /api/alpha-trace/agent-runs/runners/status` to reuse `RuntimeConfigFacade` while keeping existing response fields.
+
+Validation:
+- `python -m py_compile backend/services/runtime_config/facade.py backend/services/runtime_config/__init__.py backend/api/alpha_trace_agent_runtime_routes.py`: passed.
+- Local facade smoke passed for qwen/bocha/tradingagents/langalpha keys and verified no obvious secret markers.
+- Local host smoke reported Bocha config_store_error because this Python process is not connected to the Docker/MySQL runtime config. This is acceptable for local smoke and is surfaced explicitly.
+
+Next:
+- M150 should make the Qwen provider adapter reuse RuntimeConfigFacade for source consistency, then add a small model adapter smoke that does not call the network when key is missing.

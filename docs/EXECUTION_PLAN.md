@@ -4945,3 +4945,33 @@ Acceptance:
 Validation:
 
 1. Documentation review.
+
+## M149 - Runtime Config Facade
+
+Status: Completed
+
+Goal:
+
+Centralize sanitized runtime configuration diagnostics for Qwen, Bocha, TradingAgents, and LangAlpha.
+
+Scope:
+
+1. Add backend `RuntimeConfigFacade` as the single read-only status resolver.
+2. Add `/api/alpha-trace/agent-runs/runtime/config`.
+3. Make `/runners/status` use the facade without changing runner behavior.
+4. Do not expose raw or encrypted secrets.
+
+Acceptance:
+
+1. Backend py_compile passes.
+2. Local smoke returns qwen/bocha/tradingagents/langalpha statuses without secret markers.
+3. Existing runner status response remains backward compatible with additive `runtimeConfig` field.
+
+Validation:
+
+1. `python -m py_compile backend/services/runtime_config/facade.py backend/services/runtime_config/__init__.py backend/api/alpha_trace_agent_runtime_routes.py`.
+2. Local Python smoke for `get_runtime_config_facade().snapshot()`.
+
+Rollback:
+
+Remove the facade and route additions; restore `/runners/status` local config checks.

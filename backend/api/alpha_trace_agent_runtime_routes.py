@@ -49,6 +49,7 @@ from services.agent_tool_registry import list_agent_tool_contracts
 from services.integration_adapters import build_default_integration_registry
 from services.async_tasks import get_async_task_store_type, get_mysql_async_task_store
 from services.system_config_store import get_mysql_system_config_store
+from services.runtime_config import get_runtime_config_facade
 
 router = APIRouter(prefix="/api/alpha-trace/agent-runs", tags=["AlphaTrace Agent Runtime"])
 
@@ -179,62 +180,29 @@ def _check_tradingagents_import(raw_path: str) -> tuple[bool, str]:
 
 @router.get("/runners/status")
 def get_agent_runner_status_endpoint(db: Session = Depends(get_db)):
-    tradingagents_enabled = os.getenv("ALPHATRACE_TRADINGAGENTS_ENABLED", "").strip().lower() == "true"
-    tradingagents_repo_path = os.getenv("TRADINGAGENTS_REPO_PATH", "").strip()
-    tradingagents_repo_exists, tradingagents_resolved_path = _resolve_tradingagents_repo_path(tradingagents_repo_path)
-    langalpha_enabled = os.getenv("ALPHATRACE_LANGALPHA_ENABLED", "").strip().lower() == "true"
-    qwen_key_configured = bool(os.getenv("DASHSCOPE_API_KEY"))
-    qwen_config_source = "environment" if qwen_key_configured else "missing"
+    runtime_config = get_runtime_config_facade().snapshot(db)
+    qwen_runtime = runtime_config["qwen"]
+    tradingagents_runtime = runtime_config["tradingagents"]
+    langalpha_runtime = runtime_config["langalpha"]
+    tradingagents_metadata = tradingagents_runtime.get("metadata") or {}
+    langalpha_metadata = langalpha_runtime.get("metadata") or {}
 
-    if not qwen_key_configured:
-        try:
-            from services.hyper_ai_service import get_llm_config
+    qwen_key_configured = bool(qwen_runtime.get("available"))
+    qwen_available = bool(qwen_runtime.get("available"))
+    qwen_status = str(qwen_runtime.get("status") or "missing_qwen_key")
+    qwen_message = str(qwen_runtime.get("message") or "")
+    qwen_config_source = str(qwen_runtime.get("source") or "missing")
 
-            config = get_llm_config(db)
-            provider = str(config.get("provider") or "").lower()
-            base_url = str(config.get("base_url") or "")
-            model = str(config.get("model") or "")
-            is_qwen_provider = provider == "qwen"
-            is_custom_qwen_endpoint = provider == "custom" and (
-                "dashscope.aliyuncs.com" in base_url.lower() or model.lower().startswith("qwen")
-            )
-            qwen_key_configured = bool(config.get("api_key")) and (is_qwen_provider or is_custom_qwen_endpoint)
-            qwen_config_source = str(config.get("source") or "hyper_ai_profile") if qwen_key_configured else "missing"
-        except Exception:
-            qwen_key_configured = False
-            qwen_config_source = "unavailable"
-
-    tradingagents_importable = False
-    tradingagents_import_error = ""
-    if tradingagents_enabled:
-        tradingagents_importable, tradingagents_import_error = _check_tradingagents_import(tradingagents_repo_path)
-
-    tradingagents_available = tradingagents_enabled and tradingagents_importable and qwen_key_configured
-    if not tradingagents_enabled:
-        tradingagents_status = "disabled"
-    elif not tradingagents_importable:
-        tradingagents_status = "import_error"
-    elif not qwen_key_configured:
-        tradingagents_status = "missing_qwen_key"
-    else:
-        tradingagents_status = "ready"
-
-    if tradingagents_available:
-        tradingagents_message = "TradingAgents PoC is enabled and importable; Qwen key is available."
-    elif not tradingagents_enabled:
-        tradingagents_message = "TradingAgents PoC is disabled. Set ALPHATRACE_TRADINGAGENTS_ENABLED=true to enable local PoC."
-    elif not tradingagents_importable:
-        tradingagents_message = f"TradingAgents package is not importable: {tradingagents_import_error}"
-    else:
-        tradingagents_message = "TradingAgents PoC requires Qwen API key via Hyper AI settings or DASHSCOPE_API_KEY."
-
-    qwen_available = qwen_key_configured
-    qwen_status = "ready" if qwen_available else "missing_qwen_key"
-    qwen_message = (
-        f"Qwen runner can use backend Qwen key from {qwen_config_source}."
-        if qwen_available
-        else "Qwen runner requires a backend Qwen API key. Save Qwen API Key again in Settings or set DASHSCOPE_API_KEY on the backend."
-    )
+    tradingagents_enabled = bool(tradingagents_metadata.get("enabled"))
+    tradingagents_available = bool(tradingagents_runtime.get("available"))
+    tradingagents_status = str(tradingagents_runtime.get("status") or "disabled")
+    tradingagents_message = str(tradingagents_runtime.get("message") or "")
+    tradingagents_repo_path = str(tradingagents_metadata.get("repoPath") or "")
+    tradingagents_repo_exists = tradingagents_metadata.get("repoPathExists")
+    tradingagents_resolved_path = str(tradingagents_metadata.get("repoPath") or "")
+    tradingagents_importable = bool(tradingagents_metadata.get("importable"))
+    tradingagents_import_error = str(tradingagents_metadata.get("importError") or "")
+    langalpha_enabled = bool(langalpha_metadata.get("enabled"))
 
     stub_policy = get_runner_execution_policy("stub")
     qwen_policy = get_runner_execution_policy("qwen")
@@ -243,6 +211,7 @@ def get_agent_runner_status_endpoint(db: Session = Depends(get_db)):
     langalpha_policy = get_runner_execution_policy("langalpha")
 
     return {
+        "runtimeConfig": runtime_config,
         "runners": [
             {
                 "runnerType": "stub",
@@ -349,6 +318,14 @@ def get_agent_runtime_integrations_endpoint():
     return {
         "integrations": integrations,
         "message": "Integration diagnostics are metadata and readiness checks only; no provider secrets are returned.",
+    }
+
+
+@router.get("/runtime/config")
+def get_agent_runtime_config_endpoint(db: Session = Depends(get_db)):
+    return {
+        "config": get_runtime_config_facade().snapshot(db),
+        "message": "Runtime configuration diagnostics are sanitized. No raw API keys or encrypted secret values are returned.",
     }
 
 

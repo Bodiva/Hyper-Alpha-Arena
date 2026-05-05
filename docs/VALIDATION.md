@@ -42,7 +42,7 @@ Run these when touching Agent Runtime, runner registry, runner adapters, or runt
 
 Commands:
 
-```powershell
+`````powershell
 Test-Path docs\PROJECT_SPEC.md
 Test-Path docs\EXECUTION_PLAN.md
 Test-Path docs\IMPLEMENTATION_LOG.md
@@ -116,7 +116,7 @@ Smoke tests:
 
 Required commands:
 
-```powershell
+`````powershell
 python -m py_compile backend/services/alpha_trace_agent_runtime_service.py
 python -m py_compile backend/services/agent_runtime_store/*.py
 cd frontend
@@ -173,7 +173,7 @@ Required checks:
 
 Local venv check:
 
-```powershell
+`````powershell
 ..\.venv-alphatrace-tg\Scripts\python.exe -c "import tradingagents; from tradingagents.graph.trading_graph import TradingAgentsGraph; print('ok')"
 ```
 
@@ -228,7 +228,7 @@ Required checks:
 
 Required commands:
 
-```powershell
+`````powershell
 python -m py_compile backend/api/alpha_trace_agent_runtime_routes.py
 cd frontend
 pnpm build
@@ -242,31 +242,31 @@ Required checks:
 
 1. Start script dry-run:
 
-```powershell
+`````powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/start_tradingagents_backend.ps1 -DryRun
 ```
 
 2. Status script dry-run:
 
-```powershell
+`````powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/check_tradingagents_status.ps1 -DryRun
 ```
 
 3. Submit script dry-run:
 
-```powershell
+`````powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/submit_tradingagents_spy_poc.ps1 -DryRun
 ```
 
 4. Backend route compile:
 
-```powershell
+`````powershell
 python -m py_compile backend/api/alpha_trace_agent_runtime_routes.py
 ```
 
 5. If frontend files changed in the same milestone, run:
 
-```powershell
+`````powershell
 cd frontend
 pnpm build
 ```
@@ -284,14 +284,14 @@ Required checks:
 
 1. Frontend build:
 
-```powershell
+`````powershell
 cd frontend
 pnpm build
 ```
 
 2. Backend API smoke if backend is running:
 
-```powershell
+`````powershell
 curl http://127.0.0.1:8802/api/alpha-trace/market-data/assets/asset_etf_510300/quote
 curl http://127.0.0.1:8802/api/alpha-trace/market-data/assets/asset_etf_510300/snapshot
 curl http://127.0.0.1:8802/api/alpha-trace/market-data/assets/asset_etf_510300/indicators
@@ -312,19 +312,19 @@ Required checks:
 
 1. Dry-run:
 
-```powershell
+`````powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/check_active_backend_routes.ps1 -DryRun
 ```
 
 2. Check local backend:
 
-```powershell
+`````powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/check_active_backend_routes.ps1 -BaseUrl http://127.0.0.1:8812/api
 ```
 
 3. Check Docker backend if running:
 
-```powershell
+`````powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/check_active_backend_routes.ps1 -BaseUrl http://127.0.0.1:8802/api
 ```
 
@@ -340,13 +340,13 @@ Required checks:
 
 1. Dry-run:
 
-```powershell
+`````powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/start_vite_real_mode.ps1 -DryRun
 ```
 
 2. Optional actual run:
 
-```powershell
+`````powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/start_vite_real_mode.ps1 -ApiBaseUrl http://127.0.0.1:8813/api -Port 8804
 ```
 
@@ -362,19 +362,19 @@ Required checks:
 
 1. Backend compile:
 
-```powershell
+`````powershell
 python -m py_compile backend/main.py
 ```
 
 2. Startup helper dry-run:
 
-```powershell
+`````powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/start_alphatrace_backend.ps1 -DryRun
 ```
 
 3. Optional manual startup:
 
-```powershell
+`````powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/start_alphatrace_backend.ps1 -Port 8813
 ```
 
@@ -387,7 +387,7 @@ Expected startup behavior:
 
 Optional route smoke after startup:
 
-```powershell
+`````powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/check_active_backend_routes.ps1 -BaseUrl http://127.0.0.1:8813/api
 ```
 
@@ -410,7 +410,7 @@ Browser 8805 -> Vite same-origin /api -> Docker backend 8802
 
 Commands:
 
-```powershell
+`````powershell
 docker compose up -d app
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/start_vite_real_mode.ps1
 ```
@@ -423,7 +423,7 @@ Expected helper defaults:
 
 Smoke:
 
-```powershell
+`````powershell
 Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8802/api/health
 Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8805/dashboard
 Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8805/api/health
@@ -437,13 +437,13 @@ Use this chain only when host PostgreSQL is reachable and the local TradingAgent
 1. Start Docker Desktop.
 2. Start database services:
 
-```powershell
+`````powershell
 docker compose up -d postgres mysql
 ```
 
 3. Start AlphaTrace-only backend on `8813` with:
 
-```powershell
+`````powershell
 $env:ALPHATRACE_BACKEND_PROFILE="alphatrace"
 $env:ALPHATRACE_LEGACY_RUNTIME_ENABLED="false"
 $env:ALPHATRACE_FRONTEND_WATCHER_ENABLED="false"
@@ -454,13 +454,13 @@ H:\git0412\hyperalphaarena_codex\ai-investment-workbench\.venv-alphatrace-tg\Scr
 
 4. Validate routes:
 
-```powershell
+`````powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/check_active_backend_routes.ps1 -BaseUrl http://127.0.0.1:8813/api
 ```
 
 5. Start Vite real mode:
 
-```powershell
+`````powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/start_vite_real_mode.ps1 -ApiBaseUrl http://127.0.0.1:8813/api -Port 8805
 ```
 
@@ -482,7 +482,7 @@ If Windows refuses to bind or connect to `127.0.0.1:5432`, local `8813` backend 
 
 If Docker compose cannot publish Postgres on host `5432` but the Docker app still needs `postgres:5432`, use a local operational workaround without changing compose files:
 
-```powershell
+`````powershell
 docker rm -f hyper-arena-postgres
 docker run -d --name hyper-arena-postgres --network hyper-arena-network `
   -e POSTGRES_USER=alpha_user `
@@ -507,7 +507,7 @@ Required checks:
 
 1. Confirm active ports:
 
-```powershell
+`````powershell
 Get-NetTCPConnection -State Listen | Where-Object { $_.LocalPort -in 3306,5432,8802,8804,8805,8812,8813,8814 }
 ```
 
@@ -520,7 +520,7 @@ Expected current recommendation:
 
 2. Confirm backend routes:
 
-```powershell
+`````powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/check_active_backend_routes.ps1 -BaseUrl http://127.0.0.1:8813/api
 ```
 
@@ -528,7 +528,7 @@ Expected result: `12/12 routes ok`.
 
 3. Confirm frontend entry:
 
-```powershell
+`````powershell
 Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8805/dashboard#dashboard
 ```
 
@@ -542,7 +542,7 @@ Required checks:
 
 1. Vite helper dry-run:
 
-```powershell
+`````powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/start_vite_real_mode.ps1 -DryRun
 ```
 
@@ -554,7 +554,7 @@ Expected:
 
 2. Runtime smoke:
 
-```powershell
+`````powershell
 Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8802/api/health
 Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8805/dashboard
 Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8805/api/health
@@ -569,7 +569,7 @@ Required checks:
 
 1. Backend compile:
 
-```powershell
+`````powershell
 backend\.venv\Scripts\python.exe -m py_compile `
   backend\services\agent_orchestrator\subprocess_orchestrator.py `
   backend\services\agent_runners\tradingagents_worker.py `
@@ -580,7 +580,7 @@ backend\.venv\Scripts\python.exe -m py_compile `
 
 2. TradingAgents disabled path through the active backend:
 
-```powershell
+`````powershell
 curl -X POST http://127.0.0.1:8805/api/alpha-trace/agent-runs/submit `
   -H "Content-Type: application/json" `
   -d "{\"assetId\":\"asset_etf_510300\",\"taskType\":\"single_asset_analysis\",\"question\":\"TradingAgents subprocess disabled smoke\",\"runnerConfig\":{\"runnerType\":\"tradingagents\",\"enableStreaming\":true,\"extraParams\":{\"ticker\":\"SPY\",\"useSubprocessWorker\":true,\"workerTimeoutSeconds\":60}}}"
@@ -607,20 +607,20 @@ Required checks:
 
 1. Backend compile:
 
-```powershell
+`````powershell
 backend\.venv\Scripts\python.exe -m py_compile backend\api\alpha_trace_agent_runtime_routes.py
 ```
 
 2. Frontend build:
 
-```powershell
+`````powershell
 cd frontend
 pnpm build
 ```
 
 3. API smoke for an existing run:
 
-```powershell
+`````powershell
 Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8805/api/alpha-trace/agent-runs/<runId>/worker-artifacts
 ```
 
@@ -642,7 +642,7 @@ Required checks:
 
 1. Backend compile:
 
-```powershell
+`````powershell
 backend\.venv\Scripts\python.exe -m py_compile `
   backend\services\agent_orchestrator\subprocess_orchestrator.py `
   backend\services\agent_runners\tradingagents_adapter.py `
@@ -652,7 +652,7 @@ backend\.venv\Scripts\python.exe -m py_compile `
 
 2. No-worker cancel function smoke:
 
-```powershell
+`````powershell
 backend\.venv\Scripts\python.exe -c "from services.agent_orchestrator.subprocess_orchestrator import cancel_subprocess_worker; print(cancel_subprocess_worker('missing_run'))"
 ```
 
@@ -673,7 +673,7 @@ Required checks:
 
 1. Backend compile:
 
-```powershell
+`````powershell
 backend\.venv\Scripts\python.exe -m py_compile `
   backend\services\agent_orchestrator\subprocess_orchestrator.py `
   backend\api\alpha_trace_agent_runtime_routes.py
@@ -681,7 +681,7 @@ backend\.venv\Scripts\python.exe -m py_compile `
 
 2. Worker registry smoke:
 
-```powershell
+`````powershell
 Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8805/api/alpha-trace/agent-runs/runtime/workers
 ```
 
@@ -697,7 +697,7 @@ Required checks:
 
 1. Frontend build:
 
-```powershell
+`````powershell
 cd frontend
 pnpm build
 ```
@@ -716,7 +716,7 @@ Required checks:
 
 1. Frontend build:
 
-```powershell
+`````powershell
 cd frontend
 pnpm build
 ```
@@ -731,7 +731,7 @@ pnpm build
 
 Required checks:
 
-```powershell
+`````powershell
 Test-Path docs\engineering\31_orchestrator_run_contract.md
 Select-String -Path docs\engineering\31_orchestrator_run_contract.md -Pattern "AgentRunStore|worker artifacts|Cancellation Contract"
 ```
@@ -742,7 +742,7 @@ No build or py_compile is required for documentation-only changes.
 
 Required checks:
 
-```powershell
+`````powershell
 Test-Path docs\engineering\32_runner_execution_boundary_decision.md
 Select-String -Path docs\engineering\32_runner_execution_boundary_decision.md -Pattern "QwenRunner|TradingAgents|subprocess|in_process|M25"
 ```
@@ -760,7 +760,7 @@ No build or py_compile is required for documentation-only changes.
 
 Required checks:
 
-```powershell
+`````powershell
 backend\.venv\Scripts\python.exe -m py_compile `
   backend\services\agent_orchestrator\execution_policy.py `
   backend\api\alpha_trace_agent_runtime_routes.py
@@ -771,7 +771,7 @@ pnpm build
 
 Runner status smoke:
 
-```powershell
+`````powershell
 backend\.venv\Scripts\python.exe -c "from services.agent_orchestrator.execution_policy import get_runner_execution_policy; print(get_runner_execution_policy('qwen').execution_mode, get_runner_execution_policy('tradingagents').execution_mode)"
 ```
 
@@ -785,7 +785,7 @@ Expected:
 
 Required checks:
 
-```powershell
+`````powershell
 backend\.venv\Scripts\python.exe -m py_compile `
   backend\services\agent_orchestrator\capability_matrix.py `
   backend\api\alpha_trace_agent_runtime_routes.py
@@ -806,7 +806,7 @@ Expected:
 
 Required checks:
 
-```powershell
+`````powershell
 cd frontend
 pnpm build
 ```
@@ -821,7 +821,7 @@ Expected:
 
 Required checks:
 
-```powershell
+`````powershell
 cd frontend
 pnpm build
 ```
@@ -836,7 +836,7 @@ Expected:
 
 Required checks:
 
-```powershell
+`````powershell
 backend\.venv\Scripts\python.exe -c "from api.alpha_trace_agent_runtime_routes import get_agent_runner_capabilities_endpoint; print(get_agent_runner_capabilities_endpoint(taskType='single_asset_analysis', requestedRunnerType='qwen')['recommendation'])"
 
 Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8805/api/alpha-trace/agent-runs/runners/capabilities
@@ -857,7 +857,7 @@ Expected:
 
 Required checks:
 
-```powershell
+`````powershell
 docker restart hyper-arena-app
 Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8802/api/health
 Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8805/api/alpha-trace/agent-runs/runners/capabilities
@@ -875,7 +875,7 @@ Expected:
 
 Required checks:
 
-```powershell
+`````powershell
 Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8805/api/alpha-trace/agent-runs/runners/status
 Invoke-WebRequest -UseBasicParsing "http://127.0.0.1:8805/api/alpha-trace/agent-runs/runners/capabilities?taskType=single_asset_analysis&requestedRunnerType=qwen"
 Invoke-WebRequest -UseBasicParsing -Method POST `
@@ -896,7 +896,7 @@ Expected:
 
 Required checks:
 
-```powershell
+`````powershell
 Test-Path docs\engineering\34_tradingagents_enablement_path_review.md
 Select-String -Path docs\engineering\34_tradingagents_enablement_path_review.md -Pattern "remain local-PoC|Dedicated TradingAgents Worker Container|not enable"
 ```
@@ -911,7 +911,7 @@ Expected:
 
 Required checks:
 
-```powershell
+`````powershell
 cd frontend
 pnpm build
 ```
@@ -925,7 +925,7 @@ Expected:
 
 Required checks:
 
-```powershell
+`````powershell
 Test-Path docs\engineering\35_orchestrator_track_freeze.md
 Select-String -Path docs\engineering\35_orchestrator_track_freeze.md -Pattern "TradingAgents|QwenRunner|Recommended Next Track|freeze"
 ```
@@ -940,7 +940,7 @@ Expected:
 
 Required checks:
 
-```powershell
+`````powershell
 docker exec hyper-arena-app printenv ALPHA_TRACE_AGENT_RUN_STORE ALPHA_TRACE_DOMAIN_STORE ALPHA_TRACE_AGENT_RUN_STORE_PATH ALPHA_TRACE_MYSQL_DATABASE_URL
 docker exec hyper-arena-app sh -lc "ls -l /app/data/alpha_trace_agent_runs.json && wc -c /app/data/alpha_trace_agent_runs.json"
 docker exec hyper-arena-mysql mysql -ualpha_user -palpha_pass alpha_trace -e "SHOW TABLES LIKE 'alpha_trace_%';"
@@ -960,7 +960,7 @@ Expected:
 
 Required checks:
 
-```powershell
+`````powershell
 docker compose build app
 docker compose up -d --force-recreate --no-deps app
 docker exec hyper-arena-app sh -lc "python -c 'import sqlalchemy, pymysql; print(\"mysql deps ok\")'"
@@ -986,7 +986,7 @@ Expected:
 
 Required checks:
 
-```powershell
+`````powershell
 docker compose up -d --force-recreate --no-deps app
 docker exec hyper-arena-app printenv ALPHA_TRACE_AGENT_RUN_STORE ALPHA_TRACE_DOMAIN_STORE
 docker exec hyper-arena-app sh -lc "cd /app && python backend/scripts/import_agent_runs_json_to_mysql.py --json-path /app/data/alpha_trace_agent_runs.json"
@@ -994,7 +994,7 @@ docker exec hyper-arena-app sh -lc "cd /app && python backend/scripts/import_age
 
 API checks:
 
-```powershell
+`````powershell
 Invoke-RestMethod http://127.0.0.1:8802/api/alpha-trace/agent-runs?limit=5
 Invoke-RestMethod http://127.0.0.1:8802/api/alpha-trace/assets?limit=3
 Invoke-RestMethod http://127.0.0.1:8802/api/alpha-trace/evidence?limit=3
@@ -1020,21 +1020,21 @@ Expected:
 
 Required checks:
 
-```powershell
+`````powershell
 docker exec hyper-arena-app sh -lc "cd /app && python -m py_compile backend/services/system_config_store/mysql_config_store.py backend/services/hyper_ai_service.py backend/services/hyper_ai_tool_registry.py backend/api/hyper_ai_routes.py backend/api/alpha_trace_agent_runtime_routes.py backend/services/agent_runners/qwen_runner.py backend/scripts/import_legacy_hyper_ai_config_to_mysql.py"
 pnpm --dir frontend build
 ```
 
 Migration smoke:
 
-```powershell
+`````powershell
 docker exec hyper-arena-app sh -lc "cd /app && python backend/scripts/import_legacy_hyper_ai_config_to_mysql.py"
 docker exec hyper-arena-mysql mysql -ualpha_user -palpha_pass alpha_trace -e "SELECT config_key, config_type, provider, enabled, secret_encrypted IS NOT NULL AS has_secret FROM alpha_trace_system_configs;"
 ```
 
 API smoke:
 
-```powershell
+`````powershell
 Invoke-RestMethod http://127.0.0.1:8802/api/hyper-ai/profile
 Invoke-RestMethod http://127.0.0.1:8802/api/hyper-ai/tools
 Invoke-RestMethod http://127.0.0.1:8802/api/alpha-trace/agent-runs/runners/status
@@ -1052,7 +1052,7 @@ Expected:
 
 Required checks before user re-saves Qwen:
 
-```powershell
+`````powershell
 Invoke-RestMethod http://127.0.0.1:8802/api/hyper-ai/profile
 Invoke-RestMethod http://127.0.0.1:8802/api/hyper-ai/tools
 Invoke-RestMethod http://127.0.0.1:8802/api/alpha-trace/agent-runs/runners/status
@@ -1067,7 +1067,7 @@ Expected before re-save:
 
 Required checks after user re-saves a valid Qwen key:
 
-```powershell
+`````powershell
 Invoke-RestMethod http://127.0.0.1:8802/api/hyper-ai/profile
 Invoke-RestMethod http://127.0.0.1:8802/api/hyper-ai/profile/llm/test-current -Method POST
 Invoke-RestMethod http://127.0.0.1:8802/api/alpha-trace/agent-runs/runners/status
@@ -1085,7 +1085,7 @@ Expected after re-save:
 
 Required checks:
 
-```powershell
+`````powershell
 pnpm --dir frontend build
 Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8805/dashboard#data-source
 Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8805/dashboard#data-sources
@@ -1104,7 +1104,7 @@ Expected:
 
 Required checks after a valid Qwen key is saved from Settings:
 
-```powershell
+`````powershell
 Invoke-RestMethod http://127.0.0.1:8805/api/hyper-ai/profile
 Invoke-RestMethod http://127.0.0.1:8805/api/hyper-ai/profile/llm/test-current -Method POST
 Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/agent-runs/runners/status
@@ -1122,7 +1122,7 @@ Expected:
 
 Required checks:
 
-```powershell
+`````powershell
 docker exec hyper-arena-app sh -lc "cd /app && python -m py_compile backend/api/hyper_ai_routes.py"
 pnpm --dir frontend build
 Invoke-RestMethod http://127.0.0.1:8805/api/hyper-ai/profile
@@ -1146,7 +1146,7 @@ Expected:
 
 Required checks:
 
-```powershell
+`````powershell
 Select-String -Path docs/EXECUTION_PLAN.md -Pattern "M43|M44|M45|M46|M47|M48"
 Select-String -Path docs/VALIDATION.md -Pattern "M43|M44|M45|M46|M47|M48"
 Select-String -Path docs/IMPLEMENTATION_LOG.md -Pattern "M43"
@@ -1163,7 +1163,7 @@ Expected:
 
 Required checks:
 
-```powershell
+`````powershell
 pnpm --dir frontend build
 Invoke-RestMethod http://127.0.0.1:8805/api/hyper-ai/profile
 Invoke-RestMethod http://127.0.0.1:8805/api/hyper-ai/tools
@@ -1183,14 +1183,14 @@ Expected:
 
 Required checks:
 
-```powershell
+`````powershell
 python -m py_compile <changed-backend-files>
 pnpm --dir frontend build
 ```
 
 Smoke checks:
 
-```powershell
+`````powershell
 # TradingAgents disabled smoke
 Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/agent-runs/submit -Method POST -ContentType "application/json" -Body '{"assetId":"asset_etf_510300","taskType":"single_asset_analysis","question":"TradingAgents disabled smoke","runnerConfig":{"runnerType":"tradingagents","enableStreaming":true}}'
 
@@ -1208,7 +1208,7 @@ Expected:
 
 Required checks:
 
-```powershell
+`````powershell
 python -m py_compile <changed-backend-files>
 Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/market-data/quote/asset_etf_510300
 Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/market-data/snapshot/asset_etf_510300
@@ -1226,7 +1226,7 @@ Expected:
 
 Required checks:
 
-```powershell
+`````powershell
 pnpm --dir frontend build
 Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8805/dashboard#dashboard
 Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8805/dashboard#assets
@@ -1249,7 +1249,7 @@ Expected:
 
 Required checks:
 
-```powershell
+`````powershell
 git status --short
 Invoke-RestMethod http://127.0.0.1:8805/api/health
 Invoke-RestMethod http://127.0.0.1:8805/api/hyper-ai/profile
@@ -1288,7 +1288,7 @@ Known validation warnings:
 
 M49 required checks:
 
-```powershell
+`````powershell
 git status --short
 git diff --stat
 Invoke-RestMethod http://127.0.0.1:8805/api/health
@@ -1301,7 +1301,7 @@ Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/leaderboard
 
 M50 required checks:
 
-```powershell
+`````powershell
 docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8805/dashboard#settings
 Invoke-RestMethod http://127.0.0.1:8805/api/health
@@ -1310,20 +1310,20 @@ Invoke-RestMethod http://127.0.0.1:8805/api/hyper-ai/profile
 
 M51 required checks:
 
-```powershell
+`````powershell
 docker exec hyper-arena-mysql mysql -uroot -p$env:MYSQL_ROOT_PASSWORD -e "SHOW DATABASES;"
 # Use only safe count/config metadata queries; do not print raw secrets.
 ```
 
 M52 required checks:
 
-```powershell
+`````powershell
 # TradingAgents disabled smoke, unsupported runner smoke, stub regression, runner status.
 ```
 
 M53 required checks:
 
-```powershell
+`````powershell
 Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8805/dashboard#dashboard
 Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8805/dashboard#assets/asset_etf_510300
 Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8805/dashboard#agent-lab
@@ -1333,7 +1333,7 @@ Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8805/dashboard#leaderboard
 
 M54 required checks:
 
-```powershell
+`````powershell
 git status --short
 Invoke-RestMethod http://127.0.0.1:8805/api/health
 Invoke-RestMethod http://127.0.0.1:8805/api/hyper-ai/profile
@@ -1389,14 +1389,14 @@ Known warnings:
 
 M71 required checks:
 
-```powershell
+`````powershell
 Select-String -Path docs\EXECUTION_PLAN.md -Pattern "M71|M72|M73|M74|M75|M76|M77|M78"
 Select-String -Path docs\VALIDATION.md -Pattern "M71-M78"
 ```
 
 M72 required checks:
 
-```powershell
+`````powershell
 Invoke-RestMethod http://127.0.0.1:8805/api/hyper-ai/profile
 Invoke-RestMethod http://127.0.0.1:8805/api/hyper-ai/tools
 Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/agent-runs/runners/status
@@ -1406,7 +1406,7 @@ python -m py_compile <changed_backend_files>  # only if backend changes
 
 M73 required checks:
 
-```powershell
+`````powershell
 pnpm --dir frontend build
 Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8805/dashboard#dashboard
 Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8805/dashboard#assets
@@ -1422,7 +1422,7 @@ Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8805/dashboard#settings
 
 M74 required checks:
 
-```powershell
+`````powershell
 Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/evidence/<ev_bocha_or_run_scoped_id>
 Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/agent-runs/<runId>/evidence
 pnpm --dir frontend build  # only if frontend changes
@@ -1431,7 +1431,7 @@ python -m py_compile backend/api/alpha_trace_evidence_routes.py  # if backend ev
 
 M75 required checks:
 
-```powershell
+`````powershell
 Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/agent-runs/runners/status
 # Submit runnerType=alphatrace_native and poll until completed/failed.
 pnpm --dir frontend build  # if frontend changes
@@ -1440,7 +1440,7 @@ python -m py_compile <changed_backend_files>  # if backend changes
 
 M76 required checks:
 
-```powershell
+`````powershell
 # Safe metadata only; do not print raw secrets.
 Invoke-RestMethod http://127.0.0.1:8805/api/hyper-ai/profile
 Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/assets
@@ -1451,7 +1451,7 @@ Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/agent-runs/<recentRunId>
 
 M77 required checks:
 
-```powershell
+`````powershell
 Invoke-RestMethod http://127.0.0.1:8805/api/health
 Invoke-RestMethod http://127.0.0.1:8805/api/hyper-ai/profile
 Invoke-RestMethod http://127.0.0.1:8805/api/hyper-ai/tools
@@ -1466,7 +1466,7 @@ Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/leaderboard
 
 M78 required checks:
 
-```powershell
+`````powershell
 git status --short
 Invoke-RestMethod http://127.0.0.1:8805/api/health
 Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/agent-runs/runners/status
@@ -1475,45 +1475,45 @@ Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/agent-runs/runners/statu
 ## M79-M92 Full-Stack Optimization Validation Rules
 
 M79 Backend layering:
-```powershell
+`````powershell
 python -m py_compile <changed_backend_files>
 Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/agent-runs/runners/status
 ```
 
 M80 Calculation/scoring:
-```powershell
+`````powershell
 python -m py_compile <changed_backend_files>
 Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/leaderboard
 Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/decisions
 ```
 
 M81 Runtime state machine:
-```powershell
+`````powershell
 python -m py_compile <changed_backend_files>
 # submit/cancel/retry/failure smoke as applicable
 ```
 
 M82 Evidence governance:
-```powershell
+`````powershell
 python -m py_compile <changed_backend_files>
 pnpm --dir frontend build  # if UI changes
 Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/evidence
 ```
 
 M83 Data Source domain:
-```powershell
+`````powershell
 pnpm --dir frontend build
 Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8805/dashboard#data-sources
 ```
 
 M84 Frontend layout:
-```powershell
+`````powershell
 pnpm --dir frontend build
 # page smoke for all AlphaTrace routes
 ```
 
 M85 Frontend API contract:
-```powershell
+`````powershell
 pnpm --dir frontend build
 Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/assets
 Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/evidence
@@ -1521,13 +1521,13 @@ Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/agent-runs/runners/statu
 ```
 
 M86 Performance/resource boundaries:
-```powershell
+`````powershell
 pnpm --dir frontend build  # if UI changes
 # inspect large completed run detail and high event count run
 ```
 
 M87 Test harness:
-```powershell
+`````powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/run_runtime_smoke.ps1 -DryRun
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/run_runtime_smoke.ps1 -BaseUrl http://127.0.0.1:8805/api
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/run_runtime_smoke.ps1 -BaseUrl http://127.0.0.1:8805/api -IncludeSubmit
@@ -1535,13 +1535,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/run_runti
 Expected: no secrets printed; default mode is GET-only; `-IncludeSubmit` writes disposable Stub and TradingAgents-disabled smoke runs.
 
 M88 MySQL schema hardening:
-```powershell
+`````powershell
 # safe schema-only MySQL metadata queries; no secret output
 Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/assets
 ```
 
 M89 Security/secrets:
-```powershell
+`````powershell
 Invoke-RestMethod http://127.0.0.1:8805/api/hyper-ai/profile
 Invoke-RestMethod http://127.0.0.1:8805/api/hyper-ai/tools
 Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/agent-runs/runners/status
@@ -1549,19 +1549,19 @@ Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/agent-runs/runners/statu
 ```
 
 M90 Legacy boundary:
-```powershell
+`````powershell
 python -m py_compile backend/main.py  # if startup code changes
 Invoke-RestMethod http://127.0.0.1:8805/api/health
 ```
 
 M91 Commit grouping:
-```powershell
+`````powershell
 git status --short
 git diff --stat
 ```
 
 M92 Closure:
-```powershell
+`````powershell
 Invoke-RestMethod http://127.0.0.1:8805/api/health
 Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/agent-runs/runners/status
 git status --short
@@ -1571,21 +1571,21 @@ git status --short
 ## M93-M100 Validation Rules
 
 M93 Evidence detail/source preview:
-```powershell
+`````powershell
 Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/evidence?limit=10
 # If UI changes:
 pnpm --dir frontend build
 ```
 
 M94 Tool invocation contract:
-```powershell
+`````powershell
 # py_compile changed backend files if event mappers change
 # pnpm build if frontend timeline changes
 Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/agent-runs/runners/status
 ```
 
 M95 Native runner:
-```powershell
+`````powershell
 # submit alphatrace_native smoke if backend changes
 # verify events/reports/evidence/decision for returned runId
 ```
@@ -1594,18 +1594,18 @@ M96/M97 architecture analyses:
 Documentation-only unless code changes.
 
 M98 frontend boundary cleanup:
-```powershell
+`````powershell
 pnpm --dir frontend build
 ```
 
 M99 backend boundary cleanup:
-```powershell
+`````powershell
 python -m py_compile <changed_backend_files>
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/run_runtime_smoke.ps1 -BaseUrl http://127.0.0.1:8805/api
 ```
 
 M100 closure:
-```powershell
+`````powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/run_runtime_smoke.ps1 -BaseUrl http://127.0.0.1:8805/api
 git status --short
 ```
@@ -1726,7 +1726,7 @@ git status --short
 - Confirm `docs/engineering/61_integration_abstraction_layer.md` exists.
 - If skeleton files are added, run:
 
-```powershell
+`````powershell
 python -m py_compile backend/services/integration_adapters/base.py backend/services/async_tasks/base.py backend/services/agent_orchestrator/base.py
 ```
 
@@ -1759,7 +1759,7 @@ python -m py_compile backend/services/integration_adapters/base.py backend/servi
 - Documentation review.
 - If `langalpha_adapter.py` changes, run:
 
-```powershell
+`````powershell
 python -m py_compile backend/services/agent_runners/langalpha_adapter.py
 ```
 
@@ -1772,7 +1772,7 @@ python -m py_compile backend/services/agent_runners/langalpha_adapter.py
 
 Run:
 
-```powershell
+`````powershell
 python -m py_compile backend/services/integration_adapters/base.py backend/services/integration_adapters/__init__.py backend/services/async_tasks/base.py backend/services/async_tasks/__init__.py backend/services/agent_orchestrator/base.py
 ```
 
@@ -1788,13 +1788,13 @@ No frontend build is required unless frontend code changes.
 
 - Run:
 
-```powershell
+`````powershell
 python -m py_compile backend/api/alpha_trace_agent_runtime_routes.py backend/services/agent_tool_registry.py
 ```
 
 - After backend reload/restart, smoke:
 
-```powershell
+`````powershell
 Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/agent-runs/runtime/tools
 ```
 
@@ -1804,7 +1804,7 @@ Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/agent-runs/runtime/tools
 
 Run:
 
-```powershell
+`````powershell
 python -m py_compile backend/services/integration_adapters/bocha_adapter.py backend/services/integration_adapters/__init__.py
 ```
 
@@ -1814,7 +1814,7 @@ No runtime smoke is required until a later milestone rewires EvidenceRetriever t
 
 Run:
 
-```powershell
+`````powershell
 python -m py_compile backend/services/integration_adapters/market_data_adapter.py backend/services/integration_adapters/__init__.py
 ```
 
@@ -1822,7 +1822,7 @@ python -m py_compile backend/services/integration_adapters/market_data_adapter.p
 
 Run:
 
-```powershell
+`````powershell
 python -m py_compile backend/services/integration_adapters/qwen_model_adapter.py backend/services/integration_adapters/__init__.py
 ```
 
@@ -1832,7 +1832,7 @@ No model-call smoke is required until this adapter is wired into a runner.
 
 Run:
 
-```powershell
+`````powershell
 python -m py_compile backend/services/agent_orchestrator/native_plan.py backend/services/agent_orchestrator/base.py
 ```
 
@@ -1840,13 +1840,13 @@ python -m py_compile backend/services/agent_orchestrator/native_plan.py backend/
 
 Run:
 
-```powershell
+`````powershell
 python -m py_compile backend/api/alpha_trace_agent_runtime_routes.py backend/services/agent_orchestrator/native_plan.py
 ```
 
 After backend reload/restart, smoke:
 
-```powershell
+`````powershell
 Invoke-RestMethod "http://127.0.0.1:8805/api/alpha-trace/agent-runs/runners/plans/alphatrace-native?taskType=single_asset_analysis"
 ```
 
@@ -1854,7 +1854,7 @@ Invoke-RestMethod "http://127.0.0.1:8805/api/alpha-trace/agent-runs/runners/plan
 
 Run:
 
-```powershell
+`````powershell
 python -m py_compile backend/services/agent_artifacts/base.py backend/services/agent_artifacts/__init__.py
 ```
 
@@ -1862,13 +1862,13 @@ python -m py_compile backend/services/agent_artifacts/base.py backend/services/a
 
 Run:
 
-```powershell
+`````powershell
 python -m py_compile backend/api/alpha_trace_agent_runtime_routes.py backend/services/integration_adapters/qwen_model_adapter.py
 ```
 
 After backend reload/restart, smoke:
 
-```powershell
+`````powershell
 Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/agent-runs/runtime/integrations
 ```
 
@@ -1878,7 +1878,7 @@ Confirm response does not include raw API keys.
 
 Run:
 
-```powershell
+`````powershell
 python -m py_compile backend/services/agent_tool_registry.py backend/services/agent_runners/tradingagents_adapter.py
 ```
 
@@ -1886,7 +1886,7 @@ python -m py_compile backend/services/agent_tool_registry.py backend/services/ag
 
 Run:
 
-```powershell
+`````powershell
 python -m py_compile backend/services/integration_adapters/registry.py backend/services/integration_adapters/__init__.py backend/api/alpha_trace_agent_runtime_routes.py
 ```
 
@@ -1898,7 +1898,7 @@ Run a local Python smoke with `PYTHONPATH=backend` to instantiate `build_default
 
 Run:
 
-```powershell
+`````powershell
 python -m py_compile backend/services/async_tasks/mysql_store.py backend/services/async_tasks/__init__.py
 ```
 
@@ -1908,13 +1908,13 @@ A real DB write smoke is deferred until this store is wired behind an endpoint o
 
 Run:
 
-```powershell
+`````powershell
 python -m py_compile backend/api/alpha_trace_agent_runtime_routes.py backend/services/async_tasks/mysql_store.py
 ```
 
 After backend reload/restart, smoke:
 
-```powershell
+`````powershell
 Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/agent-runs/runtime/tasks
 ```
 
@@ -1922,7 +1922,7 @@ Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/agent-runs/runtime/tasks
 
 Run:
 
-```powershell
+`````powershell
 python -m py_compile backend/services/integration_adapters/tool_adapters.py backend/services/integration_adapters/registry.py backend/services/integration_adapters/__init__.py
 ```
 
@@ -1932,7 +1932,7 @@ Optional local smoke invokes both adapters with static data and `includeExternal
 
 Run:
 
-```powershell
+`````powershell
 python -m py_compile backend/services/agent_orchestrator/tool_executor.py
 ```
 
@@ -1942,7 +1942,7 @@ Optional local smoke executes `MarketContextToolAdapter` through `ToolExecutor`.
 
 Run:
 
-```powershell
+`````powershell
 python -m py_compile backend/services/agent_runners/qwen_runner.py backend/services/agent_orchestrator/tool_executor.py backend/services/integration_adapters/tool_adapters.py
 ```
 
@@ -1952,7 +1952,7 @@ Runtime smoke with `ALPHATRACE_USE_TOOL_ADAPTERS=true` is optional and should on
 
 Run:
 
-```powershell
+`````powershell
 python -m py_compile backend/services/agent_runners/qwen_runner.py backend/services/integration_adapters/tool_adapters.py backend/services/agent_orchestrator/tool_executor.py
 ```
 
@@ -1962,7 +1962,7 @@ Runtime smoke with `ALPHATRACE_USE_TOOL_ADAPTERS=true` is optional and should on
 
 Run:
 
-```powershell
+`````powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1
 ```
 
@@ -1974,3 +1974,19 @@ Required docs:
 
 - `docs/engineering/68_frontend_boundary_audit.md`
 - `docs/engineering/69_frontend_api_client_abstraction_plan.md`
+
+### M149 Runtime Config Facade
+
+Required backend compile:
+
+```powershell
+python -m py_compile backend/services/runtime_config/facade.py backend/services/runtime_config/__init__.py backend/api/alpha_trace_agent_runtime_routes.py
+```
+
+Required local smoke:
+
+```powershell
+# Run from repo root; add backend to sys.path before importing services.
+```
+
+The smoke must verify qwen/bocha/tradingagents/langalpha keys are present and obvious secret markers are absent.
