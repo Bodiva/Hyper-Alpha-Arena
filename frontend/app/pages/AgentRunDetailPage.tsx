@@ -293,6 +293,44 @@ const formatArgsSummary = (args: Record<string, unknown>): string => {
     .join(" | ");
 };
 
+const SENSITIVE_PAYLOAD_KEY = /(api[_-]?key|authorization|bearer|token|secret|password|credential)/i;
+
+const redactPayloadForDisplay = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(redactPayloadForDisplay);
+  if (typeof value === "object" && value !== null) {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, entry]) => [
+        key,
+        SENSITIVE_PAYLOAD_KEY.test(key) ? "<redacted>" : redactPayloadForDisplay(entry),
+      ]),
+    );
+  }
+  if (typeof value === "string" && /sk-[A-Za-z0-9_\-]{12,}/.test(value)) return "sk-<redacted>";
+  return value;
+};
+
+const formatJsonPreview = (value: unknown): string => JSON.stringify(redactPayloadForDisplay(value), null, 2);
+
+const getToolContractDescription = (toolName: string): string => {
+  const normalized = toolName.toLowerCase();
+  if (normalized.includes("bocha.search")) {
+    return "External search tool via backend Bocha adapter. API key is backend-only; URL is the canonical source.";
+  }
+  if (normalized.includes("evidence.retrieve")) {
+    return "AlphaTrace evidence retrieval over static, run-scoped, and available external evidence items.";
+  }
+  if (normalized.includes("market.context") || normalized.includes("market_data") || normalized.includes("indicator")) {
+    return "AlphaTrace market context/data loader. Current MVP uses static/demo data unless a provider adapter is configured.";
+  }
+  if (normalized.startsWith("qwen.") || normalized.includes("llm")) {
+    return "LLM provider call. This is model reasoning/generation, not an external market-data tool.";
+  }
+  if (normalized.includes("tradingagents")) {
+    return "TradingAgents PoC runner invocation. Internal graph state is mapped back to AlphaTrace schema.";
+  }
+  return "Runtime tool event emitted by the backend. Inspect args/result for the exact contract used in this run.";
+};
+
 interface RuntimeToolActivity {
   activityId: string;
   toolName: string;
@@ -306,6 +344,8 @@ interface RuntimeToolActivity {
   evidenceIds: string[];
   startedAt: string;
   completedAt?: string;
+  callPayload?: Record<string, unknown>;
+  resultPayload?: Record<string, unknown>;
 }
 
 interface DecisionTimelineItem {
@@ -618,10 +658,12 @@ const getRuntimeToolActivities = (events: AgentRuntimeEvent[]): RuntimeToolActiv
           agentName,
           stepId,
           source: typeof payload.source === "string" ? payload.source : typeof args.source === "string" ? args.source : undefined,
+          query: typeof payload.query === "string" ? payload.query : typeof args.query === "string" ? args.query : undefined,
           status: "RUNNING",
           args,
           evidenceIds: toStringList(payload.evidenceIds),
           startedAt: event.timestamp,
+          callPayload: payload,
         };
         activities.push(activity);
         openByKey.set(key, activity);
@@ -655,6 +697,7 @@ const getRuntimeToolActivities = (events: AgentRuntimeEvent[]): RuntimeToolActiv
               ? payload.error
               : "Runtime tool result received.";
       activity.evidenceIds = Array.from(new Set([...activity.evidenceIds, ...toStringList(payload.evidenceIds)]));
+      activity.resultPayload = payload;
 
       if (!openByKey.has(key)) activities.push(activity);
       openByKey.delete(key);
@@ -1698,12 +1741,21 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
                         <p className="truncate text-muted-foreground">Agent: {agent?.name ?? call.agentId}</p>
                         <details>
                           <summary className="cursor-pointer text-muted-foreground">details</summary>
-                        <div className="mt-1 space-y-1">
-                          <p className="text-muted-foreground">Args: {formatArgsSummary(call.args)}</p>
-                          <p className="text-muted-foreground">Result: {call.summary ?? "执行中或无结果摘要"}</p>
+                          <div className="mt-1 space-y-2">
+                            <p className="text-muted-foreground">Contract: {getToolContractDescription(call.toolName)}</p>
+                            {typeof call.args.source === "string" ? <p className="text-muted-foreground">Source: {call.args.source}</p> : null}
+                            {typeof call.args.query === "string" ? <p className="break-words text-muted-foreground">Query: {call.args.query}</p> : null}
+                            <p className="text-muted-foreground">Args: {formatArgsSummary(call.args)}</p>
+                            <p className="text-muted-foreground">Result: {call.summary ?? "执行中或无结果摘要"}</p>
                             <p className="text-muted-foreground">
                               {formatDateTime(call.startedAt)} {call.completedAt ? `→ ${formatDateTime(call.completedAt)}` : ""}
                             </p>
+                            <details>
+                              <summary className="cursor-pointer text-muted-foreground">sanitized args payload</summary>
+                              <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap rounded bg-muted/40 p-2 font-mono text-[10px] text-muted-foreground">
+                                {formatJsonPreview(call.args)}
+                              </pre>
+                            </details>
                           </div>
                         </details>
                         {call.evidenceIds?.length ? (
@@ -1732,7 +1784,8 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
                       <p className="truncate text-muted-foreground">Agent: {activity.agentName}</p>
                       <details>
                         <summary className="cursor-pointer text-muted-foreground">details</summary>
-                        <div className="mt-1 space-y-1">
+                        <div className="mt-1 space-y-2">
+                          <p className="text-muted-foreground">Contract: {getToolContractDescription(activity.toolName)}</p>
                           <p className="text-muted-foreground">Step: {activity.stepId}</p>
                           {activity.source ? <p className="text-muted-foreground">Source: {activity.source}</p> : null}
                           {activity.query ? <p className="break-words text-muted-foreground">Query: {activity.query}</p> : null}
@@ -1741,6 +1794,15 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
                           <p className="text-muted-foreground">
                             {formatDateTime(activity.startedAt)} {activity.completedAt ? `→ ${formatDateTime(activity.completedAt)}` : ""}
                           </p>
+                          <details>
+                            <summary className="cursor-pointer text-muted-foreground">sanitized event payload</summary>
+                            <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap rounded bg-muted/40 p-2 font-mono text-[10px] text-muted-foreground">
+                              {formatJsonPreview({
+                                called: activity.callPayload,
+                                result: activity.resultPayload,
+                              })}
+                            </pre>
+                          </details>
                         </div>
                       </details>
                       {activity.evidenceIds.length ? (

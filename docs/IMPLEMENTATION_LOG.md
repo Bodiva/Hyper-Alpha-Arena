@@ -3296,3 +3296,27 @@ Notes:
 
 Next:
 - Continue with AgentRunDetail visual consistency cleanup or Native runner/token metric persistence review.
+
+## 2026-05-05 - M112 Tool Invocation Detail UX
+
+Goal:
+- Make Tool Calls Timeline auditable without changing backend tool payloads.
+
+Changes:
+- Updated `frontend/app/pages/AgentRunDetailPage.tsx`.
+- Added tool contract descriptions for Bocha search, evidence retrieval, market context/data, Qwen/LLM calls, and TradingAgents PoC calls.
+- Runtime tool activities now preserve called/result payloads for expandable inspection.
+- Tool details now show source, query, result summary, timing, related evidence, and sanitized args/event payloads.
+- Sensitive payload keys and `sk-*` style values are redacted before display.
+- Updated `docs/EXECUTION_PLAN.md`: M111 and M112 marked completed.
+
+Validation:
+- `pnpm --dir frontend build`: passed.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/run_route_smoke.ps1 -BaseUrl http://127.0.0.1:8805 -FailOnError`: 12/12 passed.
+
+Notes:
+- This is a display-only pass. It does not introduce new backend tool execution and does not expose secrets.
+- Existing unrelated Settings/layout changes remain uncommitted and were not included in this milestone.
+
+Next:
+- Continue M113 - Native Risk Sub-Perspective Implementation.

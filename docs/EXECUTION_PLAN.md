@@ -4070,7 +4070,7 @@ Validation:
 
 ## M111 - Evidence Detail Traceability for Bocha and Run Evidence
 
-Status: Ready
+Status: Completed
 
 Goal:
 
@@ -4094,7 +4094,7 @@ Validation:
 
 ## M112 - Tool Invocation Detail UX
 
-Status: Pending
+Status: Completed
 
 Goal:
 
