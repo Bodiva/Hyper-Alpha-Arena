@@ -2801,3 +2801,15 @@ Expected:
 - Build succeeds.
 - `frontend/app/shared/ui/ArchitectureReviewPanel.tsx` compiles without new dependencies.
 - No existing page wiring is changed.
+
+### M202 Architecture Documentation Alignment for Review Layer
+
+Documentation-only check:
+
+```powershell
+Select-String -Path docs/ARCHITECTURE.md -Pattern "Architecture Review and External Component Decision Layer"
+```
+
+Expected:
+
+- Architecture document includes backend review endpoints, frontend review components, integration rules, and review workflow.

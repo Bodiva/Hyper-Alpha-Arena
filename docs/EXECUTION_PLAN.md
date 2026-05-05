@@ -6504,3 +6504,32 @@ Validation:
 Rollback:
 
 Remove `frontend/app/shared/ui/ArchitectureReviewPanel.tsx`.
+
+## M202 - Architecture Documentation Alignment for Review Layer
+
+Status: Completed
+
+Goal:
+
+Document the architecture review, external component, and integration decision layer in the canonical architecture document.
+
+Scope:
+
+1. Update `docs/ARCHITECTURE.md`.
+2. Document backend review endpoints.
+3. Document frontend review contracts/components.
+4. Document component integration rules and review workflow.
+5. Do not modify business code.
+
+Acceptance:
+
+1. Architecture document mentions module boundaries, external components, integration decisions, and architecture review bundle.
+2. No build required because this is documentation-only.
+
+Validation:
+
+1. `Select-String -Path docs/ARCHITECTURE.md -Pattern "Architecture Review and External Component Decision Layer"`.
+
+Rollback:
+
+Remove the added architecture section.

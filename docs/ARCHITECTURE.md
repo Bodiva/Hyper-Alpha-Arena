@@ -528,3 +528,46 @@ Current status:
 1. API contracts and reusable components exist.
 2. Existing page wiring is intentionally deferred until current unrelated frontend dirty state is isolated.
 3. This keeps backend abstraction progress reviewable and avoids mixing architectural contracts with UI layout changes.
+
+## 18. Architecture Review and External Component Decision Layer
+
+M189-M201 added a review-oriented control plane on top of the lower-level runtime and data contracts. The goal is to make future backend refactors and open-source component integrations explicit, inspectable, and reversible.
+
+### Backend Review Contracts
+
+| Contract | Endpoint / Path | Purpose |
+|---|---|---|
+| Module boundaries | `/api/alpha-trace/agent-runs/runtime/module-boundaries` | Separates AlphaTrace-owned backend layers, legacy crypto/trading modules, infrastructure targets, external runners, and external workbenches. |
+| External components | `/api/alpha-trace/agent-runs/runtime/external-components` | Catalogs TradingAgents, LangAlpha, Bocha, and future professional market data with integration mode, non-goals, runtime requirements, and risks. |
+| Integration decisions | `/api/alpha-trace/agent-runs/runtime/integration-decisions` | Defines proceed/stop criteria, preserved AlphaTrace contracts, and required validation before deepening an external integration. |
+| Architecture review bundle | `/api/alpha-trace/agent-runs/runtime/architecture-review` | Bundles architecture index, module boundaries, external components, integration decisions, and runtime readiness into one review payload. |
+
+### Frontend Review Contracts and Components
+
+| File | Purpose |
+|---|---|
+| `frontend/app/entities/runtime/api.ts` | Typed helpers for architecture, readiness, module boundaries, external components, integration decisions, and review bundle. |
+| `frontend/app/shared/ui/RuntimeReadinessPanel.tsx` | Reusable runtime readiness renderer. |
+| `frontend/app/shared/ui/DataApiCatalogPanel.tsx` | Reusable Data API resource/provider boundary renderer. |
+| `frontend/app/shared/ui/ModuleBoundaryPanel.tsx` | Reusable backend module boundary renderer. |
+| `frontend/app/shared/ui/ExternalComponentPanel.tsx` | Reusable external component integration renderer. |
+| `frontend/app/shared/ui/IntegrationDecisionPanel.tsx` | Reusable proceed/stop gate renderer. |
+| `frontend/app/shared/ui/ArchitectureReviewPanel.tsx` | Composes the review bundle into one architecture diagnostics view. |
+
+### Component Integration Rules
+
+1. TradingAgents remains an opt-in runner adapter. It can contribute graph/node events, reports, and decisions only after mapping into AlphaTrace `AgentRuntimeEvent`, `AgentReport`, `EvidenceReference`, `AgentArtifact`, and `AgentDecision`.
+2. LangAlpha remains an external workbench design candidate. It should be integrated through an external service bridge only after worker and artifact contracts are stable.
+3. Bocha remains a backend-only evidence/tool provider. URLs are canonical source artifacts and must not require frontend API keys.
+4. Professional market data providers are future adapters. They must not reuse legacy BTC/Hyperliquid runtime streams as ETF/fund/index data infrastructure.
+5. MySQL is the formal product persistence target. External checkpoints, workbench state, and provider caches are not a substitute for AlphaTrace product stores.
+
+### Review Workflow
+
+Before adding or deepening an external component integration:
+
+1. Check the component in `/runtime/external-components`.
+2. Check proceed/stop gates in `/runtime/integration-decisions`.
+3. Confirm preserved frontend/backend contracts in `/runtime/module-boundaries` and `/runtime/architecture-review`.
+4. Implement only through an adapter or external service bridge.
+5. Run disabled/failure/success smoke tests and Qwen/Stub/Native regression before promoting beyond PoC.

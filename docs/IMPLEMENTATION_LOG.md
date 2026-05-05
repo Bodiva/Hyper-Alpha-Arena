@@ -4846,3 +4846,22 @@ Notes:
 
 Next:
 - Validate build and commit.
+
+## 2026-05-05 - M202 Architecture Documentation Alignment for Review Layer
+
+Goal:
+- Align canonical architecture documentation with the new architecture review and external component decision layer.
+
+Changes:
+- Updated `docs/ARCHITECTURE.md`.
+
+Validation:
+- `Select-String -Path docs/ARCHITECTURE.md -Pattern "Architecture Review and External Component Decision Layer"`: passed.
+
+Notes:
+- Documentation-only milestone.
+- No backend code, frontend code, Docker, or package files changed.
+
+Next:
+- Validate and commit.
+
