@@ -3264,3 +3264,36 @@ Expected:
 - Blueprint services work without DB, Docker, TradingAgents import, or API keys.
 - AlphaTrace Native is the default recommended product runner.
 - TradingAgents and LangAlpha are visible only as adapter/reference boundaries.
+
+## M226 Validation - Data Center and Data API Boundary Validation
+
+Required checks:
+
+```powershell
+python -m py_compile backend/services/data_center_catalog.py backend/services/data_api/catalog.py backend/api/alpha_trace_data_source_routes.py backend/api/alpha_trace_agent_runtime_routes.py
+```
+
+Direct smoke:
+
+```powershell
+$env:PYTHONPATH="backend"
+python - <<'PY'
+from services.data_center_catalog import get_data_center_catalog
+from services.data_api import get_data_api_catalog
+
+data_center = get_data_center_catalog().to_response()
+data_api = get_data_api_catalog().to_response()
+assert any(connector["connector_id"] == "bocha_search_tool_ingestion" for connector in data_center["connectors"])
+assert any(connector["target_store"] == "clickhouse_business_store" for connector in data_center["connectors"])
+assert any(provider["provider_id"] == "clickhouse_business_store" for provider in data_api["providers"])
+assert any(provider["provider_id"] == "mysql_system_config_store" for provider in data_api["providers"])
+assert any(resource["resource_id"] == "agent_runtime" for resource in data_api["resources"])
+assert "Legacy BTC/Hyperliquid" in data_api["policies"]["legacyBoundary"]
+PY
+```
+
+Expected:
+
+- Bocha appears as tool-result ingestion, not the durable store.
+- MySQL and ClickHouse roles are explicit.
+- Legacy BTC/Hyperliquid is excluded from the AlphaTrace market data boundary.

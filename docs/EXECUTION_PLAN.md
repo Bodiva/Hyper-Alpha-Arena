@@ -7288,3 +7288,35 @@ Validation:
 Rollback:
 
 Revert only the M225 documentation entries. No runtime code changes are required.
+
+## M226 - Data Center and Data API Boundary Validation
+
+Status: Completed
+
+Goal:
+
+Validate and document the current AlphaTrace Data Center and Data API catalogs after the MySQL/ClickHouse/Bocha boundary decision.
+
+Scope:
+
+1. Validate Data Center connectors for static seed, Bocha tool ingestion, professional market data, file upload, and MySQL system config.
+2. Validate Data API resources for asset, evidence, market data, strategy, portfolio, decision, agent runtime, and data sources.
+3. Validate provider boundaries for MySQL config/task control, ClickHouse business analytics, Bocha tool provider, and future professional market data.
+4. Confirm legacy BTC/Hyperliquid APIs are not the AlphaTrace market data boundary.
+5. Do not add new data providers or change runtime behavior.
+
+Acceptance:
+
+1. Data Center catalog explicitly classifies Bocha as tool-result ingestion.
+2. Data API catalog includes both MySQL and ClickHouse provider roles.
+3. Agent Runtime is described as MySQL task/control plus ClickHouse analytics target with fallback.
+4. Professional market data is a planned connector, not legacy BTC/Hyperliquid reuse.
+
+Validation:
+
+1. `python -m py_compile backend/services/data_center_catalog.py backend/services/data_api/catalog.py backend/api/alpha_trace_data_source_routes.py backend/api/alpha_trace_agent_runtime_routes.py`
+2. Direct smoke validates connector/resource/provider counts and key ownership rules.
+
+Rollback:
+
+Revert only the M226 documentation entries. No runtime code changes are required.

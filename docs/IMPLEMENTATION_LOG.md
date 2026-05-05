@@ -5464,3 +5464,27 @@ Notes:
 
 Result:
 - M225 is complete.
+
+## 2026-05-05 - M226 Data Center and Data API Boundary Validation
+
+Goal:
+- Validate that the current backend already has Data Center and Data API boundary catalogs aligned with the MySQL/ClickHouse/Bocha decisions.
+
+Validation:
+- `python -m py_compile backend/services/data_center_catalog.py backend/services/data_api/catalog.py backend/api/alpha_trace_data_source_routes.py backend/api/alpha_trace_agent_runtime_routes.py`: passed.
+- Direct smoke without Docker/DB/external keys: passed.
+  - Data Center connectors: 5.
+  - Data API resources: 8.
+  - Data API providers: 6.
+  - `bocha_search_tool_ingestion` is present.
+  - `clickhouse_business_store` and `mysql_system_config_store` provider boundaries are present.
+  - Agent Runtime data API boundary is present.
+  - Legacy BTC/Hyperliquid is explicitly excluded from AlphaTrace market data boundary.
+
+Notes:
+- This milestone intentionally does not add providers or change ingestion behavior.
+- Bocha remains a backend tool; mapped evidence/artifacts are the product data.
+- Professional ETF/fund/index data remains a planned connector path through Data Center.
+
+Result:
+- M226 is complete.
