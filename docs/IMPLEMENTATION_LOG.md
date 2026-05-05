@@ -3709,3 +3709,19 @@ Validation:
 
 Notes:
 - This is intentionally feature-flagged because existing runs and UI are stable on the current event shape.
+
+## 2026-05-05 - M145 Feature-Flagged Evidence Retrieve ToolAdapter Path
+
+Goal:
+- Add a default-off migration point for `evidence.retrieve` to use ToolAdapter/ToolExecutor from Qwen/Native runner.
+
+Changes:
+- Updated `backend/services/agent_runners/qwen_runner.py`.
+- When `ALPHATRACE_USE_TOOL_ADAPTERS=true`, evidence retrieval uses `EvidenceRetrieveToolAdapter` and `ToolExecutor` event payloads.
+- Default path remains unchanged.
+
+Validation:
+- Pending py_compile.
+
+Notes:
+- Existing detailed static/Bocha retrieval events remain the default path. The adapter path is for controlled migration testing.

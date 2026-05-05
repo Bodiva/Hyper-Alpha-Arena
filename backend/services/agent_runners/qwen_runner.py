@@ -27,7 +27,7 @@ from services.agent_orchestrator.tool_executor import ToolExecutor
 from services.agent_tool_registry import get_agent_tool_contract
 from services.evidence_retrieval.retriever import EvidenceRetriever, to_evidence_reference
 from services.evidence_retrieval.static_evidence_seed import EvidenceItem
-from services.integration_adapters import MarketContextToolAdapter, ToolInvocationRequest
+from services.integration_adapters import EvidenceRetrieveToolAdapter, MarketContextToolAdapter, ToolInvocationRequest
 from services.evidence_retrieval.support_scoring import score_evidence_support
 from services.market_data_store.market_data_store import get_static_market_data_store
 from services.portfolio_store.portfolio_store import get_static_portfolio_store
@@ -565,6 +565,9 @@ class QwenRunnerAdapter:
         run_id: str,
         portfolio_context: Optional[Dict[str, Any]] = None,
     ) -> List[EvidenceItem]:
+        if os.getenv("ALPHATRACE_USE_TOOL_ADAPTERS", "").strip().lower() == "true":
+            return self._retrieve_evidence_with_tool_adapter(request, context, run_id)
+
         self._append_event(
             context,
             run_id,
@@ -707,6 +710,102 @@ class QwenRunnerAdapter:
                 ),
                 agent_name="Evidence Retriever",
                 team="analyst_team",
+            )
+        return items
+
+    def _retrieve_evidence_with_tool_adapter(
+        self,
+        request: SubmitAgentRunRequest,
+        context: AgentRunnerContext,
+        run_id: str,
+    ) -> List[EvidenceItem]:
+        tool_request = ToolInvocationRequest(
+            tool_id="evidence.retrieve",
+            run_id=run_id,
+            step_id="evidence_retrieval",
+            agent_name="Evidence Retriever",
+            args={
+                "assetId": request.assetId,
+                "question": request.question,
+                "taskType": request.taskType,
+                "limit": 5,
+                "includeExternal": True,
+            },
+        )
+        try:
+            self._append_event(
+                context,
+                run_id,
+                "tool.called",
+                self._step_payload("evidence_retrieval", 25, **ToolExecutor.build_called_payload(tool_request)),
+                agent_name="Evidence Retriever",
+                team="analyst_team",
+            )
+            record = ToolExecutor().execute(EvidenceRetrieveToolAdapter(), tool_request)
+            self._append_event(
+                context,
+                run_id,
+                "tool.result",
+                self._step_payload("evidence_retrieval", 45, **record.result_payload),
+                agent_name="Evidence Retriever",
+                team="analyst_team",
+            )
+            if record.result.status != "completed":
+                return []
+            items = self._evidence_items_from_tool_payload(record.result.payload)
+            if items:
+                self._append_event(
+                    context,
+                    run_id,
+                    "evidence.linked",
+                    self._step_payload(
+                        "evidence_retrieval",
+                        progress=100,
+                        evidenceIds=[item.evidenceId for item in items],
+                        summary="Retrieved evidence through ToolAdapter and linked before prompt construction.",
+                    ),
+                    agent_name="Evidence Retriever",
+                    team="analyst_team",
+                )
+            return items
+        except Exception as exc:
+            self._append_event(
+                context,
+                run_id,
+                "tool.result",
+                self._step_payload(
+                    "evidence_retrieval",
+                    45,
+                    toolName="evidence.retrieve",
+                    status="failed",
+                    summary=f"Evidence retrieval failed through ToolAdapter; Qwen will continue with assumption fallback. Error: {exc}",
+                ),
+                agent_name="Evidence Retriever",
+                team="analyst_team",
+            )
+            return []
+
+    @staticmethod
+    def _evidence_items_from_tool_payload(payload: Dict[str, Any]) -> List[EvidenceItem]:
+        items: list[EvidenceItem] = []
+        for item in (payload or {}).get("evidence") or []:
+            if not isinstance(item, dict):
+                continue
+            items.append(
+                EvidenceItem(
+                    evidenceId=str(item.get("evidenceId") or ""),
+                    title=str(item.get("title") or "Evidence"),
+                    sourceName=str(item.get("sourceName") or "AlphaTrace Evidence"),
+                    sourceType=str(item.get("sourceType") or item.get("evidenceType") or "evidence"),
+                    evidenceType=str(item.get("evidenceType") or "evidence"),
+                    relatedAssetIds=list(item.get("relatedAssetIds") or []),
+                    publishedAt=str(item.get("publishedAt") or datetime.now().astimezone().isoformat(timespec="seconds")),
+                    qualityScore=int(item.get("qualityScore") or 50),
+                    reliabilityScore=int(item.get("reliabilityScore") or 50),
+                    summary=str(item.get("summary") or ""),
+                    url=item.get("url"),
+                    extractedFields=dict(item.get("extractedFields") or {}),
+                )
             )
         return items
 

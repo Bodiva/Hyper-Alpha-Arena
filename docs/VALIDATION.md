@@ -1947,3 +1947,13 @@ python -m py_compile backend/services/agent_runners/qwen_runner.py backend/servi
 ```
 
 Runtime smoke with `ALPHATRACE_USE_TOOL_ADAPTERS=true` is optional and should only be run in a safe backend reload window.
+
+### M145 Feature-Flagged Evidence Retrieve ToolAdapter Path
+
+Run:
+
+```powershell
+python -m py_compile backend/services/agent_runners/qwen_runner.py backend/services/integration_adapters/tool_adapters.py backend/services/agent_orchestrator/tool_executor.py
+```
+
+Runtime smoke with `ALPHATRACE_USE_TOOL_ADAPTERS=true` is optional and should only be run in a safe backend reload window.

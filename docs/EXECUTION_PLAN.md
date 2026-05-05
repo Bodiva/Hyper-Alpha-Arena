@@ -4856,3 +4856,26 @@ Acceptance:
 Validation:
 
 1. `python -m py_compile backend/services/agent_runners/qwen_runner.py backend/services/agent_orchestrator/tool_executor.py backend/services/integration_adapters/tool_adapters.py`.
+
+## M145 - Feature-Flagged Evidence Retrieve ToolAdapter Path
+
+Status: Completed
+
+Goal:
+
+Add a safe migration point for Qwen/Native evidence retrieval through `ToolAdapter` and `ToolExecutor`.
+
+Scope:
+
+1. Add `ALPHATRACE_USE_TOOL_ADAPTERS=true` gated path for `evidence.retrieve`.
+2. Default behavior remains unchanged when the flag is absent/false.
+3. Preserve fallback behavior if adapter invocation fails.
+
+Acceptance:
+
+1. `qwen_runner.py` compiles.
+2. Default runtime behavior is unchanged.
+
+Validation:
+
+1. `python -m py_compile backend/services/agent_runners/qwen_runner.py backend/services/integration_adapters/tool_adapters.py backend/services/agent_orchestrator/tool_executor.py`.
