@@ -3863,3 +3863,24 @@ Notes:
 
 Next:
 - M154 should define the Adapter Composition Matrix for Native / TradingAgents / LangAlpha / future ETF providers, then identify which pieces are implemented vs design-only.
+
+## 2026-05-05 - M154 Runner Adapter Composition Matrix
+
+Goal:
+- Expose a product-facing matrix describing how Stub, Qwen, AlphaTrace Native, TradingAgents, and LangAlpha compose orchestration/model/data/tool/persistence/streaming/artifact boundaries.
+
+Changes:
+- Added `backend/services/agent_orchestrator/adapter_matrix.py`.
+- Added `GET /api/alpha-trace/agent-runs/runners/adapter-matrix`.
+
+Validation:
+- `python -m py_compile backend/services/agent_orchestrator/adapter_matrix.py backend/api/alpha_trace_agent_runtime_routes.py`: passed.
+- Local smoke verified matrix entries for qwen, alphatrace_native, tradingagents, and langalpha.
+
+Notes:
+- TradingAgents remains opt-in PoC.
+- LangAlpha remains design-only external service candidate.
+- No external code is copied or executed.
+
+Next:
+- M155 should start reducing runner/orchestrator coupling by extracting a Native Agent Flow descriptor that can feed both UI and future scheduler execution.

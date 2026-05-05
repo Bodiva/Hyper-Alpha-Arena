@@ -5094,3 +5094,33 @@ Validation:
 Rollback:
 
 Remove the catalog module and `/api-catalog` route. Existing data source APIs remain unaffected.
+
+## M154 - Runner Adapter Composition Matrix
+
+Status: Completed
+
+Goal:
+
+Expose a product-facing matrix that explains how Stub, Qwen, AlphaTrace Native, TradingAgents, and LangAlpha compose orchestration, model, data, tool, persistence, streaming, and artifact boundaries.
+
+Scope:
+
+1. Add `AdapterCompositionMatrix` service.
+2. Add `GET /api/alpha-trace/agent-runs/runners/adapter-matrix`.
+3. Mark TradingAgents as opt-in PoC and LangAlpha as design-only external-service candidate.
+4. Do not run or import external projects.
+
+Acceptance:
+
+1. Backend py_compile passes.
+2. Local smoke verifies matrix includes qwen, alphatrace_native, tradingagents, and langalpha.
+3. Matrix states are descriptive and do not expose external internal state.
+
+Validation:
+
+1. `python -m py_compile backend/services/agent_orchestrator/adapter_matrix.py backend/api/alpha_trace_agent_runtime_routes.py`.
+2. Local Python smoke for `get_adapter_composition_matrix().to_response()`.
+
+Rollback:
+
+Remove the matrix service and endpoint. Runner behavior remains unaffected.

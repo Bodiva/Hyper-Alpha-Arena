@@ -42,6 +42,7 @@ from services.alpha_trace_agent_runtime_service import (
 from services.agent_orchestrator.execution_policy import get_runner_execution_policy
 from services.agent_orchestrator.capability_matrix import get_runner_capability, list_runner_capabilities, resolve_recommended_runner
 from services.agent_orchestrator.native_plan import build_alphatrace_native_plan
+from services.agent_orchestrator.adapter_matrix import get_adapter_composition_matrix
 from services.agent_orchestrator.subprocess_orchestrator import get_subprocess_worker_registry_snapshot
 from services.agent_runners.registry import AgentRunnerConfigurationError, AgentRunnerExecutionError, AgentRunnerNotImplementedError
 from services.agent_runtime_store.registry import get_agent_run_store
@@ -293,6 +294,11 @@ def get_agent_runner_capabilities_endpoint(
         "recommendation": resolve_recommended_runner(taskType, requestedRunnerType),
         "message": "Runner capabilities are advisory diagnostics. Submit requests still use the explicit runnerConfig.runnerType and never silently fallback.",
     }
+
+
+@router.get("/runners/adapter-matrix")
+def get_agent_runner_adapter_matrix_endpoint():
+    return get_adapter_composition_matrix().to_response()
 
 
 @router.get("/runners/plans/alphatrace-native")

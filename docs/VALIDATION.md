@@ -2044,3 +2044,17 @@ Required local smoke:
 
 - `get_data_api_catalog().to_response()` includes market data and agent runtime resources.
 - Response contains no key/credential values.
+
+### M154 Runner Adapter Composition Matrix
+
+Required backend compile:
+
+```powershell
+python -m py_compile backend/services/agent_orchestrator/adapter_matrix.py backend/api/alpha_trace_agent_runtime_routes.py
+```
+
+Required local smoke:
+
+- Matrix includes qwen, alphatrace_native, tradingagents, and langalpha.
+- TradingAgents is `poc_opt_in`.
+- LangAlpha is `design_only`.
