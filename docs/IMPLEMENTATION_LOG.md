@@ -4966,3 +4966,24 @@ Notes:
 
 Next:
 - Continue with M207: render agent-skill bindings in a reusable frontend panel or connect the binding matrix into flow/DAG diagnostics.
+
+## 2026-05-05 - M207 Reusable Agent Skill Binding Panel
+
+Goal:
+- Add a reusable frontend panel for the agent-role to skill/tool/output-contract binding matrix and include it in Architecture Review.
+
+Changes:
+- Added `frontend/app/shared/ui/AgentSkillBindingPanel.tsx`.
+- Updated `frontend/app/shared/ui/ArchitectureReviewPanel.tsx` to render binding matrix data.
+
+Validation:
+- pnpm --dir frontend build: passed. Existing Vite chunk/browserslist warnings remain.
+
+Result:
+- M207 is complete. Architecture Review can now render the agent role/skill/tool binding matrix in a readable table.
+
+Notes:
+- This is frontend-only and does not alter runner execution.
+
+Next:
+- Continue with M208: document and validate the end-to-end Data Center -> Tool -> Skill -> Agent -> Store data flow, then choose the next implementation slice.

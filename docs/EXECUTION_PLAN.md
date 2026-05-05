@@ -6666,3 +6666,33 @@ Validation:
 Rollback:
 
 Remove the agent skill binding service, endpoint, frontend types/helper, smoke additions, and docs additions.
+
+## M207 - Reusable Agent Skill Binding Panel
+
+Status: Completed
+
+Goal:
+
+Render the agent-role to skill/tool/output-contract binding matrix in a reusable frontend panel and include it in Architecture Review.
+
+Scope:
+
+1. Add `AgentSkillBindingPanel`.
+2. Render role dependencies, default skills, optional skills, tool IDs, output contracts, team, status, and policies.
+3. Add the panel to `ArchitectureReviewPanel` using existing review bundle data.
+4. Do not wire old business pages or change runner behavior.
+
+Acceptance:
+
+1. Frontend build passes.
+2. Architecture Review can show the Data Center, Skill Catalog, and Role Binding Matrix together.
+3. The binding panel supports loading, error, empty, compact, and full modes.
+4. No new dependencies are introduced.
+
+Validation:
+
+1. `pnpm --dir frontend build`.
+
+Rollback:
+
+Remove `AgentSkillBindingPanel` and the ArchitectureReviewPanel binding additions.

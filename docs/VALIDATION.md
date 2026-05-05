@@ -2891,3 +2891,17 @@ Expected:
 - Binding catalog includes evidence, analyst, research, risk, and portfolio roles.
 - Architecture review bundle includes `agentSkillBindings`.
 - Endpoint smoke includes `/runtime/agent-skill-bindings`.
+
+### M207 Reusable Agent Skill Binding Panel
+
+Required frontend build:
+
+```powershell
+pnpm --dir frontend build
+```
+
+Expected:
+
+- `frontend/app/shared/ui/AgentSkillBindingPanel.tsx` compiles.
+- `ArchitectureReviewPanel` renders `agentSkillBindings` from the review bundle.
+- No new dependencies are introduced.
