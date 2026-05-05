@@ -7124,3 +7124,37 @@ Validation:
 Rollback:
 
 Revert the `docs/ARCHITECTURE_OVERVIEW.md`, `docs/EXECUTION_PLAN.md`, `docs/VALIDATION.md`, and `docs/IMPLEMENTATION_LOG.md` documentation additions.
+
+## M221 - Run-Scoped Evidence Detail Traceability
+
+Status: Completed
+
+Goal:
+
+Make `ev_bocha_*` and other run-scoped evidence IDs navigable from AgentRunDetail to Evidence Center with full source metadata instead of empty details.
+
+Scope:
+
+1. Allow `GET /api/alpha-trace/evidence/{evidenceId}?runId={runId}` to resolve evidence from a specific AgentRun first.
+2. Keep static evidence lookup unchanged.
+3. Pass `runId` from Evidence Center URL parameters into the real evidence detail API.
+4. Increase evidence real-mode API timeout to reduce false fallback to mock data for run-scoped evidence scans.
+5. Do not change Bocha credential handling, runner behavior, or legacy pages.
+
+Acceptance:
+
+1. Clicking an evidence ID from AgentRunDetail can resolve run-scoped evidence by `evidenceId + runId`.
+2. Bocha evidence keeps title, sourceName, summary, URL, extracted fields, usage metadata, and governance notes.
+3. Static evidence detail still works.
+4. Frontend build passes.
+
+Validation:
+
+1. `python -m py_compile backend/api/alpha_trace_evidence_routes.py`
+2. `pnpm --dir frontend build`
+3. API smoke for one static evidence item.
+4. API smoke for one run-scoped evidence item with `runId` if present in the current store.
+
+Rollback:
+
+Revert the evidence route query parameter handling and frontend evidence API timeout/signature changes.

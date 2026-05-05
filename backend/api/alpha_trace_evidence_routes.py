@@ -142,9 +142,13 @@ def _list_run_scoped_evidence(
     return items
 
 
-def _find_run_scoped_evidence(evidence_id: str) -> Optional[AlphaTraceEvidenceItem]:
+def _find_run_scoped_evidence(evidence_id: str, run_id: Optional[str] = None) -> Optional[AlphaTraceEvidenceItem]:
     store = get_agent_run_store()
-    runs = sorted(store.list_runs(), key=lambda run: run.startedAt, reverse=True)
+    if run_id:
+        run = store.get_run(run_id)
+        runs = [run] if run else []
+    else:
+        runs = sorted(store.list_runs(), key=lambda run: run.startedAt, reverse=True)
     for run in runs:
         evidence_items = store.get_evidence(run.runId)
         evidence = next((item for item in evidence_items if item.evidenceId == evidence_id), None)
@@ -223,10 +227,13 @@ def search_alpha_trace_evidence(
 
 
 @router.get("/{evidence_id}", response_model=AlphaTraceEvidenceItem)
-def get_alpha_trace_evidence(evidence_id: str):
+def get_alpha_trace_evidence(
+    evidence_id: str,
+    runId: Optional[str] = Query(None),
+):
     item = get_static_evidence_store().get_evidence(evidence_id)
     if not item:
-        item = _find_run_scoped_evidence(evidence_id)
+        item = _find_run_scoped_evidence(evidence_id, run_id=runId)
     if not item:
         raise HTTPException(status_code=404, detail=f"Evidence not found: {evidence_id}")
     return item

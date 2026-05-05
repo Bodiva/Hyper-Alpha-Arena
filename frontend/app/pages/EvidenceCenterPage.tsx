@@ -139,6 +139,7 @@ export default function EvidenceCenterPage() {
   const initialRouteParams = useMemo(() => getCurrentHashQueryParams(), []);
   const linkedAssetId = initialRouteParams.get("assetId") ?? undefined;
   const linkedEvidenceId = initialRouteParams.get("evidenceId") ?? undefined;
+  const linkedRunId = initialRouteParams.get("runId") ?? undefined;
   const linkedSource = initialRouteParams.get("source") ?? undefined;
 
   const [typeFilter, setTypeFilter] = useState<EvidenceTypeFilter>("ALL");
@@ -161,7 +162,7 @@ export default function EvidenceCenterPage() {
         limit: 100,
       }),
       listAssetsAsync({ limit: 100 }),
-      linkedEvidenceId ? getEvidenceByIdAsync(linkedEvidenceId).catch(() => undefined) : Promise.resolve(undefined),
+      linkedEvidenceId ? getEvidenceByIdAsync(linkedEvidenceId, { runId: linkedRunId }).catch(() => undefined) : Promise.resolve(undefined),
     ])
       .then(([items, assetItems, linkedEvidence]) => {
         if (cancelled) return;
@@ -187,7 +188,7 @@ export default function EvidenceCenterPage() {
     return () => {
       cancelled = true;
     };
-  }, [linkedAssetId, linkedEvidenceId, linkedSource]);
+  }, [linkedAssetId, linkedEvidenceId, linkedRunId, linkedSource]);
 
   const assetById = useMemo(() => new Map(assets.map((asset) => [asset.id, asset])), [assets]);
 

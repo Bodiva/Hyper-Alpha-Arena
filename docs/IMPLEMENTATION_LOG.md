@@ -5324,3 +5324,32 @@ Notes:
 
 Result:
 - M220 is complete. The canonical architecture overview now has the requested target directory structure and end-to-end architecture/data-flow diagrams.
+
+## 2026-05-05 - M221 Run-Scoped Evidence Detail Traceability
+
+Goal:
+- Fix the Evidence Center path where `ev_bocha_*` or other run-scoped evidence IDs can be cited in AgentRunDetail but open as empty/undefined detail in Evidence Center.
+
+Assumption:
+- The likely failure mode is not missing Bocha URL mapping; Bocha mapper already stores URL/title/summary/extracted fields. The weak point is resolving a run-scoped evidence item by ID without using the originating `runId`, plus a short frontend real-mode timeout causing false fallback to mock data.
+
+Changes:
+- Updated `GET /api/alpha-trace/evidence/{evidenceId}` to accept optional `runId`.
+- If `runId` is supplied, backend resolves that run first before scanning all stored runs.
+- Updated frontend evidence API to pass `runId` and use a 5 second timeout for real-mode evidence calls.
+- Updated Evidence Center to read `runId` from the hash query and pass it to `getEvidenceByIdAsync`.
+
+Validation:
+- `python -m py_compile backend/api/alpha_trace_evidence_routes.py`: passed.
+- `pnpm --dir frontend build`: passed with existing chunk/browserslist warnings.
+- `GET /api/health` on `8802` and `8805`: passed after Docker app recreate.
+- `GET /api/alpha-trace/evidence/ev_static_510300_snapshot_001`: passed; returned populated static evidence detail.
+- `GET /api/alpha-trace/evidence?sourceType=bocha_search&limit=5`: passed; returned Bocha evidence with URL and `usedByAgentRunIds`.
+- `GET /api/alpha-trace/evidence/{ev_bocha_*}?runId=run_qwen_20260505_122056_745680`: passed; returned run-scoped Bocha evidence detail with URL, summary, extracted fields, usage metadata, and governance metadata.
+
+Notes:
+- This does not change Bocha key handling.
+- This does not change Qwen, Native, TradingAgents, or Stub runner behavior.
+
+Result:
+- M221 is complete. Run-scoped Bocha evidence is now directly resolvable from Evidence Center when AgentRunDetail passes `runId`.

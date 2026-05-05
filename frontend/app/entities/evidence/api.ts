@@ -34,6 +34,11 @@ export interface EvidenceUsedBy {
   decisions: Decision[];
 }
 
+export interface GetEvidenceByIdOptions {
+  delayMs?: number;
+  runId?: string;
+}
+
 const normalize = (value: string): string => value.trim().toLowerCase();
 
 const realModeNotImplemented = (operation: string): never => {
@@ -225,7 +230,7 @@ export const listEvidenceAsync = async (params: ListEvidenceParams = {}, delayMs
         minQualityScore: params.minQualityScore,
         limit: params.limit ?? 100,
       },
-      timeoutMs: 1200,
+      timeoutMs: 5000,
     });
     const items = response.items.map(mapBackendEvidenceItem);
     return items.length > 0 ? items : listEvidenceFromMock(params);
@@ -234,12 +239,22 @@ export const listEvidenceAsync = async (params: ListEvidenceParams = {}, delayMs
   }
 };
 
-export const getEvidenceByIdAsync = async (evidenceId: string, delayMs?: number): Promise<Evidence | undefined> => {
+export const getEvidenceByIdAsync = async (
+  evidenceId: string,
+  optionsOrDelayMs?: GetEvidenceByIdOptions | number,
+): Promise<Evidence | undefined> => {
+  const options: GetEvidenceByIdOptions =
+    typeof optionsOrDelayMs === "number" ? { delayMs: optionsOrDelayMs } : (optionsOrDelayMs ?? {});
   if (shouldUseMockData()) {
-    return mockDelay(getEvidenceById(evidenceId), delayMs);
+    return mockDelay(getEvidenceById(evidenceId), options.delayMs);
   }
   try {
-    return mapBackendEvidenceItem(await httpClient.get<BackendEvidenceItem>(ENDPOINTS.alphaTraceEvidenceDetail(evidenceId), { timeoutMs: 1200 }));
+    return mapBackendEvidenceItem(
+      await httpClient.get<BackendEvidenceItem>(ENDPOINTS.alphaTraceEvidenceDetail(evidenceId), {
+        params: { runId: options.runId },
+        timeoutMs: 5000,
+      }),
+    );
   } catch {
     return getEvidenceByIdFromMock(evidenceId);
   }
@@ -264,7 +279,7 @@ export const searchEvidenceAsync = async (params: SearchEvidenceParams = {}, del
         taskType: params.taskType ?? "single_asset_analysis",
         limit: params.limit ?? 5,
       },
-      timeoutMs: 1200,
+      timeoutMs: 5000,
     });
     const items = response.items.map(mapBackendEvidenceItem);
     return items.length > 0

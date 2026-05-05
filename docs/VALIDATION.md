@@ -3114,3 +3114,31 @@ Expected:
 - TradingAgents and LangAlpha are documented as adapter/reference boundaries.
 
 No backend compile or frontend build is required unless business code changes.
+
+## M221 Validation - Run-Scoped Evidence Detail Traceability
+
+Required checks:
+
+```powershell
+python -m py_compile backend/api/alpha_trace_evidence_routes.py
+pnpm --dir frontend build
+```
+
+API smoke:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8802/api/alpha-trace/evidence/ev_static_510300_snapshot_001
+```
+
+If a run-scoped evidence id is present:
+
+```powershell
+Invoke-RestMethod "http://127.0.0.1:8802/api/alpha-trace/evidence/<evidenceId>?runId=<runId>"
+```
+
+Expected:
+
+- Static evidence detail still returns a populated evidence item.
+- Run-scoped evidence detail returns the item from the requested AgentRun.
+- Bocha evidence includes `url`, `sourceName`, `summary`, `extractedFields`, and metadata describing external-search provenance.
+- Frontend build passes.
