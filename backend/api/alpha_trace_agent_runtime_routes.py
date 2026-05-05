@@ -43,6 +43,7 @@ from services.agent_runtime_health import find_stale_agent_runs
 from services.agent_runtime_metrics import get_agent_run_metrics_snapshot
 from services.agent_runtime_timeline import get_agent_run_timeline_summary
 from services.architecture_index import get_alphatrace_architecture_index
+from services.architecture_review_bundle import get_architecture_review_bundle
 from services.backend_module_boundaries import get_backend_module_boundary_catalog
 from services.external_component_catalog import get_external_component_catalog
 from services.integration_decision_guide import get_integration_decision_guide
@@ -381,6 +382,11 @@ def get_agent_runtime_architecture_endpoint(db: Session = Depends(get_db)):
         **get_alphatrace_architecture_index(db),
         "message": "AlphaTrace architecture index is a product-owned map of API, data, model, orchestration, runner, tool and artifact boundaries.",
     }
+
+
+@router.get("/runtime/architecture-review")
+def get_agent_runtime_architecture_review_endpoint(db: Session = Depends(get_db)):
+    return get_architecture_review_bundle(db)
 
 
 @router.get("/runtime/module-boundaries")

@@ -6414,3 +6414,35 @@ Validation:
 Rollback:
 
 Remove `frontend/app/shared/ui/IntegrationDecisionPanel.tsx`.
+
+## M199 - Architecture Review Bundle
+
+Status: Completed
+
+Goal:
+
+Expose a consolidated backend architecture review payload for diagnostics and refactor review tooling.
+
+Scope:
+
+1. Add `backend/services/architecture_review_bundle.py`.
+2. Add `GET /api/alpha-trace/agent-runs/runtime/architecture-review`.
+3. Bundle architecture index, module boundaries, external components, integration decisions, and readiness.
+4. Add checks to backend abstraction smoke and endpoint smoke.
+
+Acceptance:
+
+1. Backend py_compile passes.
+2. Backend abstraction smoke passes.
+3. Endpoint smoke script syntax includes architecture review.
+4. Bundle is read-only and does not import or execute external projects.
+
+Validation:
+
+1. `python -m py_compile backend/services/architecture_review_bundle.py backend/services/architecture_index.py backend/services/backend_module_boundaries.py backend/services/external_component_catalog.py backend/services/integration_decision_guide.py backend/api/alpha_trace_agent_runtime_routes.py`.
+2. `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`.
+3. `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_abstraction_endpoints.ps1 -SkipHttp`.
+
+Rollback:
+
+Remove the architecture review bundle service, endpoint, and smoke additions.

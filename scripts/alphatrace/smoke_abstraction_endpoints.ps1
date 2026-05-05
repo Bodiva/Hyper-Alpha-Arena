@@ -8,6 +8,7 @@ $ErrorActionPreference = "Stop"
 $endpoints = @(
     "/alpha-trace/agent-runs/runtime/config",
     "/alpha-trace/agent-runs/runtime/architecture",
+    "/alpha-trace/agent-runs/runtime/architecture-review",
     "/alpha-trace/agent-runs/runtime/module-boundaries",
     "/alpha-trace/agent-runs/runtime/external-components",
     "/alpha-trace/agent-runs/runtime/integration-decisions",

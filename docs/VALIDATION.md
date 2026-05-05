@@ -2752,3 +2752,23 @@ Expected:
 - Build succeeds.
 - `frontend/app/shared/ui/IntegrationDecisionPanel.tsx` compiles without new dependencies.
 - No existing page wiring is changed.
+
+### M199 Architecture Review Bundle
+
+Required backend compile:
+
+```powershell
+python -m py_compile backend/services/architecture_review_bundle.py backend/services/architecture_index.py backend/services/backend_module_boundaries.py backend/services/external_component_catalog.py backend/services/integration_decision_guide.py backend/api/alpha_trace_agent_runtime_routes.py
+```
+
+Required regression:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_abstraction_endpoints.ps1 -SkipHttp
+```
+
+Expected:
+
+- Architecture review bundle contains architecture, moduleBoundaries, externalComponents, integrationDecisions, readiness, summary, and policies.
+- No external project is imported or executed.

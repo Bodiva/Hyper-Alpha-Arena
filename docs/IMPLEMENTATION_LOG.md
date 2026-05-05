@@ -4785,3 +4785,27 @@ Notes:
 
 Next:
 - Validate build and commit.
+
+## 2026-05-05 - M199 Architecture Review Bundle
+
+Goal:
+- Add a consolidated backend review payload for architecture/refactor diagnostics.
+
+Changes:
+- Added `backend/services/architecture_review_bundle.py`.
+- Updated `backend/api/alpha_trace_agent_runtime_routes.py`.
+- Updated `scripts/alphatrace/smoke_backend_abstractions.ps1`.
+- Updated `scripts/alphatrace/smoke_abstraction_endpoints.ps1`.
+
+Validation:
+- `python -m py_compile backend/services/architecture_review_bundle.py backend/services/architecture_index.py backend/services/backend_module_boundaries.py backend/services/external_component_catalog.py backend/services/integration_decision_guide.py backend/api/alpha_trace_agent_runtime_routes.py`: passed.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`: passed.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_abstraction_endpoints.ps1 -SkipHttp`: passed.
+
+Notes:
+- The bundle reduces frontend multi-endpoint stitching for future architecture review pages.
+- It is read-only and does not import or run TradingAgents/LangAlpha.
+
+Next:
+- Validate and commit the bundle.
+
