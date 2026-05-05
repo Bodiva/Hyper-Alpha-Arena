@@ -12,6 +12,42 @@ def get_static_data_source_seed() -> List[Dict[str, object]]:
 
     return [
         {
+            "sourceId": "ds_etf_file_import_clickhouse",
+            "name": "ETF File Import to ClickHouse",
+            "sourceType": "FILE_IMPORT",
+            "vendor": "AlphaTrace Upload",
+            "status": "HEALTHY",
+            "reliabilityScore": 80,
+            "qualityScore": 82,
+            "lastSyncAt": "2026-05-05T08:00:00+08:00",
+            "syncFrequency": "ON_DEMAND",
+            "supportedAssetTypes": ["ETF", "FUND", "INDEX"],
+            "dataCategories": ["MARKET_DATA", "FUND_QUARTERLY_REPORT"],
+            "evidenceSources": ["ETF File Upload", "data/test"],
+            "description": "Upload ETF-related CSV, TSV, JSON, JSONL, Excel, or Parquet files and persist normalized rows to ClickHouse.",
+            "configState": "clickhouse_env_required",
+            "governanceNotes": [
+                "Uploaded files are normalized into typed ClickHouse metadata plus raw row JSON.",
+                "The raw source row is preserved in payload_json for later schema hardening.",
+                "ClickHouse connection is configured with ALPHA_TRACE_CLICKHOUSE_URL and ALPHA_TRACE_ETF_IMPORT_TABLE.",
+            ],
+            "recentTasks": [
+                {
+                    "taskId": "task_etf_file_import_ready",
+                    "taskName": "ETF file import endpoint ready",
+                    "taskType": "FILE_IMPORT",
+                    "status": "SUCCESS",
+                    "startedAt": "2026-05-05T08:00:00+08:00",
+                    "endedAt": "2026-05-05T08:00:01+08:00",
+                    "durationSeconds": 1,
+                    "recordsFetched": 0,
+                    "recordsSucceeded": 0,
+                    "recordsFailed": 0,
+                    "message": "Use /api/alpha-trace/data-sources/file-imports to write uploads into ClickHouse.",
+                }
+            ],
+        },
+        {
             "sourceId": "ds_alphatrace_static_evidence_seed",
             "name": "AlphaTrace Static Evidence Seed",
             "sourceType": "DATABASE_SYNC",

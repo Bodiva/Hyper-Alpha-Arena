@@ -5155,3 +5155,22 @@ Notes:
 
 Next:
 - Continue with M215: decide between committing the Data Import frontend UI cleanly or adding a controlled projection writer endpoint behind an explicit dry-run/write flag.
+
+## 2026-05-05 - M215 Data Source Catalog ClickHouse Import Entry
+
+Goal:
+- Surface the ClickHouse ETF/index file import path in the Data Source catalog and keep MySQL/ClickHouse terminology aligned.
+
+Changes:
+- Added `ds_etf_file_import_clickhouse` to the static Data Source seed.
+- Corrected a dirty seed edit that had drifted Domain Seed text back to PostgreSQL; it now consistently says MySQL.
+
+Validation:
+- `python -m py_compile backend/services/data_source_store/static_data_source_seed.py`: passed.
+- `GET http://127.0.0.1:8802/api/alpha-trace/data-sources?keyword=ClickHouse`: passed and returned `ds_etf_file_import_clickhouse`.
+
+Result:
+- M215 is complete. The Data Source catalog now exposes the ClickHouse file import path and remains aligned with the MySQL config/domain direction.
+
+Next:
+- Continue with M216: split or document the broad frontend UX dirty batch before committing it.

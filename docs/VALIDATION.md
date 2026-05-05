@@ -3030,3 +3030,17 @@ Expected:
 
 - Response contains `alpha_trace_runtime_events`, `alpha_trace_agent_reports`, `alpha_trace_evidence_refs`, and `alpha_trace_decisions` summaries.
 - Rows are preview only and are not written to ClickHouse.
+
+### M215 Data Source Catalog ClickHouse Import Entry
+
+Checks:
+
+```powershell
+python -m py_compile backend/services/data_source_store/static_data_source_seed.py
+Invoke-RestMethod "http://127.0.0.1:8802/api/alpha-trace/data-sources?keyword=ClickHouse"
+```
+
+Expected:
+
+- Response includes `ds_etf_file_import_clickhouse`.
+- Domain seed text remains MySQL-aligned.

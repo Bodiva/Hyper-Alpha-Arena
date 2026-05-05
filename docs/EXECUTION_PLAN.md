@@ -6916,3 +6916,33 @@ Validation:
 Rollback:
 
 Remove the projection service, runtime route import, and projection preview endpoint.
+
+## M215 - Data Source Catalog ClickHouse Import Entry
+
+Status: Completed
+
+Goal:
+
+Expose the ClickHouse ETF/index file import path in the AlphaTrace Data Source catalog and keep storage ownership terminology aligned with the MySQL/ClickHouse decision.
+
+Scope:
+
+1. Add a static Data Source entry for ETF file imports into ClickHouse.
+2. Ensure domain seed metadata still names MySQL, not PostgreSQL, as the AlphaTrace config/domain MVP store.
+3. Validate the Data Source API can find the ClickHouse import source.
+4. Do not change runtime runner behavior or legacy BTC/Hyperliquid services.
+
+Acceptance:
+
+1. `static_data_source_seed.py` py_compile passes.
+2. `/api/alpha-trace/data-sources?keyword=ClickHouse` returns `ds_etf_file_import_clickhouse`.
+3. Domain seed catalog text remains MySQL-aligned.
+
+Validation:
+
+1. `python -m py_compile backend/services/data_source_store/static_data_source_seed.py`.
+2. `Invoke-RestMethod "http://127.0.0.1:8802/api/alpha-trace/data-sources?keyword=ClickHouse"`.
+
+Rollback:
+
+Remove the ClickHouse file import static Data Source entry and restore the previous seed text.
