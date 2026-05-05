@@ -2168,3 +2168,24 @@ Required local smoke:
 - `QwenModelProviderAdapter().health()` returns `ready` or `missing_config`.
 - Health source is consistent with runtime config diagnostics.
 - Response contains no raw token-shaped credential such as `sk-` or `Bearer ...`.
+
+### M164 Model Provider Catalog Boundary
+
+Required backend compile:
+
+```powershell
+python -m py_compile backend/services/model_providers/catalog.py backend/services/model_providers/__init__.py backend/api/alpha_trace_agent_runtime_routes.py
+```
+
+Required local smoke:
+
+- `list_model_provider_descriptors()` includes Qwen, TradingAgents bridge, and LangAlpha bridge.
+- Response contains no raw token-shaped credential.
+- `scripts/alphatrace/smoke_backend_abstractions.ps1` passes.
+- `scripts/alphatrace/smoke_abstraction_endpoints.ps1 -SkipHttp` passes.
+
+Runtime HTTP smoke after backend reload:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/agent-runs/runtime/model-providers
+```

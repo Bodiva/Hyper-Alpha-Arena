@@ -4063,3 +4063,28 @@ Notes:
 
 Next:
 - M164 should continue backend abstraction cleanup around model provider/catalog boundaries or add runtime-safe HTTP smoke after a backend reload window.
+
+## 2026-05-05 - M164 Model Provider Catalog Boundary
+
+Goal:
+- Add a model provider catalog boundary for Qwen, future OpenAI-compatible providers, TradingAgents model bridge, LangAlpha BYOK bridge, and future local providers.
+
+Changes:
+- Added `backend/services/model_providers/catalog.py`.
+- Added `backend/services/model_providers/__init__.py`.
+- Added `GET /api/alpha-trace/agent-runs/runtime/model-providers`.
+- Updated `scripts/alphatrace/smoke_backend_abstractions.ps1`.
+- Updated `scripts/alphatrace/smoke_abstraction_endpoints.ps1`.
+
+Validation:
+- `python -m py_compile backend/services/model_providers/catalog.py backend/services/model_providers/__init__.py backend/api/alpha_trace_agent_runtime_routes.py`: passed.
+- Local smoke for `list_model_provider_descriptors()`: passed.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`: passed.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_abstraction_endpoints.ps1 -SkipHttp`: passed.
+
+Notes:
+- This is diagnostics/catalog only. It does not invoke models or change runner execution.
+- Full HTTP smoke for new endpoints still requires a backend reload because the currently running service predates these route additions.
+
+Next:
+- M165 should add a product-owned AgentRun artifact/metrics task persistence model or continue frontend-safe observability cleanup, depending on active runtime stability.

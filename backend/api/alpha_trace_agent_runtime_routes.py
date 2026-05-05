@@ -54,6 +54,7 @@ from services.integration_adapters import build_default_integration_registry
 from services.async_tasks import get_async_task_store_type, get_mysql_async_task_store
 from services.system_config_store import get_mysql_system_config_store
 from services.runtime_config import get_runtime_config_facade
+from services.model_providers import list_model_provider_descriptors
 
 router = APIRouter(prefix="/api/alpha-trace/agent-runs", tags=["AlphaTrace Agent Runtime"])
 
@@ -354,6 +355,14 @@ def get_agent_runtime_config_endpoint(db: Session = Depends(get_db)):
     return {
         "config": get_runtime_config_facade().snapshot(db),
         "message": "Runtime configuration diagnostics are sanitized. No raw API keys or encrypted secret values are returned.",
+    }
+
+
+@router.get("/runtime/model-providers")
+def get_agent_runtime_model_providers_endpoint(db: Session = Depends(get_db)):
+    return {
+        **list_model_provider_descriptors(db),
+        "message": "Model provider diagnostics describe backend model boundaries and contain no raw credentials.",
     }
 
 

@@ -5385,3 +5385,36 @@ Validation:
 Rollback:
 
 Restore `QwenModelProviderAdapter.health()` to its previous `_resolve_config()`-based implementation. Model invocation remains unaffected either way.
+
+## M164 - Model Provider Catalog Boundary
+
+Status: Completed
+
+Goal:
+
+Create a product-owned catalog for backend model provider boundaries so future Qwen/OpenAI-compatible/TradingAgents/LangAlpha model integration does not remain scattered across runner UI copy.
+
+Scope:
+
+1. Add sanitized model provider descriptors.
+2. Include direct providers, runner-owned bridges, external workbench bridges, and planned local providers.
+3. Add `GET /api/alpha-trace/agent-runs/runtime/model-providers`.
+4. Do not invoke providers and do not expose raw credentials.
+
+Acceptance:
+
+1. Backend py_compile passes.
+2. Local smoke verifies Qwen, TradingAgents bridge, and LangAlpha bridge descriptors exist.
+3. Backend abstraction smoke script includes the catalog.
+4. HTTP endpoint smoke list includes the new endpoint.
+
+Validation:
+
+1. `python -m py_compile backend/services/model_providers/catalog.py backend/services/model_providers/__init__.py backend/api/alpha_trace_agent_runtime_routes.py`.
+2. Local Python smoke for `list_model_provider_descriptors()`.
+3. `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`.
+4. `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_abstraction_endpoints.ps1 -SkipHttp`.
+
+Rollback:
+
+Remove the catalog package and endpoint. Runner behavior remains unchanged.
