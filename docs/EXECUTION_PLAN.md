@@ -5154,3 +5154,32 @@ Validation:
 Rollback:
 
 Remove flow catalog service and endpoints. Existing runner behavior remains unaffected.
+
+## M156 - Abstraction Endpoint Smoke Script
+
+Status: Completed with runtime reload pending
+
+Goal:
+
+Add a repeatable HTTP smoke script for the new abstraction diagnostics endpoints.
+
+Scope:
+
+1. Add `scripts/alphatrace/smoke_abstraction_endpoints.ps1`.
+2. Cover runtime config/tools/integrations/tasks, runner status/capabilities/adapter-matrix/flows, and data API catalog.
+3. Support `-SkipHttp` for syntax validation when backend reload is not safe.
+
+Acceptance:
+
+1. Script exists and validates endpoint list with `-SkipHttp`.
+2. Full HTTP smoke is available for use after backend reload/restart.
+3. Current running service failure is recorded if it has not loaded new routes.
+
+Validation:
+
+1. `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_abstraction_endpoints.ps1 -SkipHttp`.
+2. Optional full HTTP smoke after backend reload.
+
+Rollback:
+
+Remove the script. Runtime behavior remains unaffected.

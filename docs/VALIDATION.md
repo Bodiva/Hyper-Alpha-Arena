@@ -2072,3 +2072,17 @@ Required local smoke:
 - Qwen/AlphaTrace Native flow has at least five nodes.
 - TradingAgents flow is `poc_opt_in`.
 - LangAlpha flow is `design_only`.
+
+### M156 Abstraction Endpoint Smoke Script
+
+Required script syntax validation:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_abstraction_endpoints.ps1 -SkipHttp
+```
+
+Full HTTP smoke after backend reload:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_abstraction_endpoints.ps1
+```

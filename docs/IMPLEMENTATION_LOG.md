@@ -3908,3 +3908,23 @@ Notes:
 
 Next:
 - M156 should add a backend endpoint smoke script for all new abstraction endpoints, without restarting services unless needed.
+
+## 2026-05-05 - M156 Abstraction Endpoint Smoke Script
+
+Goal:
+- Add a repeatable HTTP smoke script for new abstraction diagnostics endpoints.
+
+Changes:
+- Added `scripts/alphatrace/smoke_abstraction_endpoints.ps1`.
+
+Validation:
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_abstraction_endpoints.ps1 -SkipHttp`: passed.
+- Full HTTP smoke against `http://127.0.0.1:8805/api` failed for 8 new endpoints with 404 because the currently running backend has not reloaded this branch's new routes yet.
+- Existing old endpoints `/runners/status` and `/runners/capabilities` returned OK, confirming the base URL is reachable.
+
+Notes:
+- Runtime HTTP validation should be rerun after a safe backend reload/restart.
+- I did not restart the backend in this step to avoid interrupting any active AgentRun.
+
+Next:
+- Continue backend abstraction work that can be validated statically; schedule endpoint HTTP smoke after a reload window.
