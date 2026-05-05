@@ -1927,3 +1927,13 @@ python -m py_compile backend/services/integration_adapters/tool_adapters.py back
 ```
 
 Optional local smoke invokes both adapters with static data and `includeExternal=False` for evidence to avoid network dependency.
+
+### M143 ToolExecutor Event Payload Helper
+
+Run:
+
+```powershell
+python -m py_compile backend/services/agent_orchestrator/tool_executor.py
+```
+
+Optional local smoke executes `MarketContextToolAdapter` through `ToolExecutor`.

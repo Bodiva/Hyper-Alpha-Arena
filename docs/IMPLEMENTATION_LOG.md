@@ -3669,3 +3669,27 @@ Validation:
 
 Next:
 - M143 can begin a runtime-safe migration by optionally letting Native/Qwen runner call these ToolAdapters behind a feature flag, or continue with ModelProvider extraction tests.
+
+## 2026-05-05 - M143 ToolExecutor Event Payload Helper
+
+Goal:
+- Centralize future tool invocation event payload generation.
+
+Changes:
+- Added `backend/services/agent_orchestrator/tool_executor.py`.
+
+Validation:
+- Pending py_compile and optional local smoke.
+
+## 2026-05-05 - M143 ToolExecutor Local Smoke
+
+Validation:
+- `python -m py_compile backend/services/agent_orchestrator/tool_executor.py`: passed.
+- Local smoke executed `MarketContextToolAdapter` through `ToolExecutor`:
+  - result status `completed`
+  - tool contract `market.context.load` present in called payload
+  - result payload contained market context
+- Local Python emitted the same requests dependency warning; unrelated to ToolExecutor behavior.
+
+Next:
+- M144 can add a ToolExecutor-backed smoke script or start a feature-flagged migration of market/evidence context loading inside Native/Qwen runner.

@@ -4811,3 +4811,25 @@ Acceptance:
 Validation:
 
 1. `python -m py_compile backend/services/integration_adapters/tool_adapters.py backend/services/integration_adapters/registry.py`.
+
+## M143 - ToolExecutor Event Payload Helper
+
+Status: Completed
+
+Goal:
+
+Centralize `tool.called` / `tool.result` payload construction so future runner refactors do not hand-code divergent tool event shapes.
+
+Scope:
+
+1. Add `ToolExecutor` and `ToolExecutionRecord`.
+2. Generate called/result payloads with `toolContract`, timing, evidence IDs, artifact IDs, and result payload.
+3. Do not wire current runners yet.
+
+Acceptance:
+
+1. ToolExecutor compiles and can execute ToolAdapters in local smoke.
+
+Validation:
+
+1. `python -m py_compile backend/services/agent_orchestrator/tool_executor.py`.
