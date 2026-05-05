@@ -4260,3 +4260,21 @@ Notes:
 
 Next:
 - M173 should define a frontend artifact API model/view contract or add a backend artifact catalog endpoint for UI discovery.
+
+## 2026-05-05 - M173 Frontend AgentArtifact API Contract
+
+Goal:
+- Add frontend runtime API types and helper for AgentArtifact list retrieval.
+
+Changes:
+- Updated `frontend/app/entities/runtime/api.ts`.
+
+Validation:
+- `pnpm --dir frontend build`: passed.
+
+Notes:
+- Existing Vite chunk and browserslist warnings remain.
+- No page UI was changed.
+
+Next:
+- M174 should add a small reusable artifact preview/view model component or continue backend event compaction/read-model work.

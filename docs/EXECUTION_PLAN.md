@@ -5662,3 +5662,30 @@ Validation:
 Rollback:
 
 Remove artifact mapping from `ToolExecutor.execute`. The standalone mapper remains usable.
+
+## M173 - Frontend AgentArtifact API Contract
+
+Status: Completed
+
+Goal:
+
+Add frontend runtime API types and helper for AgentArtifact list retrieval.
+
+Scope:
+
+1. Extend `frontend/app/entities/runtime/api.ts` with AgentArtifact types.
+2. Add `listAgentRunArtifactsAsync(runId)`.
+3. Do not wire pages in this milestone.
+
+Acceptance:
+
+1. Frontend build passes.
+2. Artifact types compile and use existing AlphaTrace endpoint constants.
+
+Validation:
+
+1. `pnpm --dir frontend build`.
+
+Rollback:
+
+Remove the added AgentArtifact types and helper.

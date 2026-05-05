@@ -94,6 +94,32 @@ export interface AgentRunMetricsSnapshot {
   message?: string;
 }
 
+export type AgentArtifactType = "table" | "chart" | "file" | "html_preview" | "web_url" | "json" | "image" | "text";
+export type AgentArtifactStatus = "created" | "available" | "failed" | "expired";
+
+export interface AgentArtifact {
+  artifact_id: string;
+  run_id: string;
+  artifact_type: AgentArtifactType;
+  title: string;
+  status: AgentArtifactStatus;
+  summary?: string;
+  source_tool?: string | null;
+  source_url?: string | null;
+  content_type?: string | null;
+  storage_uri?: string | null;
+  preview_payload?: JsonRecord;
+  metadata?: JsonRecord;
+}
+
+export interface AgentRunArtifactsResponse {
+  runId: string;
+  artifacts: AgentArtifact[];
+  total: number;
+  message?: string;
+  error?: string;
+}
+
 export const getRuntimeArchitectureAsync = () =>
   httpClient.get<RuntimeArchitectureIndex>(ENDPOINTS.alphaTraceAgentRuntimeArchitecture);
 
@@ -108,3 +134,6 @@ export const getOrchestratorsAsync = () =>
 
 export const getAgentRunMetricsAsync = (runId: string) =>
   httpClient.get<AgentRunMetricsSnapshot>(ENDPOINTS.alphaTraceAgentRunMetrics(runId));
+
+export const listAgentRunArtifactsAsync = (runId: string) =>
+  httpClient.get<AgentRunArtifactsResponse>(ENDPOINTS.alphaTraceAgentRunArtifacts(runId));

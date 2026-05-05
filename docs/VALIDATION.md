@@ -2323,3 +2323,16 @@ Required local smoke:
 - Fake tool with Bocha-like web result produces `ToolExecutionRecord.artifacts`.
 - `result_payload.artifactIds` includes mapped artifact ids.
 - `scripts/alphatrace/smoke_backend_abstractions.ps1` passes.
+
+### M173 Frontend AgentArtifact API Contract
+
+Required frontend build:
+
+```powershell
+pnpm --dir frontend build
+```
+
+Expected:
+
+- Build succeeds.
+- `frontend/app/entities/runtime/api.ts` exports AgentArtifact types and `listAgentRunArtifactsAsync`.
