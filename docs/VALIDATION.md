@@ -2574,3 +2574,17 @@ Select-String -Path docs/ARCHITECTURE.md -Pattern "Runtime Observability and Art
 Expected:
 
 - Architecture document includes runtime read model, artifact contract, data provider boundary, and frontend API contract notes.
+
+### M188 Reusable Runtime Readiness Panel
+
+Required frontend build:
+
+```powershell
+pnpm --dir frontend build
+```
+
+Expected:
+
+- Build succeeds.
+- `frontend/app/shared/ui/RuntimeReadinessPanel.tsx` compiles without new dependencies.
+- No existing page wiring is changed in this milestone.

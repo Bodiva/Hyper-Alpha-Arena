@@ -6092,3 +6092,30 @@ Validation:
 Rollback:
 
 Remove the added architecture section.
+
+## M188 - Reusable Runtime Readiness Panel
+
+Status: Completed
+
+Goal:
+
+Add a reusable frontend UI primitive for rendering runtime readiness diagnostics.
+
+Scope:
+
+1. Add `RuntimeReadinessPanel`.
+2. Support loading, error, empty, compact, section statuses, and action items.
+3. Do not wire existing pages in this milestone.
+
+Acceptance:
+
+1. Frontend build passes.
+2. Component compiles without new dependencies.
+
+Validation:
+
+1. `pnpm --dir frontend build`.
+
+Rollback:
+
+Remove `frontend/app/shared/ui/RuntimeReadinessPanel.tsx`.
