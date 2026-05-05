@@ -13,6 +13,7 @@ from services.agent_skill_bindings import get_agent_skill_binding_catalog
 from services.agent_skill_catalog import get_agent_skill_catalog
 from services.agent_tool_registry import list_agent_tool_contracts
 from services.backend_module_boundaries import get_backend_module_boundary_catalog
+from services.clickhouse_schema_catalog import get_clickhouse_schema_catalog
 from services.data_center_catalog import get_data_center_catalog
 from services.data_api import get_data_api_catalog
 from services.external_component_catalog import get_external_component_catalog
@@ -45,6 +46,7 @@ def get_alphatrace_architecture_index(db: Session | None = None) -> dict[str, An
     data_center = get_data_center_catalog().to_response()
     skills = get_agent_skill_catalog().to_response()
     agent_skill_bindings = get_agent_skill_binding_catalog().to_response()
+    clickhouse_schemas = get_clickhouse_schema_catalog().to_response()
 
     return {
         "version": 1,
@@ -101,6 +103,12 @@ def get_alphatrace_architecture_index(db: Session | None = None) -> dict[str, An
                 "contracts": ("/api/alpha-trace/agent-runs/runtime/data-center",),
             },
             {
+                "layerId": "clickhouse_business_analytics",
+                "displayName": "ClickHouse Business Analytics Schema Catalog",
+                "status": "planned",
+                "contracts": ("/api/alpha-trace/agent-runs/runtime/clickhouse-schema-catalog",),
+            },
+            {
                 "layerId": "agent_skills",
                 "displayName": "Agent Skill Catalog",
                 "status": "active",
@@ -151,6 +159,10 @@ def get_alphatrace_architecture_index(db: Session | None = None) -> dict[str, An
             "taskSpecs": {"total": task_specs.get("total", 0)},
             "dataApis": {"total": data_api.get("total", 0), "providerTotal": data_api.get("providerTotal", 0)},
             "dataCenter": {"total": data_center.get("total", 0), "summary": data_center.get("summary", {})},
+            "clickHouseSchemas": {
+                "total": clickhouse_schemas.get("total", 0),
+                "summary": clickhouse_schemas.get("summary", {}),
+            },
             "skills": {"total": skills.get("total", 0), "summary": skills.get("summary", {})},
             "agentSkillBindings": {
                 "total": agent_skill_bindings.get("total", 0),
@@ -189,6 +201,7 @@ def get_alphatrace_architecture_index(db: Session | None = None) -> dict[str, An
             "taskSpecs": "/api/alpha-trace/agent-runs/runtime/task-specs",
             "dataApiCatalog": "/api/alpha-trace/data-sources/api-catalog",
             "dataCenter": "/api/alpha-trace/agent-runs/runtime/data-center",
+            "clickHouseSchemas": "/api/alpha-trace/agent-runs/runtime/clickhouse-schema-catalog",
             "skills": "/api/alpha-trace/agent-runs/runtime/skills",
             "agentSkillBindings": "/api/alpha-trace/agent-runs/runtime/agent-skill-bindings",
             "adapterMatrix": "/api/alpha-trace/agent-runs/runners/adapter-matrix",

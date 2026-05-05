@@ -13,6 +13,7 @@ $endpoints = @(
     "/alpha-trace/agent-runs/runtime/external-components",
     "/alpha-trace/agent-runs/runtime/integration-decisions",
     "/alpha-trace/agent-runs/runtime/data-center",
+    "/alpha-trace/agent-runs/runtime/clickhouse-schema-catalog",
     "/alpha-trace/agent-runs/runtime/skills",
     "/alpha-trace/agent-runs/runtime/agent-skill-bindings",
     "/alpha-trace/agent-runs/runtime/readiness",

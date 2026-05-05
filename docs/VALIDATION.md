@@ -2919,3 +2919,25 @@ Expected:
 - Document describes the end-to-end Data Center -> Tool -> Skill -> Agent -> Store flow.
 - Bocha is documented as a backend tool provider.
 - MySQL and ClickHouse responsibilities are separated.
+
+### M209 ClickHouse Business Analytics Schema Catalog
+
+Required backend compile:
+
+```powershell
+python -m py_compile backend/services/clickhouse_schema_catalog.py backend/services/architecture_index.py backend/services/architecture_review_bundle.py backend/api/alpha_trace_agent_runtime_routes.py
+```
+
+Required regression:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_abstraction_endpoints.ps1 -SkipHttp
+pnpm --dir frontend build
+```
+
+Expected:
+
+- ClickHouse schema catalog lists planned analytical tables for runtime, evidence, decision, market data, and leaderboard facts.
+- Architecture review bundle includes `clickHouseSchemas`.
+- No live ClickHouse dependency is introduced.

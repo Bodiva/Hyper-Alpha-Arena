@@ -8,6 +8,7 @@ from services.architecture_index import get_alphatrace_architecture_index
 from services.agent_skill_bindings import get_agent_skill_binding_catalog
 from services.agent_skill_catalog import get_agent_skill_catalog
 from services.backend_module_boundaries import get_backend_module_boundary_catalog
+from services.clickhouse_schema_catalog import get_clickhouse_schema_catalog
 from services.data_center_catalog import get_data_center_catalog
 from services.external_component_catalog import get_external_component_catalog
 from services.integration_decision_guide import get_integration_decision_guide
@@ -29,6 +30,7 @@ def get_architecture_review_bundle(db: Session | None = None) -> dict[str, Any]:
     data_center = get_data_center_catalog().to_response()
     skills = get_agent_skill_catalog().to_response()
     agent_skill_bindings = get_agent_skill_binding_catalog().to_response()
+    clickhouse_schemas = get_clickhouse_schema_catalog().to_response()
     readiness = get_runtime_readiness_summary(db)
 
     return {
@@ -40,6 +42,7 @@ def get_architecture_review_bundle(db: Session | None = None) -> dict[str, Any]:
         "dataCenter": data_center,
         "skills": skills,
         "agentSkillBindings": agent_skill_bindings,
+        "clickHouseSchemas": clickhouse_schemas,
         "readiness": readiness,
         "summary": {
             "layers": len(architecture.get("layers", [])),
@@ -49,6 +52,7 @@ def get_architecture_review_bundle(db: Session | None = None) -> dict[str, Any]:
             "dataCenterConnectors": data_center.get("total", 0),
             "skills": skills.get("total", 0),
             "agentSkillBindings": agent_skill_bindings.get("total", 0),
+            "clickHouseTables": clickhouse_schemas.get("total", 0),
             "readiness": readiness.get("overallStatus", "unknown"),
         },
         "policies": {

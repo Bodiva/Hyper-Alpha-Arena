@@ -47,6 +47,7 @@ from services.architecture_review_bundle import get_architecture_review_bundle
 from services.agent_skill_bindings import get_agent_skill_binding_catalog
 from services.agent_skill_catalog import get_agent_skill_catalog
 from services.backend_module_boundaries import get_backend_module_boundary_catalog
+from services.clickhouse_schema_catalog import get_clickhouse_schema_catalog
 from services.data_center_catalog import get_data_center_catalog
 from services.external_component_catalog import get_external_component_catalog
 from services.integration_decision_guide import get_integration_decision_guide
@@ -437,6 +438,14 @@ def get_agent_runtime_agent_skill_bindings_endpoint():
     return {
         **get_agent_skill_binding_catalog().to_response(),
         "message": "Agent skill bindings describe default role-to-skill, role-to-tool, and role-to-output-contract mappings for the AlphaTrace multi-agent DAG.",
+    }
+
+
+@router.get("/runtime/clickhouse-schema-catalog")
+def get_agent_runtime_clickhouse_schema_catalog_endpoint():
+    return {
+        **get_clickhouse_schema_catalog().to_response(),
+        "message": "ClickHouse schema catalog describes planned structured business and analytical projections. It does not connect to ClickHouse yet.",
     }
 
 

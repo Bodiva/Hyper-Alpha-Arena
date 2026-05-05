@@ -6723,3 +6723,38 @@ Validation:
 Rollback:
 
 Remove `docs/engineering/72_data_center_tool_skill_agent_flow.md`.
+
+## M209 - ClickHouse Business Analytics Schema Catalog
+
+Status: Completed
+
+Goal:
+
+Define a read-only ClickHouse schema catalog for structured AlphaTrace business and analytical projections without introducing a live ClickHouse dependency yet.
+
+Scope:
+
+1. Add `backend/services/clickhouse_schema_catalog.py`.
+2. Add `GET /api/alpha-trace/agent-runs/runtime/clickhouse-schema-catalog`.
+3. Include ClickHouse schema catalog in architecture index and architecture review bundle.
+4. Add frontend runtime API types/helpers.
+5. Extend smoke scripts.
+6. Do not connect to ClickHouse or change MySQL/JSON runtime behavior.
+
+Acceptance:
+
+1. Catalog includes runtime events, reports, evidence refs, decisions, market facts, and leaderboard facts.
+2. Each table defines source contracts, core columns, partitioning, ordering, TTL policy, and notes.
+3. Backend py_compile, backend abstraction smoke, endpoint smoke, and frontend build pass.
+4. Architecture review bundle includes `clickHouseSchemas`.
+
+Validation:
+
+1. `python -m py_compile backend/services/clickhouse_schema_catalog.py backend/services/architecture_index.py backend/services/architecture_review_bundle.py backend/api/alpha_trace_agent_runtime_routes.py`.
+2. `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`.
+3. `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_abstraction_endpoints.ps1 -SkipHttp`.
+4. `pnpm --dir frontend build`.
+
+Rollback:
+
+Remove the ClickHouse schema catalog service, endpoint, frontend types/helper, smoke additions, and bundle/index additions.

@@ -5007,3 +5007,28 @@ Notes:
 
 Next:
 - Continue with M209: add a ClickHouse schema/catalog read model or schema design document for structured business data.
+
+## 2026-05-05 - M209 ClickHouse Business Analytics Schema Catalog
+
+Goal:
+- Add a read-only ClickHouse schema catalog for structured business and analytical AlphaTrace projections.
+
+Changes:
+- Added `backend/services/clickhouse_schema_catalog.py`.
+- Added `/api/alpha-trace/agent-runs/runtime/clickhouse-schema-catalog`.
+- Updated architecture index, architecture review bundle, frontend runtime API contracts, and smoke scripts.
+
+Validation:
+- python -m py_compile backend/services/clickhouse_schema_catalog.py backend/services/architecture_index.py backend/services/architecture_review_bundle.py backend/api/alpha_trace_agent_runtime_routes.py: passed.
+- powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1: passed. Warning only: existing RequestsDependencyWarning from local Python packages.
+- powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_abstraction_endpoints.ps1 -SkipHttp: passed, 24 endpoint definitions validated.
+- pnpm --dir frontend build: passed. Existing Vite chunk/browserslist warnings remain.
+
+Result:
+- M209 is complete. AlphaTrace now has a read-only ClickHouse schema catalog for planned structured business and analytical projections.
+
+Notes:
+- This does not connect to ClickHouse and does not change current MySQL/JSON runtime behavior.
+
+Next:
+- Continue with M210: add a reusable ClickHouse schema frontend panel and include it in Architecture Review.

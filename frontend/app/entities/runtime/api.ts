@@ -153,6 +153,34 @@ export interface AgentSkillBindingCatalogResponse {
   message?: string;
 }
 
+export interface ClickHouseColumnDescriptor {
+  name: string;
+  type: string;
+  role: string;
+  notes?: string;
+}
+
+export interface ClickHouseTableDescriptor {
+  table_name: string;
+  domain: string;
+  status: string;
+  source_contracts: string[];
+  columns: ClickHouseColumnDescriptor[];
+  partition_by: string;
+  order_by: string[];
+  ttl_policy: string;
+  notes?: string;
+}
+
+export interface ClickHouseSchemaCatalogResponse {
+  version: number;
+  tables: ClickHouseTableDescriptor[];
+  total: number;
+  summary: JsonRecord;
+  policies: Record<string, string>;
+  message?: string;
+}
+
 export interface ArchitectureReviewBundleResponse {
   version: number;
   architecture: RuntimeArchitectureIndex;
@@ -162,6 +190,7 @@ export interface ArchitectureReviewBundleResponse {
   dataCenter: DataCenterCatalogResponse;
   skills: AgentSkillCatalogResponse;
   agentSkillBindings: AgentSkillBindingCatalogResponse;
+  clickHouseSchemas: ClickHouseSchemaCatalogResponse;
   readiness: RuntimeReadinessResponse;
   summary: JsonRecord;
   policies: Record<string, string>;
@@ -372,6 +401,9 @@ export const getRuntimeIntegrationDecisionsAsync = () =>
 
 export const getRuntimeDataCenterAsync = () =>
   httpClient.get<DataCenterCatalogResponse>(ENDPOINTS.alphaTraceAgentRuntimeDataCenter);
+
+export const getRuntimeClickHouseSchemaCatalogAsync = () =>
+  httpClient.get<ClickHouseSchemaCatalogResponse>(ENDPOINTS.alphaTraceAgentRuntimeClickHouseSchemaCatalog);
 
 export const getRuntimeSkillsAsync = () =>
   httpClient.get<AgentSkillCatalogResponse>(ENDPOINTS.alphaTraceAgentRuntimeSkills);

@@ -50,6 +50,7 @@ export const ENDPOINTS = {
   alphaTraceAgentRuntimeExternalComponents: "/alpha-trace/agent-runs/runtime/external-components",
   alphaTraceAgentRuntimeIntegrationDecisions: "/alpha-trace/agent-runs/runtime/integration-decisions",
   alphaTraceAgentRuntimeDataCenter: "/alpha-trace/agent-runs/runtime/data-center",
+  alphaTraceAgentRuntimeClickHouseSchemaCatalog: "/alpha-trace/agent-runs/runtime/clickhouse-schema-catalog",
   alphaTraceAgentRuntimeSkills: "/alpha-trace/agent-runs/runtime/skills",
   alphaTraceAgentRuntimeAgentSkillBindings: "/alpha-trace/agent-runs/runtime/agent-skill-bindings",
   alphaTraceAgentRuntimeReadiness: "/alpha-trace/agent-runs/runtime/readiness",
@@ -90,6 +91,9 @@ export const ENDPOINTS = {
   alphaTraceDecisionAgentRun: (decisionId = ":decisionId") => `/alpha-trace/decisions/${decisionId}/agent-run`,
   alphaTraceDataSources: "/alpha-trace/data-sources",
   alphaTraceDataApiCatalog: "/alpha-trace/data-sources/api-catalog",
+  alphaTraceDataSourceFileImports: "/alpha-trace/data-sources/file-imports",
+  alphaTraceDataSourceLocalImportFiles: "/alpha-trace/data-sources/file-imports/local-files",
+  alphaTraceDataSourceLocalImport: "/alpha-trace/data-sources/file-imports/local-files/import",
   alphaTraceDataSourceDetail: (sourceId = ":sourceId") => `/alpha-trace/data-sources/${sourceId}`,
   alphaTraceDataSourceTasks: (sourceId = ":sourceId") => `/alpha-trace/data-sources/${sourceId}/tasks`,
 } as const;
@@ -145,6 +149,7 @@ export const ALPHA_TRACE_AGENT_RUNTIME_MODULE_BOUNDARIES = ENDPOINTS.alphaTraceA
 export const ALPHA_TRACE_AGENT_RUNTIME_EXTERNAL_COMPONENTS = ENDPOINTS.alphaTraceAgentRuntimeExternalComponents;
 export const ALPHA_TRACE_AGENT_RUNTIME_INTEGRATION_DECISIONS = ENDPOINTS.alphaTraceAgentRuntimeIntegrationDecisions;
 export const ALPHA_TRACE_AGENT_RUNTIME_DATA_CENTER = ENDPOINTS.alphaTraceAgentRuntimeDataCenter;
+export const ALPHA_TRACE_AGENT_RUNTIME_CLICKHOUSE_SCHEMA_CATALOG = ENDPOINTS.alphaTraceAgentRuntimeClickHouseSchemaCatalog;
 export const ALPHA_TRACE_AGENT_RUNTIME_SKILLS = ENDPOINTS.alphaTraceAgentRuntimeSkills;
 export const ALPHA_TRACE_AGENT_RUNTIME_AGENT_SKILL_BINDINGS = ENDPOINTS.alphaTraceAgentRuntimeAgentSkillBindings;
 export const ALPHA_TRACE_AGENT_RUNTIME_READINESS = ENDPOINTS.alphaTraceAgentRuntimeReadiness;
@@ -185,5 +190,8 @@ export const ALPHA_TRACE_DECISION_EVIDENCE = ENDPOINTS.alphaTraceDecisionEvidenc
 export const ALPHA_TRACE_DECISION_AGENT_RUN = ENDPOINTS.alphaTraceDecisionAgentRun;
 export const ALPHA_TRACE_DATA_SOURCES = ENDPOINTS.alphaTraceDataSources;
 export const ALPHA_TRACE_DATA_API_CATALOG = ENDPOINTS.alphaTraceDataApiCatalog;
+export const ALPHA_TRACE_DATA_SOURCE_FILE_IMPORTS = ENDPOINTS.alphaTraceDataSourceFileImports;
+export const ALPHA_TRACE_DATA_SOURCE_LOCAL_IMPORT_FILES = ENDPOINTS.alphaTraceDataSourceLocalImportFiles;
+export const ALPHA_TRACE_DATA_SOURCE_LOCAL_IMPORT = ENDPOINTS.alphaTraceDataSourceLocalImport;
 export const ALPHA_TRACE_DATA_SOURCE_DETAIL = ENDPOINTS.alphaTraceDataSourceDetail;
 export const ALPHA_TRACE_DATA_SOURCE_TASKS = ENDPOINTS.alphaTraceDataSourceTasks;
