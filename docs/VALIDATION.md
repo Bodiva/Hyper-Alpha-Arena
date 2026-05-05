@@ -2098,3 +2098,16 @@ python -m py_compile backend/services/agent_artifacts/base.py backend/services/a
 Required local smoke:
 
 - Save/get/list a `web_url` artifact in `MemoryAgentArtifactStore`.
+
+### M158 Evidence URL to AgentArtifact Mapper
+
+Required backend compile:
+
+```powershell
+python -m py_compile backend/services/agent_artifacts/evidence_mapper.py backend/services/agent_artifacts/__init__.py
+```
+
+Required local smoke:
+
+- Map an evidence reference with `https://` URL to `web_url` artifact.
+- Verify placeholder URL does not create an artifact.

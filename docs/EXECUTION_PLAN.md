@@ -5213,3 +5213,33 @@ Validation:
 Rollback:
 
 Remove artifact store files and endpoint. Current reports/evidence/decision behavior remains unaffected.
+
+## M158 - Evidence URL to AgentArtifact Mapper
+
+Status: Completed
+
+Goal:
+
+Map evidence items with canonical source URLs into product-owned `web_url` AgentArtifacts for future preview/detail UI.
+
+Scope:
+
+1. Add `evidence_to_web_artifact`.
+2. Add `evidence_list_to_web_artifacts` with de-duplication.
+3. Do not fetch or embed external pages in backend.
+4. Treat source URL as canonical; iframe/web preview remains best-effort frontend behavior.
+
+Acceptance:
+
+1. Backend py_compile passes.
+2. Local smoke maps an `EvidenceReference` with https URL into a `web_url` artifact.
+3. Missing or placeholder URLs do not create artifacts.
+
+Validation:
+
+1. `python -m py_compile backend/services/agent_artifacts/evidence_mapper.py backend/services/agent_artifacts/__init__.py`.
+2. Local Python smoke for evidence URL artifact mapping.
+
+Rollback:
+
+Remove evidence mapper exports. Artifact store remains unaffected.

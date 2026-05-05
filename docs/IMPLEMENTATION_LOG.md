@@ -3951,3 +3951,23 @@ Notes:
 
 Next:
 - M158 should add a lightweight Artifact mapping design for Bocha URL previews and LangAlpha external files, then decide whether Evidence detail should create web_url artifacts.
+
+## 2026-05-05 - M158 Evidence URL to AgentArtifact Mapper
+
+Goal:
+- Map evidence items with canonical source URLs into product-owned `web_url` AgentArtifacts for future preview/detail UI.
+
+Changes:
+- Added `backend/services/agent_artifacts/evidence_mapper.py`.
+- Updated artifact package exports.
+
+Validation:
+- `python -m py_compile backend/services/agent_artifacts/evidence_mapper.py backend/services/agent_artifacts/__init__.py`: passed.
+- Local smoke mapped `ev_bocha_test` with `https://example.com/a` into `art_run_test_ev_bocha_test_web` and ignored placeholder URL `#`.
+
+Notes:
+- The mapper is pure and does not fetch external pages.
+- Source URL remains canonical; embedded preview is a best-effort frontend concern.
+
+Next:
+- M159 should decide whether run evidence persistence should optionally create web_url artifacts behind a feature flag.
