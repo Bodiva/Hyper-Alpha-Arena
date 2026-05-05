@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import deque
+from dataclasses import asdict
 import json
 import os
 from pathlib import Path
@@ -40,9 +41,11 @@ from services.alpha_trace_agent_runtime_service import (
 )
 from services.agent_orchestrator.execution_policy import get_runner_execution_policy
 from services.agent_orchestrator.capability_matrix import get_runner_capability, list_runner_capabilities, resolve_recommended_runner
+from services.agent_orchestrator.native_plan import build_alphatrace_native_plan
 from services.agent_orchestrator.subprocess_orchestrator import get_subprocess_worker_registry_snapshot
 from services.agent_runners.registry import AgentRunnerConfigurationError, AgentRunnerExecutionError, AgentRunnerNotImplementedError
 from services.agent_runtime_store.registry import get_agent_run_store
+from services.agent_tool_registry import list_agent_tool_contracts
 from services.system_config_store import get_mysql_system_config_store
 
 router = APIRouter(prefix="/api/alpha-trace/agent-runs", tags=["AlphaTrace Agent Runtime"])
@@ -318,6 +321,23 @@ def get_agent_runner_capabilities_endpoint(
         "capabilities": [item.to_dict() for item in list_runner_capabilities()],
         "recommendation": resolve_recommended_runner(taskType, requestedRunnerType),
         "message": "Runner capabilities are advisory diagnostics. Submit requests still use the explicit runnerConfig.runnerType and never silently fallback.",
+    }
+
+
+@router.get("/runners/plans/alphatrace-native")
+def get_alphatrace_native_plan_endpoint(taskType: Optional[str] = Query("single_asset_analysis")):
+    plan = build_alphatrace_native_plan(task_type=taskType or "single_asset_analysis")
+    return {
+        "plan": asdict(plan),
+        "message": "AlphaTrace Native orchestration plan is a logical product DAG. It describes expected steps and dependencies, not a live execution snapshot.",
+    }
+
+
+@router.get("/runtime/tools")
+def get_agent_runtime_tool_contracts_endpoint():
+    return {
+        "tools": [item.to_payload() for item in list_agent_tool_contracts()],
+        "message": "Tool contracts describe backend actions that may appear in AgentRuntimeEvent tool.called/tool.result payloads.",
     }
 
 

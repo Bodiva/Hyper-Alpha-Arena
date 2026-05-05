@@ -409,3 +409,33 @@ For code changes:
 3. API changes: curl/TestClient smoke.
 4. Runtime changes: stub + qwen/native/tradingagents-disabled regression as applicable.
 5. Record results in `docs/IMPLEMENTATION_LOG.md`.
+
+## 16. Refactor Abstraction Layer Baseline
+
+M117-M126 introduced an explicit integration and orchestration boundary for future open-source and commercial components.
+
+New additive backend interface locations:
+
+| Path | Purpose |
+|---|---|
+| `backend/services/integration_adapters/base.py` | Protocols/dataclasses for data providers, model providers, tool adapters, and external workbench adapters. |
+| `backend/services/async_tasks/base.py` | Execution-neutral task spec/status/scheduler protocol for in-process, subprocess, and future durable workers. |
+| `backend/services/agent_orchestrator/base.py` | Product-level orchestration plan/step/snapshot vocabulary. |
+
+Design documents:
+
+| Document | Purpose |
+|---|---|
+| `docs/engineering/60_backend_boundary_audit.md` | AlphaTrace Core vs Legacy vs Integration vs PoC Runner boundary. |
+| `docs/engineering/61_integration_abstraction_layer.md` | Data/model/tool/workbench/async task abstraction plan. |
+| `docs/engineering/62_tradingagents_langalpha_component_strategy.md` | TradingAgents and LangAlpha component selection strategy. |
+| `docs/engineering/63_orchestration_boundary_model.md` | Native, LangGraph, TradingAgents, LangAlpha orchestration mapping. |
+| `docs/engineering/64_async_task_scheduler_design.md` | Future task manager and MySQL task table design. |
+| `docs/engineering/65_data_api_management_layer.md` | Data provider governance and tool boundary rules. |
+| `docs/engineering/66_langalpha_external_adapter_design.md` | LangAlpha external service adapter boundary. |
+
+Architectural rule:
+
+1. New providers and open-source agent systems must enter through these interfaces or a deliberate adapter wrapper.
+2. `qwen_runner.py` remains the stable implementation for now but should be decomposed behind these contracts in small, tested slices.
+3. No external framework owns AlphaTrace frontend schema, MySQL product persistence, or evidence/decision contracts.

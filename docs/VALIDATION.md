@@ -1712,3 +1712,148 @@ git status --short
 - Run runtime smoke helper.
 - Run route smoke helper.
 - Capture `git status --short`.
+
+## Validation Rules for M117-M126
+
+### M117 Backend Architecture Boundary Audit
+
+- Documentation-only unless code changes.
+- Confirm `docs/engineering/60_backend_boundary_audit.md` exists.
+- Confirm legacy modules are explicitly marked non-core.
+
+### M118 Integration Abstraction Layer Design
+
+- Confirm `docs/engineering/61_integration_abstraction_layer.md` exists.
+- If skeleton files are added, run:
+
+```powershell
+python -m py_compile backend/services/integration_adapters/base.py backend/services/async_tasks/base.py backend/services/agent_orchestrator/base.py
+```
+
+### M119 Orchestration / LangGraph / TradingAgents / LangAlpha Boundary Model
+
+- Documentation review.
+- If orchestration code changes, run py_compile for changed files.
+- Confirm frontend contract remains AlphaTrace `AgentRun` / `AgentRuntimeEvent` / `AgentReport` / `EvidenceReference` / `AgentDecision`.
+
+### M120 Async Task Manager and Scheduler Design Pass
+
+- Documentation review.
+- If task scheduler code changes, run py_compile for changed files.
+- Do not introduce Celery/Redis/Docker changes unless a later milestone explicitly requires it.
+
+### M121 Data API Management Layer Design
+
+- Documentation review.
+- If data source/evidence/market API code changes, run related py_compile and API smoke.
+- Confirm no API keys are exposed in frontend or logs.
+
+### M122 LangAlpha Reusable Module Inventory Refresh
+
+- Documentation review.
+- Use local git objects or upstream docs if the LangAlpha worktree is dirty/missing files.
+- Do not copy or import LangAlpha code.
+
+### M123 LangAlpha External Adapter Design
+
+- Documentation review.
+- If `langalpha_adapter.py` changes, run:
+
+```powershell
+python -m py_compile backend/services/agent_runners/langalpha_adapter.py
+```
+
+### M124 TradingAgents Component Selection Plan
+
+- Documentation review.
+- Confirm TradingAgents remains opt-in PoC and no source code is copied.
+
+### M125 Initial Abstraction Skeleton
+
+Run:
+
+```powershell
+python -m py_compile backend/services/integration_adapters/base.py backend/services/integration_adapters/__init__.py backend/services/async_tasks/base.py backend/services/async_tasks/__init__.py backend/services/agent_orchestrator/base.py
+```
+
+No frontend build is required unless frontend code changes.
+
+### M126 Architecture Review and Next Refactor Queue
+
+- Run M125 py_compile command.
+- Run `git status --short`.
+- Update `docs/IMPLEMENTATION_LOG.md` with completed milestones, assumptions, validation, and next refactor queue.
+
+### M127 Runtime Tool Catalog Endpoint
+
+- Run:
+
+```powershell
+python -m py_compile backend/api/alpha_trace_agent_runtime_routes.py backend/services/agent_tool_registry.py
+```
+
+- After backend reload/restart, smoke:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/agent-runs/runtime/tools
+```
+
+- Confirm no secret material is present.
+
+### M128 Bocha DataProviderAdapter Wrapper
+
+Run:
+
+```powershell
+python -m py_compile backend/services/integration_adapters/bocha_adapter.py backend/services/integration_adapters/__init__.py
+```
+
+No runtime smoke is required until a later milestone rewires EvidenceRetriever through the adapter.
+
+### M129 Static Market Data ProviderAdapter Wrapper
+
+Run:
+
+```powershell
+python -m py_compile backend/services/integration_adapters/market_data_adapter.py backend/services/integration_adapters/__init__.py
+```
+
+### M130 Qwen ModelProviderAdapter Boundary
+
+Run:
+
+```powershell
+python -m py_compile backend/services/integration_adapters/qwen_model_adapter.py backend/services/integration_adapters/__init__.py
+```
+
+No model-call smoke is required until this adapter is wired into a runner.
+
+### M131 AlphaTrace Native OrchestrationPlan Builder
+
+Run:
+
+```powershell
+python -m py_compile backend/services/agent_orchestrator/native_plan.py backend/services/agent_orchestrator/base.py
+```
+
+### M132 Native OrchestrationPlan Diagnostics Endpoint
+
+Run:
+
+```powershell
+python -m py_compile backend/api/alpha_trace_agent_runtime_routes.py backend/services/agent_orchestrator/native_plan.py
+```
+
+After backend reload/restart, smoke:
+
+```powershell
+Invoke-RestMethod "http://127.0.0.1:8805/api/alpha-trace/agent-runs/runners/plans/alphatrace-native?taskType=single_asset_analysis"
+```
+
+### M133 AgentArtifact Contract Skeleton
+
+Run:
+
+```powershell
+python -m py_compile backend/services/agent_artifacts/base.py backend/services/agent_artifacts/__init__.py
+```

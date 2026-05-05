@@ -3351,3 +3351,201 @@ Notes:
 Next:
 - When safe, restart/reload backend, submit one `runnerType=alphatrace_native` smoke run, and verify Risk Review report plus three `riskPerspective` events.
 - If current long-running runs remain stale, decide whether to cancel them before continuing runtime-heavy validation.
+
+## 2026-05-05 - M117-M125 Backend Abstraction Baseline
+
+Goal:
+- Start the 4-hour backend refactor track for future open-source component integration without destabilizing current runtime flows.
+- Make AlphaTrace Core / Integration / PoC Runner / Legacy boundaries explicit.
+- Add minimal abstraction skeletons for data/model/tool/workbench integrations, async tasks, and orchestration plans.
+
+Assumptions:
+- Existing unrelated frontend/settings/asset changes are out of scope for this architecture batch and remain uncommitted.
+- LangAlpha local worktree currently shows many deleted files, so deeper LangAlpha inspection should use git objects (`origin/main`) or upstream docs until the checkout is repaired.
+- TradingAgents and LangAlpha remain optional adapters/reference systems; AlphaTrace Native remains the product runner path.
+- Runtime wiring is intentionally unchanged in this batch to avoid interrupting active AgentRun work.
+
+Changes:
+- Added `docs/engineering/60_backend_boundary_audit.md`.
+- Added `docs/engineering/61_integration_abstraction_layer.md`.
+- Added `docs/engineering/62_tradingagents_langalpha_component_strategy.md`.
+- Added `backend/services/integration_adapters/base.py` and package exports.
+- Added `backend/services/async_tasks/base.py` and package exports.
+- Added `backend/services/agent_orchestrator/base.py`.
+- Updated `docs/EXECUTION_PLAN.md` with M117-M126.
+- Updated `docs/VALIDATION.md` with M117-M126 validation rules.
+
+Current decisions:
+- Data APIs, model providers, backend tools, external workbenches, runner adapters, and async task schedulers must have separate boundaries.
+- TradingAgents is best treated as a runner/subprocess/LangGraph benchmark path.
+- LangAlpha is best treated as an external workbench adapter or architecture reference, not an in-process runner.
+- Native AlphaTrace orchestration should eventually be extracted out of `qwen_runner.py` into a dedicated orchestrator using the new `OrchestrationPlan` vocabulary.
+
+Validation:
+- Pending py_compile for newly added abstraction skeletons.
+
+Next:
+- Complete M126 by running py_compile and recording git status.
+- Continue with M119/M120/M121 implementation detail if validation passes: orchestration boundary model, async task manager design, and data API management design.
+
+## 2026-05-05 - M126 Architecture Review and Next Refactor Queue
+
+Goal:
+- Close the first architecture-refactor batch and make the next implementation queue explicit.
+
+Validation:
+- `python -m py_compile backend/services/integration_adapters/base.py backend/services/integration_adapters/__init__.py backend/services/async_tasks/base.py backend/services/async_tasks/__init__.py backend/services/agent_orchestrator/base.py`: passed.
+- `git status --short`: captured. Existing unrelated frontend/settings/asset changes remain dirty and are not part of this architecture batch.
+
+Completed in M117-M126:
+- Backend boundary audit.
+- Integration abstraction design.
+- Orchestration boundary model.
+- Async task manager design.
+- Data API management design.
+- LangAlpha external adapter design.
+- TradingAgents/LangAlpha component selection strategy.
+- Additive Python skeletons for integration adapters, async task scheduler contracts, and orchestration plans.
+
+Next refactor queue:
+1. M127 Tool Adapter Catalog: centralize real backend tool contracts and metadata.
+2. M128 Bocha/DataProvider adapter wrapper: adapt existing `ExternalEvidenceSearch` to `DataProviderAdapter` without changing runner behavior.
+3. M129 MarketData provider adapter wrapper: adapt static market data to provider/tool contracts.
+4. M130 ModelProvider adapter extraction plan for Qwen: separate model invocation from runner orchestration in a small tested slice.
+5. M131 Native OrchestrationPlan builder: make Native DAG plan explicit before moving execution out of `qwen_runner.py`.
+6. M132 AsyncTask status persistence PoC: design or implement minimal MySQL task snapshot only if safe.
+7. M133 AgentArtifact contract design: prepare for LangAlpha-style tables/charts/files/web previews.
+8. M134 Batch validation and commit grouping.
+
+## 2026-05-05 - M127 Runtime Tool Catalog Endpoint
+
+Goal:
+- Provide a backend source of truth for tool-call contracts used by AgentRunDetail diagnostics.
+
+Changes:
+- Updated `backend/api/alpha_trace_agent_runtime_routes.py`.
+- Added `GET /api/alpha-trace/agent-runs/runtime/tools` returning contracts from existing `services.agent_tool_registry`.
+
+Validation:
+- Pending py_compile.
+- Runtime smoke is pending backend reload/restart because the running Docker app may not yet include the new route.
+
+Notes:
+- No runner behavior changed.
+- No secrets are returned; the endpoint exposes metadata only.
+
+Next:
+- Run py_compile and continue with M128 Bocha/DataProvider adapter wrapper.
+
+## 2026-05-05 - M128 Bocha DataProviderAdapter Wrapper
+
+Goal:
+- Wrap Bocha search as a first-class data provider adapter without changing current evidence retrieval behavior.
+
+Changes:
+- Added `backend/services/integration_adapters/bocha_adapter.py`.
+- Exported `BochaDataProviderAdapter` from `backend/services/integration_adapters/__init__.py`.
+
+Validation:
+- Pending py_compile.
+
+Notes:
+- Existing Qwen/Native EvidenceRetriever still calls `ExternalEvidenceSearch` directly. This avoids behavior changes while providing the migration target.
+
+## 2026-05-05 - M129 Static Market Data ProviderAdapter Wrapper
+
+Goal:
+- Wrap AlphaTrace static market data as a provider adapter so professional data APIs can later replace the same interface.
+
+Changes:
+- Added `backend/services/integration_adapters/market_data_adapter.py`.
+- Exported `StaticMarketDataProviderAdapter`.
+
+Validation:
+- Pending py_compile.
+
+Notes:
+- Existing APIs and runner market context loading are unchanged.
+
+## 2026-05-05 - M130 Qwen ModelProviderAdapter Boundary
+
+Goal:
+- Create an additive Qwen/DashScope model provider boundary for future extraction from `qwen_runner.py`.
+
+Changes:
+- Added `backend/services/integration_adapters/qwen_model_adapter.py`.
+- Exported `QwenModelProviderAdapter`.
+
+Validation:
+- Pending py_compile.
+
+Notes:
+- Current QwenRunner model-call and streaming behavior is unchanged.
+
+## 2026-05-05 - M131 AlphaTrace Native OrchestrationPlan Builder
+
+Goal:
+- Make the Native DAG explicit as data before moving execution logic out of `qwen_runner.py`.
+
+Changes:
+- Added `backend/services/agent_orchestrator/native_plan.py`.
+
+Validation:
+- Pending py_compile.
+
+Notes:
+- Runtime execution remains unchanged.
+
+## 2026-05-05 - M132 Native OrchestrationPlan Diagnostics Endpoint
+
+Goal:
+- Let frontend/diagnostics retrieve the Native logical DAG from backend instead of relying only on hardcoded UI mapping.
+
+Changes:
+- Updated `backend/api/alpha_trace_agent_runtime_routes.py`.
+- Added `GET /api/alpha-trace/agent-runs/runners/plans/alphatrace-native`.
+
+Validation:
+- Pending py_compile.
+- Runtime smoke is pending backend reload/restart because running Docker app may not yet include the new route.
+
+Notes:
+- The endpoint returns expected plan/dependencies, not live run progress.
+
+## 2026-05-05 - M133 AgentArtifact Contract Skeleton
+
+Goal:
+- Prepare for LangAlpha-style files/tables/charts/web previews through a product-facing artifact contract.
+
+Changes:
+- Added `backend/services/agent_artifacts/base.py`.
+- Added `backend/services/agent_artifacts/__init__.py`.
+- Added `docs/engineering/67_agent_artifact_contract.md`.
+
+Validation:
+- Pending py_compile.
+
+## 2026-05-05 - M134 Architecture Refactor Batch Validation
+
+Goal:
+- Validate M117-M133 additive architecture/refactor baseline and prepare a reviewable save point.
+
+Validation:
+- `python -m py_compile backend/api/alpha_trace_agent_runtime_routes.py backend/services/agent_tool_registry.py backend/services/integration_adapters/base.py backend/services/integration_adapters/__init__.py backend/services/integration_adapters/bocha_adapter.py backend/services/integration_adapters/market_data_adapter.py backend/services/integration_adapters/qwen_model_adapter.py backend/services/async_tasks/base.py backend/services/async_tasks/__init__.py backend/services/agent_orchestrator/base.py backend/services/agent_orchestrator/native_plan.py backend/services/agent_artifacts/base.py backend/services/agent_artifacts/__init__.py`: passed.
+- `git diff --check` for the M117-M133 scoped files: passed; only existing CRLF normalization warnings for canonical docs.
+- Frontend build not run because this batch did not modify frontend code.
+- Runtime endpoint smoke for new routes is pending backend reload/restart; current running Docker app may not include these source changes yet.
+
+Current save-point scope:
+- Backend route addition: runtime tool contracts endpoint and native plan endpoint.
+- Additive backend abstraction skeletons: integration adapters, async tasks, orchestrator plan, artifacts.
+- Architecture/design docs M117-M133.
+
+Unrelated dirty files intentionally excluded:
+- Existing Settings/layout/asset frontend changes.
+- `backend/api/config_routes.py` existing change.
+- `frontend/app/shared/ui/LanguageToggle.tsx` and `ResearchAssetChart.tsx` existing untracked UI work.
+
+Next:
+- Commit only the M117-M134 scoped files.
+- Continue with M135: begin a small runtime-safe migration by making provider/tool metadata queryable from status diagnostics, or M136: extract market/evidence tool execution helpers from `qwen_runner.py` without changing outputs.

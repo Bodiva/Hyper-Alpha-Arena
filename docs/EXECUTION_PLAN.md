@@ -4208,3 +4208,423 @@ Validation:
 1. `git status --short`.
 2. Runtime smoke helper.
 3. Route smoke helper.
+
+## M117 - Backend Architecture Boundary Audit
+
+Status: Completed
+
+Goal:
+
+Make AlphaTrace Core / Integration / PoC Runner / Legacy / Shared Infrastructure boundaries explicit before larger backend refactors.
+
+Scope:
+
+1. Classify current API, service, runtime, store, integration, and legacy modules.
+2. Identify refactor pain points and non-goals.
+3. Do not move runtime code in this milestone.
+
+Acceptance:
+
+1. Boundary document exists and can guide future implementation.
+2. Legacy BTC/Hyperliquid/Binance modules are clearly not AlphaTrace core.
+3. TradingAgents/LangAlpha remain adapter/reference paths.
+
+Validation:
+
+1. Documentation review.
+2. No business runtime code changed.
+
+## M118 - Integration Abstraction Layer Design
+
+Status: Completed
+
+Goal:
+
+Define common contracts for data providers, model providers, tool adapters, external workbenches, and async task execution.
+
+Scope:
+
+1. Add design documentation.
+2. Add additive interface skeletons only.
+3. Do not rewire Bocha/Qwen/TradingAgents yet.
+
+Acceptance:
+
+1. Future components know which interface to implement.
+2. Provider-specific details remain behind AlphaTrace contracts.
+3. Code skeleton py_compile passes.
+
+Validation:
+
+1. `python -m py_compile backend/services/integration_adapters/base.py backend/services/async_tasks/base.py backend/services/agent_orchestrator/base.py`.
+
+## M119 - Orchestration / LangGraph / TradingAgents / LangAlpha Boundary Model
+
+Status: Completed
+
+Goal:
+
+Define how AlphaTrace Native, TradingAgents LangGraph, and LangAlpha external workbench orchestration compare and map into AgentRun events.
+
+Scope:
+
+1. Use `OrchestrationPlan` / `OrchestrationStep` as AlphaTrace-native logical DAG contract.
+2. Do not expose TradingAgents or LangAlpha internal state to the frontend.
+3. Identify future mapper work.
+
+Acceptance:
+
+1. Native DAG, TradingAgents graph, and LangAlpha subagent/workspace flows can be compared through one vocabulary.
+
+Validation:
+
+1. Documentation review.
+2. py_compile if any orchestration code changes.
+
+## M120 - Async Task Manager and Scheduler Design Pass
+
+Status: Completed
+
+Goal:
+
+Move from ad hoc background threads/subprocesses toward a single task status vocabulary and future durable worker boundary.
+
+Scope:
+
+1. Define task status machine, cancellation, timeout, retry, and error reason model.
+2. Keep current in-process/subprocess implementation unchanged unless small diagnostics are needed.
+3. MySQL durable task table remains design unless explicitly implemented later.
+
+Acceptance:
+
+1. Future worker implementation has a concrete contract and migration path.
+
+Validation:
+
+1. Documentation review.
+2. py_compile if code changes.
+
+## M121 - Data API Management Layer Design
+
+Status: Completed
+
+Goal:
+
+Define how AlphaTrace will manage Bocha, static seeds, future professional data APIs, market data, file/doc corpus, and MCP-like tools.
+
+Scope:
+
+1. Align DataSource catalog, EvidenceRetriever, MarketDataStore, and Bocha integration.
+2. Define provider health, auth mode, timeout, retry, evidence/artifact mapping.
+3. Do not connect new external providers.
+
+Acceptance:
+
+1. Future ETF/fund/index/professional data providers have a clear adapter contract.
+
+Validation:
+
+1. Documentation review.
+2. API smoke if data source endpoints change.
+
+## M122 - LangAlpha Reusable Module Inventory Refresh
+
+Status: Completed
+
+Goal:
+
+Capture which LangAlpha modules/patterns should be referenced, reimplemented, adapted externally, or ignored.
+
+Scope:
+
+1. Use local git objects / GitHub README because local LangAlpha worktree is not clean.
+2. Do not copy LangAlpha code.
+3. Do not run LangAlpha service.
+
+Acceptance:
+
+1. LangAlpha useful modules are represented in the component strategy document.
+2. Adapter boundary remains external-service-first.
+
+Validation:
+
+1. Documentation review.
+
+## M123 - LangAlpha External Adapter Design
+
+Status: Completed
+
+Goal:
+
+Turn LangAlpha from architecture reference into a future external service adapter plan.
+
+Scope:
+
+1. Define AlphaTrace submit -> LangAlpha workspace/thread/task -> LangAlpha events/artifacts -> AlphaTrace schema mapping.
+2. Keep runnerType=langalpha disabled.
+3. Do not import or execute LangAlpha.
+
+Acceptance:
+
+1. Future implementation can be scoped without destabilizing AlphaTrace backend.
+
+Validation:
+
+1. Documentation review.
+2. py_compile if `langalpha_adapter.py` changes.
+
+## M124 - TradingAgents Component Selection Plan
+
+Status: Completed
+
+Goal:
+
+Decide which TradingAgents pieces to learn from or map, instead of treating the whole project as the product backend.
+
+Scope:
+
+1. Identify DAG/debate/risk/portfolio manager/checkpoint/tool boundaries.
+2. Keep TradingAgents PoC opt-in.
+3. Do not copy TradingAgents source.
+
+Acceptance:
+
+1. Component selection strategy document exists.
+
+Validation:
+
+1. Documentation review.
+
+## M125 - Initial Abstraction Skeleton
+
+Status: Completed
+
+Goal:
+
+Add minimal additive Python protocol/dataclass skeletons for integration adapters, async tasks, and orchestrator plans.
+
+Scope:
+
+1. Add `integration_adapters` protocols.
+2. Add `async_tasks` protocols.
+3. Add `agent_orchestrator.base` plan/step protocols.
+4. Do not change runtime wiring.
+
+Acceptance:
+
+1. Skeleton compiles and does not affect current runtime behavior.
+
+Validation:
+
+1. `python -m py_compile backend/services/integration_adapters/base.py backend/services/integration_adapters/__init__.py backend/services/async_tasks/base.py backend/services/async_tasks/__init__.py backend/services/agent_orchestrator/base.py`.
+
+## M126 - Architecture Review and Next Refactor Queue
+
+Status: Completed
+
+Goal:
+
+Close the first architecture-refactor batch and choose the next implementation slice without relying on chat memory.
+
+Scope:
+
+1. Update architecture docs/logs.
+2. Run compile validation for new abstraction files.
+3. Capture next steps for Qwen extraction, Bocha adapter conversion, Native orchestrator extraction, and async task persistence.
+
+Acceptance:
+
+1. Current abstraction layer is reviewable and next refactor queue is explicit.
+
+Validation:
+
+1. py_compile for new backend abstraction files.
+2. `git status --short`.
+
+
+
+
+## M127 - Runtime Tool Catalog Endpoint
+
+Status: Completed
+
+Goal:
+
+Expose backend tool contracts through AlphaTrace API so UI/diagnostics can identify actual backend tools without hardcoding every contract in frontend code.
+
+Scope:
+
+1. Reuse existing `agent_tool_registry.py`.
+2. Add read-only `/api/alpha-trace/agent-runs/runtime/tools` endpoint.
+3. Do not change runner execution or tool invocation behavior.
+
+Acceptance:
+
+1. Tool contracts list includes evidence, Bocha, market context, portfolio context, and Qwen model-call boundaries.
+2. Endpoint does not expose secrets.
+
+Validation:
+
+1. `python -m py_compile backend/api/alpha_trace_agent_runtime_routes.py backend/services/agent_tool_registry.py`.
+2. Runtime API smoke after backend reload/restart window.
+
+## M128 - Bocha DataProviderAdapter Wrapper
+
+Status: Completed
+
+Goal:
+
+Represent Bocha Web Search behind the new `DataProviderAdapter` abstraction while preserving existing EvidenceRetriever behavior.
+
+Scope:
+
+1. Add adapter wrapper around existing `ExternalEvidenceSearch`.
+2. Provide capability, health, and query methods.
+3. Do not rewire Qwen/Native runner yet.
+
+Acceptance:
+
+1. Adapter compiles and can be imported.
+2. Existing Bocha/EvidenceRetriever behavior remains unchanged.
+
+Validation:
+
+1. `python -m py_compile backend/services/integration_adapters/bocha_adapter.py backend/services/integration_adapters/__init__.py`.
+
+## M129 - Static Market Data ProviderAdapter Wrapper
+
+Status: Completed
+
+Goal:
+
+Represent AlphaTrace static ETF/fund/index/future market data behind the new `DataProviderAdapter` abstraction.
+
+Scope:
+
+1. Add adapter wrapper around existing `StaticAlphaTraceMarketDataStore`.
+2. Support market context, quote, snapshot, indicators, and klines query shapes.
+3. Do not rewire existing market data APIs or runner context loading yet.
+
+Acceptance:
+
+1. Adapter compiles and can be imported.
+2. Existing market data behavior remains unchanged.
+
+Validation:
+
+1. `python -m py_compile backend/services/integration_adapters/market_data_adapter.py backend/services/integration_adapters/__init__.py`.
+
+## M130 - Qwen ModelProviderAdapter Boundary
+
+Status: Completed
+
+Goal:
+
+Add a Qwen/DashScope model provider adapter boundary so model invocation can later be extracted from runner orchestration.
+
+Scope:
+
+1. Add additive `QwenModelProviderAdapter`.
+2. Support health and non-streaming invoke shape.
+3. Keep current QwenRunner streaming path unchanged.
+
+Acceptance:
+
+1. Adapter compiles and can be imported.
+2. Existing QwenRunner behavior remains unchanged.
+
+Validation:
+
+1. `python -m py_compile backend/services/integration_adapters/qwen_model_adapter.py backend/services/integration_adapters/__init__.py`.
+
+## M131 - AlphaTrace Native OrchestrationPlan Builder
+
+Status: Completed
+
+Goal:
+
+Make the Native DAG explicit through an `OrchestrationPlan` builder before extracting execution from QwenRunner.
+
+Scope:
+
+1. Add plan builder for single asset and portfolio diagnosis logical flows.
+2. Do not change runtime execution.
+3. Keep frontend schema unchanged.
+
+Acceptance:
+
+1. Plan builder compiles and describes Evidence Retrieval -> Market/Portfolio Overview -> Bull/Bear -> Research Manager -> Risk Review -> Final Decision.
+
+Validation:
+
+1. `python -m py_compile backend/services/agent_orchestrator/native_plan.py backend/services/agent_orchestrator/base.py`.
+
+## M132 - Native OrchestrationPlan Diagnostics Endpoint
+
+Status: Completed
+
+Goal:
+
+Expose the AlphaTrace Native logical DAG through a read-only API endpoint for future Agent Flow UI and validation tooling.
+
+Scope:
+
+1. Add `GET /api/alpha-trace/agent-runs/runners/plans/alphatrace-native`.
+2. Return `OrchestrationPlan` as dataclass payload.
+3. Do not change live runner execution.
+
+Acceptance:
+
+1. Endpoint can describe single asset and portfolio diagnosis native plans.
+2. The response clearly states it is a logical plan, not a live snapshot.
+
+Validation:
+
+1. `python -m py_compile backend/api/alpha_trace_agent_runtime_routes.py backend/services/agent_orchestrator/native_plan.py`.
+2. Runtime API smoke after backend reload/restart window.
+
+## M133 - AgentArtifact Contract Skeleton
+
+Status: Completed
+
+Goal:
+
+Define the product-facing artifact object needed for future LangAlpha, PTC, chart/table/file, and web-preview integrations.
+
+Scope:
+
+1. Add additive dataclass/protocol skeleton.
+2. Add design documentation.
+3. Do not add store/API yet.
+
+Acceptance:
+
+1. Artifact contract compiles and explains how future tool outputs are separated from reports.
+
+Validation:
+
+1. `python -m py_compile backend/services/agent_artifacts/base.py backend/services/agent_artifacts/__init__.py`.
+
+## M134 - Architecture Refactor Batch Validation and Save Point
+
+Status: Completed
+
+Goal:
+
+Validate M117-M133 and create a scoped save point before deeper runtime refactors.
+
+Scope:
+
+1. Run backend py_compile for changed architecture files.
+2. Run diff hygiene checks.
+3. Do not include unrelated frontend/settings work.
+
+Acceptance:
+
+1. M117-M133 files compile.
+2. Next refactor queue is explicit.
+
+Validation:
+
+1. py_compile passed for scoped backend files.
+2. `git diff --check` passed with only CRLF normalization warnings.
