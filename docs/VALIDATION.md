@@ -3388,3 +3388,17 @@ Expected:
 
 - Architecture diagnostics link to public Tool/Skill Catalog APIs.
 - Runtime diagnostic links remain available.
+
+## M230 Validation - Backend Abstraction Batch Closure
+
+Required checks:
+
+```powershell
+git status --short
+git log --oneline -10
+```
+
+Expected:
+
+- M223-M229 commits are present on the working branch.
+- Remaining dirty files are classified and not accidentally mixed with backend abstraction commits.

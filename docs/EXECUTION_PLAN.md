@@ -7415,3 +7415,33 @@ Validation:
 Rollback:
 
 Revert the `architecture_index.py` link/contract additions.
+
+## M230 - Backend Abstraction Batch Closure
+
+Status: Completed
+
+Goal:
+
+Close the M223-M229 backend abstraction batch with a clear review point before moving into frontend route/UI cleanup or deeper Native runner extraction.
+
+Scope:
+
+1. Record the completed commits and validation coverage.
+2. Record remaining dirty worktree items separately from committed backend abstraction work.
+3. Identify next recommended milestones.
+4. Do not commit unrelated Strategy Radar / Agent Lab frontend changes in this closure.
+
+Acceptance:
+
+1. Implementation log lists M223-M229 completed work.
+2. Dirty worktree is classified as separate frontend/UI work.
+3. Next milestones are explicit and scoped.
+
+Validation:
+
+1. `git status --short`
+2. `git log --oneline -10`
+
+Rollback:
+
+Revert only the M230 documentation entries.

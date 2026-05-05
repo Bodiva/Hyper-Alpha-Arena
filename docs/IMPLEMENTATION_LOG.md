@@ -5557,3 +5557,37 @@ Validation:
 
 Result:
 - M229 is complete.
+
+## 2026-05-05 - M230 Backend Abstraction Batch Closure
+
+Goal:
+- Close the current backend abstraction/data-center/tool-skill/ClickHouse contract batch and preserve a clean review point.
+
+Completed commits in this batch:
+- `e8fae0d feat: add clickhouse import field mapping`
+- `555ce80 feat: expose alphatrace tool skill catalog`
+- `12a2f67 docs: validate native orchestrator blueprint`
+- `e4f7773 docs: validate data center boundaries`
+- `f49a9cd docs: validate agent run clickhouse projection`
+- `ac8f530 docs: align clickhouse schema catalog`
+- `08d568f docs: align architecture tool skill links`
+
+Validation summary:
+- Backend `py_compile` checks passed for changed backend files in M223, M224, M225, M226, M227, M228, and M229.
+- Frontend `pnpm --dir frontend build` passed for M223.
+- Docker HTTP dry-run for M223 could not run because Docker Desktop was unavailable; service-level dry-run covered the field-mapping logic.
+- Direct smoke tests passed for tool/skill catalogs, orchestrator blueprint, data center/data API catalogs, ClickHouse projection, ClickHouse schema catalog, and architecture index links.
+
+Remaining dirty worktree:
+- `frontend/app/pages/AgentLabPage.tsx`: large Agent Lab simplification; not part of this backend abstraction batch.
+- `frontend/app/pages/StrategyRadarPage.tsx` plus `Sidebar.tsx`, `main.tsx`, `navigation.ts`, `ResearchWorkspaceNav.tsx`: Strategy Radar route/page work; should be reviewed as a separate frontend milestone before commit.
+- `screenshots/strategy-radar-*.png` and `screenshots/test-hash-slash.png`: local visual artifacts; decide whether to keep, ignore, or delete before staging.
+
+Recommended next milestones:
+1. M231 - Frontend dirty worktree review: either formalize Strategy Radar as an AlphaTrace page or park it outside the main branch.
+2. M232 - Agent Lab simplification review: validate the large AgentLabPage diff against runner-status and submit behavior before committing.
+3. M233 - Native runner extraction plan: move more orchestration from QwenRunner internals into product-owned Native Orchestrator services.
+4. M234 - ClickHouse runtime projection write path design: decide when and how to enable writes beyond preview-only.
+
+Result:
+- M230 is complete.
