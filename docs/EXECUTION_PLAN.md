@@ -7089,3 +7089,38 @@ Validation:
 Rollback:
 
 Revert AgentLab copy changes and the artifact store `db` alias.
+
+## M220 - Target Architecture and Data Flow Refresh
+
+Status: Completed
+
+Goal:
+
+Make the AlphaTrace commercial backend target architecture explicit after the MySQL/ClickHouse/Data Center/Tool/Skill/Native Multi-Agent direction was clarified.
+
+Scope:
+
+1. Update `docs/ARCHITECTURE_OVERVIEW.md` with the target backend directory structure.
+2. Document the store ownership split:
+   - MySQL for system configuration, credential metadata, task control, and lightweight settings.
+   - ClickHouse for structured business facts, market data, runtime analytical projections, evidence/report/decision projections, and leaderboard facts.
+3. Document Bocha as a backend tool, not a durable business store.
+4. Document Data Center, Tool Registry, Skill Catalog, Orchestrator, and Agent role boundaries.
+5. Document TradingAgents and LangAlpha integration positioning.
+6. Do not modify business code or legacy pages.
+
+Acceptance:
+
+1. Architecture overview contains a target directory structure.
+2. Architecture overview contains MySQL/ClickHouse ownership and routing rules.
+3. Architecture overview contains a commercial backend data-flow diagram.
+4. Architecture overview states `alphatrace_native` as the product runner path and TradingAgents/LangAlpha as adapter/reference boundaries.
+
+Validation:
+
+1. `Select-String -Path docs/ARCHITECTURE_OVERVIEW.md -Pattern "Target Backend Directory Structure","Store Ownership","Commercial Backend Data Flow","Native Multi-Agent","LangAlpha","ClickHouse","MySQL","Bocha"`
+2. No backend compile or frontend build is required because this is documentation-only.
+
+Rollback:
+
+Revert the `docs/ARCHITECTURE_OVERVIEW.md`, `docs/EXECUTION_PLAN.md`, `docs/VALIDATION.md`, and `docs/IMPLEMENTATION_LOG.md` documentation additions.

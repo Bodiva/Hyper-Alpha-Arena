@@ -3096,3 +3096,21 @@ Required checks:
 1. `python -m py_compile backend/services/agent_artifacts/registry.py`
 2. `pnpm --dir frontend build`
 3. Confirm no Strategy Radar/BTC-oriented page is linked from AlphaTrace navigation.
+
+## M220 Validation - Target Architecture and Data Flow Refresh
+
+Documentation-only check:
+
+```powershell
+Select-String -Path docs/ARCHITECTURE_OVERVIEW.md -Pattern "Target Backend Directory Structure","Store Ownership","Commercial Backend Data Flow","Native Multi-Agent","LangAlpha","ClickHouse","MySQL","Bocha"
+```
+
+Expected:
+
+- Architecture overview contains the target backend directory structure.
+- Store ownership clearly separates MySQL config/task control from ClickHouse structured business and analytical data.
+- Bocha is documented as a backend tool.
+- `alphatrace_native` is documented as the product runner path.
+- TradingAgents and LangAlpha are documented as adapter/reference boundaries.
+
+No backend compile or frontend build is required unless business code changes.

@@ -5291,3 +5291,36 @@ M219 validation completion:
 
 M219 result:
 - Complete. Agent Lab runner copy is clearer; runner behavior remains unchanged.
+
+## 2026-05-05 - M220 Target Architecture and Data Flow Refresh
+
+Goal:
+- Convert the latest architecture decisions into the canonical architecture overview:
+  - MySQL stores system config, credential metadata, lightweight settings, and task-control state.
+  - ClickHouse stores structured business facts, market data, runtime analytical projections, evidence/report/decision projections, and leaderboard facts.
+  - Bocha is a backend tool for evidence retrieval, not a durable business store.
+  - Data Center owns connector governance, ingestion, quality policy, and store routing.
+  - Tool Registry and Skill Catalog sit between Data Center and agent roles.
+  - `alphatrace_native` is the product multi-agent runner path.
+  - TradingAgents and LangAlpha remain adapter/reference boundaries, not product schema owners.
+
+Changes:
+- Updated `docs/ARCHITECTURE_OVERVIEW.md` with:
+  - target backend directory structure,
+  - store ownership table,
+  - commercial backend data-flow diagram,
+  - native multi-agent product path,
+  - integration positioning table.
+- Updated `docs/EXECUTION_PLAN.md` with M220.
+- Updated `docs/VALIDATION.md` with M220 validation.
+
+Validation:
+- `Select-String -Path docs/ARCHITECTURE_OVERVIEW.md -Pattern "Target Backend Directory Structure","Store Ownership","Commercial Backend Data Flow","Native Multi-Agent","LangAlpha","ClickHouse","MySQL","Bocha"`: passed.
+
+Notes:
+- Strategy Radar/BTC-oriented untracked files remain excluded from this milestone.
+- A pre-existing Data Import wording change remains outside M220 and was not staged for this documentation commit.
+- No backend code, frontend code, Docker, package, runner behavior, or legacy page was modified.
+
+Result:
+- M220 is complete. The canonical architecture overview now has the requested target directory structure and end-to-end architecture/data-flow diagrams.

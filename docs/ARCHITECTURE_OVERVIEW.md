@@ -302,3 +302,188 @@ flowchart TD
 ```
 
 Rule: Bocha is a tool input to Evidence Retrieval. It is not the durable business data layer. Structured business outputs go to ClickHouse after mapping into AlphaTrace schemas; runtime/config/control state goes to MySQL.
+
+## 10. Target Backend Directory Structure
+
+The current codebase is transitional: AlphaTrace product modules live inside the existing Hyper-Alpha-Arena backend while legacy crypto/trading modules remain available for old pages. The target commercial backend should gradually move toward the following ownership structure.
+
+```text
+backend/
+  api/
+    alpha_trace/
+      assets.py
+      evidence.py
+      strategies.py
+      portfolios.py
+      decisions.py
+      leaderboard.py
+      data_sources.py
+      agent_runs.py
+      runtime_diagnostics.py
+      settings.py
+  domains/
+    asset/
+    evidence/
+    strategy/
+    portfolio/
+    decision/
+    leaderboard/
+    data_source/
+    market_data/
+  runtime/
+    agent_run_service.py
+    runtime_event_service.py
+    sse_stream_service.py
+    task_status_machine.py
+    async_scheduler.py
+    orchestrator/
+      task_spec.py
+      dag.py
+      role_binding.py
+      skill_binding.py
+  runners/
+    base.py
+    registry.py
+    stub.py
+    qwen.py
+    alphatrace_native.py
+    tradingagents_adapter.py
+    langalpha_adapter.py
+  tools/
+    registry.py
+    bocha_search.py
+    evidence_retrieve.py
+    market_context.py
+    model_call.py
+  skills/
+    catalog.py
+    bindings.py
+    policies.py
+  data_center/
+    catalog.py
+    connector_registry.py
+    ingestion_jobs.py
+    store_routing.py
+    quality_policy.py
+  integrations/
+    qwen/
+    bocha/
+    tradingagents/
+    langalpha/
+    professional_market_data/
+  infrastructure/
+    mysql/
+      system_config_store.py
+      task_control_store.py
+    clickhouse/
+      market_fact_store.py
+      runtime_projection_store.py
+      evidence_fact_store.py
+    object_storage/
+    logging/
+    audit/
+  legacy/
+    crypto/
+    exchange/
+    trading/
+```
+
+Migration rule: do not physically move modules until the target boundary is stable. First add thin facades and read models, then move one domain at a time behind unchanged AlphaTrace API contracts.
+
+## 11. Store Ownership and Data Routing
+
+| Data class | Canonical owner | Store target | Notes |
+|---|---|---|---|
+| API keys, provider settings, module presets | Settings / Runtime Config | MySQL | Store encrypted/sanitized config metadata only; never expose raw keys to frontend. |
+| Task status, cancellation, retry, run control | Agent Runtime | MySQL | MySQL is the control-plane store. JSON remains local fallback only. |
+| Runtime events for analytics | Agent Runtime projection | ClickHouse | Keep raw control state in MySQL; project analytical facts to ClickHouse. |
+| Reports, evidence refs, decisions for analytics | Runtime/domain projection | ClickHouse | Projection must be replayable from AlphaTrace schema. |
+| ETF/fund/index market facts and file imports | Data Center / Market Data | ClickHouse | Structured business facts, partitioned by date/import batch. |
+| Bocha search results | Tool output -> Evidence | MySQL metadata + ClickHouse analytical projection | Bocha is a tool. Its URL/title/summary become evidence metadata; it is not the business store. |
+| Agent skills and role bindings | Orchestrator / Skill Catalog | MySQL config later, static catalog now | Skills define allowed tool/data/model/output contracts per role. |
+| TradingAgents internal checkpoint | TradingAgents adapter only | Runner-private, not product persistence | Never expose checkpoint as frontend schema. |
+| LangAlpha workspace/thread state | LangAlpha external bridge only | External service-private | Map outputs back into AlphaTrace AgentRun schema. |
+
+## 12. Commercial Backend Data Flow
+
+```mermaid
+flowchart TD
+  UI["AlphaTrace Frontend\n(product schema only)"]
+  API["AlphaTrace API Layer"]
+  Orchestrator["Orchestrator\nintent -> task spec -> DAG -> roles"]
+  Agents["Native Multi-Agent Runtime\nMarket / Bull / Bear / Risk / PM"]
+  SkillPolicy["Skill Binding Policy\nrole -> tools + data + output contract"]
+  ToolRegistry["Tool Registry\nBocha / market.context / evidence.retrieve / model.call"]
+  DataCenter["Data Center\nconnectors + ingestion + quality + routing"]
+  MySQL[("MySQL\nconfig + task control")]
+  ClickHouse[("ClickHouse\nstructured business + analytical facts")]
+  Runners["Runner Adapters\nQwen / Native / TradingAgents / LangAlpha"]
+  External["External Frameworks\nTradingAgents, LangAlpha"]
+
+  UI --> API
+  API --> Orchestrator
+  API --> MySQL
+  Orchestrator --> Agents
+  Orchestrator --> Runners
+  Agents --> SkillPolicy
+  SkillPolicy --> ToolRegistry
+  ToolRegistry --> DataCenter
+  DataCenter --> ClickHouse
+  DataCenter --> MySQL
+  Runners --> External
+  Runners --> MySQL
+  Runners --> ClickHouse
+  MySQL --> API
+  ClickHouse --> API
+```
+
+Key constraint: the frontend never receives TradingAgents or LangAlpha internal state. Every external runtime must be normalized into AlphaTrace `AgentRun`, `AgentRuntimeEvent`, `AgentReport`, `EvidenceReference`, `AgentDecision`, and analytical projections.
+
+## 13. Native Multi-Agent Product Path
+
+```mermaid
+flowchart LR
+  Task["Submit Agent Task"]
+  Evidence["Evidence Retrieval\nBocha + static + future data center"]
+  Market["Market Analyst"]
+  Bull["Bull Researcher"]
+  Bear["Bear Researcher"]
+  Risk["Risk Analyst"]
+  PM["Portfolio Manager"]
+  Decision["Decision + Attribution"]
+  Stores["MySQL control + ClickHouse analytics"]
+
+  Task --> Evidence
+  Evidence --> Market
+  Market --> Bull
+  Market --> Bear
+  Bull --> Risk
+  Bear --> Risk
+  Risk --> PM
+  PM --> Decision
+  Evidence --> Stores
+  Market --> Stores
+  Bull --> Stores
+  Bear --> Stores
+  Risk --> Stores
+  Decision --> Stores
+```
+
+Product direction:
+
+1. `alphatrace_native` is the recommended product runner path.
+2. TradingAgents is used to learn LangGraph-style flow, debate, and risk team patterns, but it remains an opt-in adapter.
+3. LangAlpha is used to learn product workbench patterns: workspace, tasks, tools, background execution, event buffers, model/provider configuration, and BYOK.
+4. Skills are product-level capabilities that can be assigned to agent roles; they are not hard-coded to one runner.
+
+## 14. Integration Positioning
+
+| Component | Best role in AlphaTrace | Do not do |
+|---|---|---|
+| Qwen Runner | Reliable model execution backend for Native and direct Qwen tasks. | Do not let Qwen markdown shape own product data contracts. |
+| AlphaTrace Native Runner | Main product multi-agent DAG with configurable skills/tools. | Do not rely on simulated UI-only DAG once native orchestration is available. |
+| TradingAgents | Optional LangGraph runner adapter and design reference for debate/risk flow. | Do not replace AlphaTrace backend, copy code, or expose internal state. |
+| LangAlpha | Architecture reference and possible external research-service adapter. | Do not embed the full LangAlpha server into AlphaTrace backend. |
+| Bocha | Backend tool for external web evidence retrieval. | Do not store Bocha as opaque untraceable text; persist URL/title/summary/source metadata. |
+| ClickHouse | Structured facts, analytics, projections, leaderboard/quality metrics. | Do not use ClickHouse for secrets or task-control state. |
+| MySQL | Config, task control, credentials metadata, lightweight product settings. | Do not use MySQL as the main analytical fact store once ClickHouse path exists. |
