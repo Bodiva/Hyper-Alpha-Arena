@@ -6386,3 +6386,31 @@ Validation:
 Rollback:
 
 Remove the endpoint constant, frontend types, and helper.
+
+## M198 - Reusable Integration Decision Panel
+
+Status: Completed
+
+Goal:
+
+Add a reusable frontend UI primitive for rendering integration decision gates.
+
+Scope:
+
+1. Add `IntegrationDecisionPanel`.
+2. Support loading, error, empty, compact, current gate badge, proceed conditions, stop conditions, AlphaTrace contracts, validation requirements, and policies.
+3. Do not wire existing pages in this milestone.
+
+Acceptance:
+
+1. Frontend build passes.
+2. Component compiles without new dependencies.
+3. Component can render decision gates for TradingAgents, LangAlpha, Bocha, and professional data providers.
+
+Validation:
+
+1. `pnpm --dir frontend build`.
+
+Rollback:
+
+Remove `frontend/app/shared/ui/IntegrationDecisionPanel.tsx`.

@@ -2738,3 +2738,17 @@ Expected:
 - `frontend/app/shared/api/endpoints.ts` exports the integration decision endpoint.
 - `frontend/app/entities/runtime/api.ts` exports integration decision types and `getRuntimeIntegrationDecisionsAsync`.
 - No existing page wiring is changed.
+
+### M198 Reusable Integration Decision Panel
+
+Required frontend build:
+
+```powershell
+pnpm --dir frontend build
+```
+
+Expected:
+
+- Build succeeds.
+- `frontend/app/shared/ui/IntegrationDecisionPanel.tsx` compiles without new dependencies.
+- No existing page wiring is changed.

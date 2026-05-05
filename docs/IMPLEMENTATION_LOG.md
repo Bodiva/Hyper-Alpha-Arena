@@ -4767,3 +4767,21 @@ Notes:
 
 Next:
 - Validate build and commit.
+
+## 2026-05-05 - M198 Reusable Integration Decision Panel
+
+Goal:
+- Add a reusable frontend UI primitive for displaying proceed/stop gates for external integrations.
+
+Changes:
+- Added `frontend/app/shared/ui/IntegrationDecisionPanel.tsx`.
+
+Validation:
+- `pnpm --dir frontend build`: passed.
+
+Notes:
+- The panel is not wired to existing pages in this milestone.
+- It supports future architecture review pages by making integration gates explicit and visible.
+
+Next:
+- Validate build and commit.
