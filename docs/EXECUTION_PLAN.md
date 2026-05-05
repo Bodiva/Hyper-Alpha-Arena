@@ -6208,3 +6208,31 @@ Validation:
 Rollback:
 
 Remove the endpoint constant, frontend types, and helper.
+
+## M192 - Reusable Module Boundary Panel
+
+Status: Completed
+
+Goal:
+
+Add a reusable frontend UI primitive for rendering backend module boundary catalogs.
+
+Scope:
+
+1. Add `ModuleBoundaryPanel`.
+2. Support loading, error, empty, compact, boundary/status badges, directories, summary counts, and policies.
+3. Do not wire existing pages in this milestone.
+
+Acceptance:
+
+1. Frontend build passes.
+2. Component compiles without new dependencies.
+3. Component can render AlphaTrace-owned, legacy, external runner, external workbench, and infrastructure boundaries.
+
+Validation:
+
+1. `pnpm --dir frontend build`.
+
+Rollback:
+
+Remove `frontend/app/shared/ui/ModuleBoundaryPanel.tsx`.

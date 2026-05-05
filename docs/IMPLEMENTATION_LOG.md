@@ -4643,3 +4643,21 @@ Notes:
 
 Next:
 - Validate build and commit.
+
+## 2026-05-05 - M192 Reusable Module Boundary Panel
+
+Goal:
+- Add a reusable frontend UI primitive for backend module boundaries.
+
+Changes:
+- Added `frontend/app/shared/ui/ModuleBoundaryPanel.tsx`.
+
+Validation:
+- `pnpm --dir frontend build`: passed.
+
+Notes:
+- The component is intentionally not wired yet because page files contain unrelated dirty work.
+- It provides a future UI foundation for architecture diagnostics and refactor review.
+
+Next:
+- Validate build and commit.

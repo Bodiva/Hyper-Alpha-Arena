@@ -2638,3 +2638,17 @@ Expected:
 - `frontend/app/shared/api/endpoints.ts` exports the module boundary endpoint.
 - `frontend/app/entities/runtime/api.ts` exports module boundary types and `getRuntimeModuleBoundariesAsync`.
 - No existing page wiring is changed.
+
+### M192 Reusable Module Boundary Panel
+
+Required frontend build:
+
+```powershell
+pnpm --dir frontend build
+```
+
+Expected:
+
+- Build succeeds.
+- `frontend/app/shared/ui/ModuleBoundaryPanel.tsx` compiles without new dependencies.
+- No existing page wiring is changed.
