@@ -19,6 +19,31 @@ export interface RuntimeArchitectureIndex {
   message?: string;
 }
 
+export interface BackendModuleBoundary {
+  module_id: string;
+  display_name: string;
+  boundary_type: string;
+  ownership: string;
+  status: string;
+  directories: string[];
+  api_prefixes?: string[];
+  depends_on?: string[];
+  extension_points?: string[];
+  notes?: string;
+  allowed_to_import?: string[];
+  must_not_import?: string[];
+  migration_target?: string;
+}
+
+export interface BackendModuleBoundaryCatalogResponse {
+  version: number;
+  modules: BackendModuleBoundary[];
+  total: number;
+  summary: Record<string, number>;
+  policies: Record<string, string>;
+  message?: string;
+}
+
 export interface RuntimeConfigStatus {
   status: string;
   available?: boolean;
@@ -208,6 +233,9 @@ export interface RuntimeReadinessResponse {
 
 export const getRuntimeArchitectureAsync = () =>
   httpClient.get<RuntimeArchitectureIndex>(ENDPOINTS.alphaTraceAgentRuntimeArchitecture);
+
+export const getRuntimeModuleBoundariesAsync = () =>
+  httpClient.get<BackendModuleBoundaryCatalogResponse>(ENDPOINTS.alphaTraceAgentRuntimeModuleBoundaries);
 
 export const getRuntimeReadinessAsync = () =>
   httpClient.get<RuntimeReadinessResponse>(ENDPOINTS.alphaTraceAgentRuntimeReadiness);

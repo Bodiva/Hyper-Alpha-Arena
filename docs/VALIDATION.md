@@ -2623,3 +2623,18 @@ Expected:
 - Module boundary catalog includes AlphaTrace-owned, legacy, infrastructure-target, external-runner, and external-workbench boundaries.
 - Architecture index links `/api/alpha-trace/agent-runs/runtime/module-boundaries`.
 - Smoke scripts pass without external provider keys.
+
+### M191 Frontend Module Boundary Contract
+
+Required frontend build:
+
+```powershell
+pnpm --dir frontend build
+```
+
+Expected:
+
+- Build succeeds.
+- `frontend/app/shared/api/endpoints.ts` exports the module boundary endpoint.
+- `frontend/app/entities/runtime/api.ts` exports module boundary types and `getRuntimeModuleBoundariesAsync`.
+- No existing page wiring is changed.

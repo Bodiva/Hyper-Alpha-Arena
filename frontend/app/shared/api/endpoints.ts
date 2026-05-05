@@ -45,6 +45,7 @@ export const ENDPOINTS = {
   alphaTraceAgentRunnerStatus: "/alpha-trace/agent-runs/runners/status",
   alphaTraceAgentRunnerCapabilities: "/alpha-trace/agent-runs/runners/capabilities",
   alphaTraceAgentRuntimeArchitecture: "/alpha-trace/agent-runs/runtime/architecture",
+  alphaTraceAgentRuntimeModuleBoundaries: "/alpha-trace/agent-runs/runtime/module-boundaries",
   alphaTraceAgentRuntimeReadiness: "/alpha-trace/agent-runs/runtime/readiness",
   alphaTraceAgentRuntimeConfig: "/alpha-trace/agent-runs/runtime/config",
   alphaTraceAgentRuntimeModelProviders: "/alpha-trace/agent-runs/runtime/model-providers",
@@ -133,6 +134,7 @@ export const ALPHA_TRACE_AGENT_RUN_TIMELINE_SUMMARY = ENDPOINTS.alphaTraceAgentR
 export const ALPHA_TRACE_AGENT_RUNNER_STATUS = ENDPOINTS.alphaTraceAgentRunnerStatus;
 export const ALPHA_TRACE_AGENT_RUNNER_CAPABILITIES = ENDPOINTS.alphaTraceAgentRunnerCapabilities;
 export const ALPHA_TRACE_AGENT_RUNTIME_ARCHITECTURE = ENDPOINTS.alphaTraceAgentRuntimeArchitecture;
+export const ALPHA_TRACE_AGENT_RUNTIME_MODULE_BOUNDARIES = ENDPOINTS.alphaTraceAgentRuntimeModuleBoundaries;
 export const ALPHA_TRACE_AGENT_RUNTIME_READINESS = ENDPOINTS.alphaTraceAgentRuntimeReadiness;
 export const ALPHA_TRACE_AGENT_RUNTIME_CONFIG = ENDPOINTS.alphaTraceAgentRuntimeConfig;
 export const ALPHA_TRACE_AGENT_RUNTIME_MODEL_PROVIDERS = ENDPOINTS.alphaTraceAgentRuntimeModelProviders;

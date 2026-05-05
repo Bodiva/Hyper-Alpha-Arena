@@ -6179,3 +6179,32 @@ Validation:
 Rollback:
 
 Remove the module boundary service, endpoint, architecture-index additions, and smoke additions.
+
+## M191 - Frontend Module Boundary Contract
+
+Status: Completed
+
+Goal:
+
+Expose the backend module boundary catalog through typed frontend API helpers.
+
+Scope:
+
+1. Add `alphaTraceAgentRuntimeModuleBoundaries` endpoint constant.
+2. Add `BackendModuleBoundary` and `BackendModuleBoundaryCatalogResponse` frontend types.
+3. Add `getRuntimeModuleBoundariesAsync` helper.
+4. Do not wire existing pages in this milestone.
+
+Acceptance:
+
+1. Frontend build passes.
+2. Typed helper compiles without new dependencies.
+3. No existing page wiring is changed.
+
+Validation:
+
+1. `pnpm --dir frontend build`.
+
+Rollback:
+
+Remove the endpoint constant, frontend types, and helper.

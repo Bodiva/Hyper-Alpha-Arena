@@ -4624,3 +4624,22 @@ Notes:
 Next:
 - Validate and commit this boundary read model.
 
+
+## 2026-05-05 - M191 Frontend Module Boundary Contract
+
+Goal:
+- Add typed frontend access to the backend module boundary catalog.
+
+Changes:
+- Updated `frontend/app/shared/api/endpoints.ts`.
+- Updated `frontend/app/entities/runtime/api.ts`.
+
+Validation:
+- `pnpm --dir frontend build`: passed.
+
+Notes:
+- This milestone only adds frontend API contracts. Existing pages are not wired yet because page files contain unrelated dirty work.
+- Future architecture/diagnostics UI can render AlphaTrace-owned, legacy, TradingAgents, LangAlpha, and data provider boundaries from one endpoint.
+
+Next:
+- Validate build and commit.
