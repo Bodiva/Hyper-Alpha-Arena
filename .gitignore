@@ -343,6 +343,7 @@ docs/*.md
 !docs/EXECUTION_PLAN.md
 !docs/IMPLEMENTATION_LOG.md
 !docs/VALIDATION.md
+!docs/ARCHITECTURE_OVERVIEW.md
 backend/scripts/
 
 # AlphaTrace local run artifacts
