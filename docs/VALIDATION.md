@@ -2251,3 +2251,16 @@ Runtime HTTP smoke after backend reload:
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/agent-runs/runtime/architecture
 ```
+
+### M168 Frontend Runtime Diagnostics API Client Boundary
+
+Required frontend build:
+
+```powershell
+pnpm --dir frontend build
+```
+
+Expected:
+
+- Build succeeds.
+- Existing Vite chunk/browserslist warnings are acceptable unless this milestone changes bundling behavior.

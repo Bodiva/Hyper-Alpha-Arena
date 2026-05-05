@@ -4155,3 +4155,22 @@ Notes:
 
 Next:
 - M168 should start consuming the new metrics/architecture endpoints in frontend diagnostics when safe, or add a static frontend architecture audit if existing frontend dirty changes make code edits risky.
+
+## 2026-05-05 - M168 Frontend Runtime Diagnostics API Client Boundary
+
+Goal:
+- Add frontend entity-layer accessors for the new runtime architecture/model/orchestrator/metrics endpoints without touching existing dirty pages.
+
+Changes:
+- Updated `frontend/app/shared/api/endpoints.ts`.
+- Added `frontend/app/entities/runtime/api.ts`.
+
+Validation:
+- `pnpm --dir frontend build`: passed.
+
+Notes:
+- Build produced existing Vite chunk and browserslist warnings; no build failure.
+- No page UI was changed in this milestone.
+
+Next:
+- M169 should either wire these APIs into a dedicated diagnostics page/panel after reconciling existing frontend dirty changes, or continue backend contracts for data source/tool result artifacts.

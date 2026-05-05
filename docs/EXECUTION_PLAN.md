@@ -5510,3 +5510,32 @@ Validation:
 Rollback:
 
 Remove architecture index helper and endpoint. Other catalogs remain available.
+
+## M168 - Frontend Runtime Diagnostics API Client Boundary
+
+Status: Completed
+
+Goal:
+
+Add a frontend entity-layer client for AlphaTrace runtime diagnostics endpoints without modifying existing dirty pages.
+
+Scope:
+
+1. Add endpoint constants for runtime architecture, config, model providers, orchestrators, run artifacts and run metrics.
+2. Add `frontend/app/entities/runtime/api.ts` with typed fetch helpers.
+3. Do not wire page UI in this milestone.
+4. Preserve mock mode and existing pages.
+
+Acceptance:
+
+1. Frontend build passes.
+2. Runtime API helpers compile.
+3. No old business pages are modified by this milestone.
+
+Validation:
+
+1. `pnpm --dir frontend build`.
+
+Rollback:
+
+Remove `frontend/app/entities/runtime/api.ts` and endpoint additions.
