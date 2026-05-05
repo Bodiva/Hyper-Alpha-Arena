@@ -43,6 +43,7 @@ from services.agent_orchestrator.execution_policy import get_runner_execution_po
 from services.agent_orchestrator.capability_matrix import get_runner_capability, list_runner_capabilities, resolve_recommended_runner
 from services.agent_orchestrator.native_plan import build_alphatrace_native_plan
 from services.agent_orchestrator.adapter_matrix import get_adapter_composition_matrix
+from services.agent_orchestrator.flow_catalog import get_agent_flow_catalog
 from services.agent_orchestrator.subprocess_orchestrator import get_subprocess_worker_registry_snapshot
 from services.agent_runners.registry import AgentRunnerConfigurationError, AgentRunnerExecutionError, AgentRunnerNotImplementedError
 from services.agent_runtime_store.registry import get_agent_run_store
@@ -299,6 +300,25 @@ def get_agent_runner_capabilities_endpoint(
 @router.get("/runners/adapter-matrix")
 def get_agent_runner_adapter_matrix_endpoint():
     return get_adapter_composition_matrix().to_response()
+
+
+@router.get("/runners/flows")
+def list_agent_runner_flows_endpoint():
+    return {
+        "flows": [flow.to_dict() for flow in get_agent_flow_catalog().list_flows()],
+        "message": "Runner flow descriptors are AlphaTrace-owned UI/diagnostic contracts, not external internal state.",
+    }
+
+
+@router.get("/runners/flows/{runner_type}")
+def get_agent_runner_flow_endpoint(
+    runner_type: str,
+    taskType: Optional[str] = Query("single_asset_analysis"),
+):
+    return {
+        "flow": get_agent_flow_catalog().get_flow(runner_type, task_type=taskType or "single_asset_analysis").to_dict(),
+        "message": "Runner flow descriptor is safe for UI rendering and does not expose external runtime state.",
+    }
 
 
 @router.get("/runners/plans/alphatrace-native")

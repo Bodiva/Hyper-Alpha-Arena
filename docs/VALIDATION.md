@@ -2058,3 +2058,17 @@ Required local smoke:
 - Matrix includes qwen, alphatrace_native, tradingagents, and langalpha.
 - TradingAgents is `poc_opt_in`.
 - LangAlpha is `design_only`.
+
+### M155 Runner Flow Catalog
+
+Required backend compile:
+
+```powershell
+python -m py_compile backend/services/agent_orchestrator/flow_catalog.py backend/api/alpha_trace_agent_runtime_routes.py
+```
+
+Required local smoke:
+
+- Qwen/AlphaTrace Native flow has at least five nodes.
+- TradingAgents flow is `poc_opt_in`.
+- LangAlpha flow is `design_only`.

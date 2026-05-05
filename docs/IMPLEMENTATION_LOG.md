@@ -3884,3 +3884,27 @@ Notes:
 
 Next:
 - M155 should start reducing runner/orchestrator coupling by extracting a Native Agent Flow descriptor that can feed both UI and future scheduler execution.
+
+## 2026-05-05 - M155 Runner Flow Catalog
+
+Goal:
+- Expose runner flow descriptors for UI/diagnostics without hardcoding flow order in pages or exposing external framework internals.
+
+Changes:
+- Added `backend/services/agent_orchestrator/flow_catalog.py`.
+- Added `GET /api/alpha-trace/agent-runs/runners/flows`.
+- Added `GET /api/alpha-trace/agent-runs/runners/flows/{runner_type}`.
+
+Validation:
+- `python -m py_compile backend/services/agent_orchestrator/flow_catalog.py backend/api/alpha_trace_agent_runtime_routes.py`: passed.
+- Local flow catalog smoke passed:
+  - qwen: 7 nodes
+  - alphatrace_native: 7 nodes
+  - tradingagents: 8 nodes
+  - langalpha: 5 nodes
+
+Notes:
+- TradingAgents and LangAlpha flow descriptors are AlphaTrace-owned diagnostics. They are not raw external framework state.
+
+Next:
+- M156 should add a backend endpoint smoke script for all new abstraction endpoints, without restarting services unless needed.

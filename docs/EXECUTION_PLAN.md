@@ -5124,3 +5124,33 @@ Validation:
 Rollback:
 
 Remove the matrix service and endpoint. Runner behavior remains unaffected.
+
+## M155 - Runner Flow Catalog
+
+Status: Completed
+
+Goal:
+
+Expose runner flow descriptors for UI/diagnostics without hardcoding flow order in pages or exposing external framework internals.
+
+Scope:
+
+1. Add `AgentFlowCatalog`.
+2. Add `GET /api/alpha-trace/agent-runs/runners/flows`.
+3. Add `GET /api/alpha-trace/agent-runs/runners/flows/{runner_type}`.
+4. Cover stub, qwen, alphatrace_native, tradingagents, and langalpha.
+
+Acceptance:
+
+1. Backend py_compile passes.
+2. Local smoke verifies Native/Qwen/TradingAgents/LangAlpha flow descriptors.
+3. TradingAgents and LangAlpha flows are descriptive only and do not expose internal runtime state.
+
+Validation:
+
+1. `python -m py_compile backend/services/agent_orchestrator/flow_catalog.py backend/api/alpha_trace_agent_runtime_routes.py`.
+2. Local Python smoke for `get_agent_flow_catalog().list_flows()`.
+
+Rollback:
+
+Remove flow catalog service and endpoints. Existing runner behavior remains unaffected.
