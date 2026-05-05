@@ -3805,3 +3805,21 @@ Notes:
 
 Next:
 - M151 should add a queue/scheduler design doc that maps current AgentRun background threads to `AsyncTaskSpec`, then decide the smallest safe wiring point.
+
+## 2026-05-05 - M151 AgentRun TaskSpec Factory
+
+Goal:
+- Map AlphaTrace submit requests into scheduler-neutral `AsyncTaskSpec` records for future worker migration.
+
+Changes:
+- Added `backend/services/agent_orchestrator/task_spec_factory.py`.
+
+Validation:
+- `python -m py_compile backend/services/agent_orchestrator/task_spec_factory.py`: passed.
+- Local smoke built a TradingAgents task spec from `SubmitAgentRunRequest`, derived tags, timeout, and redacted an accidental `apiKey` extra param.
+
+Notes:
+- The factory is not wired into `/submit` yet. It gives the future scheduler a stable input contract without changing current runtime behavior.
+
+Next:
+- M152 should define the concrete migration point in `alpha_trace_agent_runtime_service.submit_agent_run`: create task spec, persist pending task, then let existing runner submit continue until scheduler cutover is explicitly enabled.

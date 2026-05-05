@@ -5005,3 +5005,33 @@ Validation:
 Rollback:
 
 Remove the scheduler/memory store files and exports. Current AgentRun submit remains unaffected.
+
+## M151 - AgentRun TaskSpec Factory
+
+Status: Completed
+
+Goal:
+
+Map AlphaTrace submit requests into scheduler-neutral `AsyncTaskSpec` records for future worker migration.
+
+Scope:
+
+1. Add `build_agent_run_task_spec`.
+2. Preserve AlphaTrace request metadata without storing provider secrets.
+3. Derive runner/task tags, timeout, and max attempts.
+4. Do not wire the factory into `/submit` yet.
+
+Acceptance:
+
+1. Backend py_compile passes.
+2. Local smoke builds a TradingAgents task spec and redacts accidental key-like extra params.
+3. Current AgentRun submit behavior remains unchanged.
+
+Validation:
+
+1. `python -m py_compile backend/services/agent_orchestrator/task_spec_factory.py`.
+2. Local Python smoke for `build_agent_run_task_spec`.
+
+Rollback:
+
+Remove `task_spec_factory.py`. Current runtime behavior remains unaffected.

@@ -2003,3 +2003,17 @@ Required local smoke:
 
 - Schedule a callable that returns a small result and verify `completed`.
 - Schedule a callable that raises and verify `failed` with error code.
+
+### M151 AgentRun TaskSpec Factory
+
+Required backend compile:
+
+```powershell
+python -m py_compile backend/services/agent_orchestrator/task_spec_factory.py
+```
+
+Required local smoke:
+
+- Build an `AsyncTaskSpec` from `SubmitAgentRunRequest`.
+- Verify runner/task tags.
+- Verify accidental key-like `extraParams` are redacted in task payload.
