@@ -4528,3 +4528,20 @@ Notes:
 
 Next:
 - Continue with endpoint smoke pack updates or frontend diagnostics wiring after isolating dirty page changes.
+
+## 2026-05-05 - M186 Abstraction Endpoint Smoke Pack Refresh
+
+Goal:
+- Keep the HTTP endpoint smoke script aligned with new runtime abstraction endpoints.
+
+Changes:
+- Updated `scripts/alphatrace/smoke_abstraction_endpoints.ps1`.
+
+Validation:
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_abstraction_endpoints.ps1 -SkipHttp`: passed.
+
+Notes:
+- Full HTTP smoke requires a backend process restarted with the latest branch. The current Docker backend can be stale, so this milestone validates script syntax only.
+
+Next:
+- Continue with architecture documentation alignment or targeted UI wiring after isolating dirty page changes.

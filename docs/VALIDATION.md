@@ -2549,3 +2549,16 @@ Expected:
 - Integration diagnostics include `professional_market_data_provider`.
 - Adapter does not call external providers.
 - Adapter health is disabled by default unless explicitly configured.
+
+### M186 Abstraction Endpoint Smoke Pack Refresh
+
+Required script syntax check:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_abstraction_endpoints.ps1 -SkipHttp
+```
+
+Expected:
+
+- Endpoint list includes runtime readiness, task specs, and artifact catalog.
+- `-SkipHttp` passes even when the running Docker backend is stale.

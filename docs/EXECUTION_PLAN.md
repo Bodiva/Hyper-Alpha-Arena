@@ -6038,3 +6038,31 @@ Validation:
 Rollback:
 
 Remove the professional adapter class, registry/export entries, and smoke assertion.
+
+## M186 - Abstraction Endpoint Smoke Pack Refresh
+
+Status: Completed
+
+Goal:
+
+Keep the HTTP endpoint smoke script aligned with the expanded runtime abstraction endpoints.
+
+Scope:
+
+1. Add runtime readiness endpoint to smoke list.
+2. Add runtime task specs endpoint to smoke list.
+3. Add artifact catalog endpoint to smoke list.
+4. Validate script syntax with `-SkipHttp` to avoid requiring a freshly restarted backend.
+
+Acceptance:
+
+1. Smoke script syntax validation passes.
+2. No backend or frontend code changes.
+
+Validation:
+
+1. `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_abstraction_endpoints.ps1 -SkipHttp`.
+
+Rollback:
+
+Remove the added endpoints from the smoke script.
