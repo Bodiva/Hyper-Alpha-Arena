@@ -20,6 +20,22 @@ class DataApiResource:
         return asdict(self)
 
 
+@dataclass(frozen=True)
+class DataApiProvider:
+    provider_id: str
+    display_name: str
+    provider_type: str
+    status: str
+    domains: tuple[str, ...]
+    requires_secret: bool
+    credential_source: str
+    operations: tuple[str, ...]
+    notes: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
 class AlphaTraceDataApiCatalog:
     """Catalog of AlphaTrace-owned data APIs and their backing provider/store boundary."""
 
@@ -113,12 +129,80 @@ class AlphaTraceDataApiCatalog:
             ),
         ]
 
+    def list_providers(self) -> list[DataApiProvider]:
+        return [
+            DataApiProvider(
+                provider_id="alphatrace_static_seed",
+                display_name="AlphaTrace Static Seed Provider",
+                provider_type="static_seed",
+                status="ready",
+                domains=("asset", "evidence", "strategy", "portfolio", "market_data", "data_source"),
+                requires_secret=False,
+                credential_source="none",
+                operations=("list", "detail", "demo_snapshot"),
+                notes="MVP fallback and deterministic demo source. Not a production data provider.",
+            ),
+            DataApiProvider(
+                provider_id="mysql_domain_store",
+                display_name="AlphaTrace MySQL Domain Store",
+                provider_type="mysql_store",
+                status="ready_or_fallback",
+                domains=("agent_runtime", "asset", "evidence", "strategy", "portfolio", "decision", "config"),
+                requires_secret=False,
+                credential_source="backend_database_url",
+                operations=("persist", "query", "project"),
+                notes="Formal persistence direction. JSON fallback remains for local/MVP paths.",
+            ),
+            DataApiProvider(
+                provider_id="bocha_web_search",
+                display_name="Bocha Web Search",
+                provider_type="external_search",
+                status="optional",
+                domains=("evidence", "external_web"),
+                requires_secret=True,
+                credential_source="mysql_system_config_or_environment",
+                operations=("search", "map_to_evidence", "map_to_artifact"),
+                notes="Current external evidence source. Search failure must fallback to static evidence.",
+            ),
+            DataApiProvider(
+                provider_id="future_professional_market_data",
+                display_name="Future Professional Market Data Provider",
+                provider_type="planned_external_market_data",
+                status="planned",
+                domains=("quote", "kline", "fund_nav", "index_constituents", "macro", "announcement"),
+                requires_secret=True,
+                credential_source="mysql_system_config_or_environment",
+                operations=("quote", "snapshot", "klines", "indicators", "reference_data"),
+                notes="Reserved boundary for ETF/fund/index/futures professional data. Do not reuse legacy BTC/Hyperliquid endpoints.",
+            ),
+            DataApiProvider(
+                provider_id="langalpha_external_workbench",
+                display_name="LangAlpha External Workbench",
+                provider_type="planned_external_workbench",
+                status="design_only",
+                domains=("workspace", "files", "mcp_tools", "artifacts"),
+                requires_secret=True,
+                credential_source="external_service_boundary",
+                operations=("submit_task", "stream_events", "fetch_artifacts"),
+                notes="Architecture reference or future external service adapter. Not imported into AlphaTrace backend.",
+            ),
+        ]
+
     def to_response(self) -> dict[str, Any]:
         resources = [resource.to_dict() for resource in self.list_resources()]
+        providers = [provider.to_dict() for provider in self.list_providers()]
         return {
             "catalogId": self.catalog_id,
             "resources": resources,
+            "providers": providers,
             "total": len(resources),
+            "providerTotal": len(providers),
+            "policies": {
+                "legacyBoundary": "Legacy BTC/Hyperliquid APIs are not AlphaTrace market data boundaries.",
+                "credentialPolicy": "Provider credentials are resolved backend-side from MySQL system config or environment; no raw keys are returned.",
+                "fallbackPolicy": "Static seed fallback remains available for MVP/demo continuity.",
+                "professionalDataPolicy": "ETF/fund/index/futures provider integrations must enter through the AlphaTrace data API/provider boundary.",
+            },
             "message": "AlphaTrace data API catalog describes product-owned data boundaries. It does not expose provider credentials or legacy trading internals.",
         }
 
@@ -127,4 +211,4 @@ def get_data_api_catalog() -> AlphaTraceDataApiCatalog:
     return AlphaTraceDataApiCatalog()
 
 
-__all__ = ["AlphaTraceDataApiCatalog", "DataApiResource", "get_data_api_catalog"]
+__all__ = ["AlphaTraceDataApiCatalog", "DataApiProvider", "DataApiResource", "get_data_api_catalog"]

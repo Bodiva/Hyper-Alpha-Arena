@@ -2495,3 +2495,22 @@ Expected:
 - `frontend/app/shared/api/endpoints.ts` exports the readiness endpoint.
 - `frontend/app/entities/runtime/api.ts` exports readiness types and `getRuntimeReadinessAsync`.
 - No existing page wiring is changed in this milestone.
+
+### M183 Data API Provider Catalog
+
+Required backend compile:
+
+```powershell
+python -m py_compile backend/services/data_api/catalog.py backend/services/architecture_index.py
+```
+
+Required regression:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1
+```
+
+Expected:
+
+- Data API catalog includes provider descriptors for static seed, MySQL, Bocha, future professional market data, and LangAlpha.
+- Catalog policies clarify credential, fallback, professional data, and legacy BTC/Hyperliquid boundaries.

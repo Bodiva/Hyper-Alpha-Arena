@@ -4465,3 +4465,24 @@ Notes:
 
 Next:
 - Continue with endpoint smoke documentation or a minimal backend self-check endpoint that does not require restarting the stale Docker backend.
+
+## 2026-05-05 - M183 Data API Provider Catalog
+
+Goal:
+- Make AlphaTrace data provider boundaries explicit before adding professional ETF/fund/index data sources.
+
+Changes:
+- Updated `backend/services/data_api/catalog.py`.
+- Updated `backend/services/architecture_index.py`.
+- Updated `scripts/alphatrace/smoke_backend_abstractions.ps1`.
+
+Validation:
+- `python -m py_compile backend/services/data_api/catalog.py backend/services/architecture_index.py`: passed.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`: passed.
+
+Notes:
+- Providers now include static seed, MySQL domain store, Bocha search, planned professional market data, and LangAlpha external workbench.
+- Catalog policy explicitly keeps legacy BTC/Hyperliquid outside the AlphaTrace market data boundary.
+
+Next:
+- Continue with frontend typing for Data API provider catalog or professional data adapter planning.

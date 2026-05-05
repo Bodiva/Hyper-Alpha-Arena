@@ -104,7 +104,7 @@ def get_alphatrace_architecture_index(db: Session | None = None) -> dict[str, An
             "modelProviders": model_providers.get("summary", {}),
             "orchestrators": orchestrators.get("summary", {}),
             "taskSpecs": {"total": task_specs.get("total", 0)},
-            "dataApis": {"total": data_api.get("total", 0)},
+            "dataApis": {"total": data_api.get("total", 0), "providerTotal": data_api.get("providerTotal", 0)},
             "runnerAdapters": {"total": adapter_matrix.get("total", 0)},
             "runnerFlows": {"total": len(flow_items)},
             "tools": {"total": len(tools)},

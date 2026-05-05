@@ -5949,3 +5949,33 @@ Validation:
 Rollback:
 
 Remove the endpoint constant, types, and helper.
+
+## M183 - Data API Provider Catalog
+
+Status: Completed
+
+Goal:
+
+Make data provider boundaries explicit for static seed, MySQL stores, Bocha search, future professional market data, and LangAlpha external workbench candidates.
+
+Scope:
+
+1. Extend `data_api.catalog` with provider descriptors.
+2. Include provider counts in runtime architecture index.
+3. Update backend abstraction smoke.
+4. Do not change existing data source endpoints or provider execution.
+
+Acceptance:
+
+1. Backend py_compile passes.
+2. Backend abstraction smoke verifies provider descriptors.
+3. Catalog explicitly states legacy BTC/Hyperliquid APIs are not AlphaTrace market data boundaries.
+
+Validation:
+
+1. `python -m py_compile backend/services/data_api/catalog.py backend/services/architecture_index.py`.
+2. `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`.
+
+Rollback:
+
+Remove provider descriptors and smoke additions.
