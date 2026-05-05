@@ -39,6 +39,7 @@ from services.alpha_trace_agent_runtime_service import (
     retry_agent_run,
     submit_agent_run,
 )
+from services.agent_runtime_health import find_stale_agent_runs
 from services.agent_orchestrator.execution_policy import get_runner_execution_policy
 from services.agent_orchestrator.capability_matrix import get_runner_capability, list_runner_capabilities, resolve_recommended_runner
 from services.agent_orchestrator.native_plan import build_alphatrace_native_plan
@@ -499,6 +500,18 @@ def get_agent_runtime_store_health_endpoint():
 
     result["overallStatus"] = "ok" if result["agentRunStore"]["available"] and result["systemConfigStore"]["available"] else "degraded"
     return result
+
+
+@router.get("/runtime/stale-runs")
+def get_agent_runtime_stale_runs_endpoint(olderThanMinutes: int = Query(60, ge=1, le=1440)):
+    runs = get_agent_run_store().list_runs()
+    stale = find_stale_agent_runs(runs, older_than_minutes=olderThanMinutes)
+    return {
+        "olderThanMinutes": olderThanMinutes,
+        "items": [item.to_dict() for item in stale],
+        "total": len(stale),
+        "message": "This is a read-only diagnostic. It does not cancel, retry, or mutate AgentRun status.",
+    }
 
 
 @router.get("/{run_id}/worker-artifacts")

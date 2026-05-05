@@ -4021,3 +4021,22 @@ Validation:
 
 Next:
 - M162 should do a repository status checkpoint and decide whether to reload backend for HTTP endpoint smoke or continue static-safe refactoring.
+
+## 2026-05-05 - M162 Stale AgentRun Diagnostics
+
+Goal:
+- Add read-only diagnostics for AgentRuns that remain running/submitted beyond a threshold.
+
+Changes:
+- Added `backend/services/agent_runtime_health.py`.
+- Added `GET /api/alpha-trace/agent-runs/runtime/stale-runs`.
+
+Validation:
+- `python -m py_compile backend/services/agent_runtime_health.py backend/api/alpha_trace_agent_runtime_routes.py`: passed.
+- Local stale run detector smoke passed; old running run detected and completed run ignored.
+
+Runtime observation:
+- Current running backend reports two old `alphatrace_native` runs still marked `running`, so I avoided backend restart in this milestone.
+
+Next:
+- M163 should either add a safe stale-run UI/client plan or perform a backend reload only after confirming no active user-important run should continue.

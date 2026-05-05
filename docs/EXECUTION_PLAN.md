@@ -5326,3 +5326,32 @@ Validation:
 Rollback:
 
 Revert the architecture doc update.
+
+## M162 - Stale AgentRun Diagnostics
+
+Status: Completed
+
+Goal:
+
+Add read-only diagnostics for AgentRuns that remain running/submitted beyond a threshold.
+
+Scope:
+
+1. Add `find_stale_agent_runs` helper.
+2. Add `GET /api/alpha-trace/agent-runs/runtime/stale-runs`.
+3. Do not cancel, retry, or mutate runs automatically.
+
+Acceptance:
+
+1. Backend py_compile passes.
+2. Local smoke detects an old running run and ignores completed runs.
+3. Endpoint is read-only.
+
+Validation:
+
+1. `python -m py_compile backend/services/agent_runtime_health.py backend/api/alpha_trace_agent_runtime_routes.py`.
+2. Local Python smoke for `find_stale_agent_runs`.
+
+Rollback:
+
+Remove helper and endpoint. Existing runtime behavior remains unaffected.

@@ -2141,3 +2141,16 @@ Documentation-only.
 Required checks:
 
 - `docs/ARCHITECTURE.md` mentions runtime_config, async_tasks scheduler, data_api catalog, agent_artifacts, adapter matrix, and flow catalog.
+
+### M162 Stale AgentRun Diagnostics
+
+Required backend compile:
+
+```powershell
+python -m py_compile backend/services/agent_runtime_health.py backend/api/alpha_trace_agent_runtime_routes.py
+```
+
+Required local smoke:
+
+- Old running run is detected.
+- Completed run is ignored.
