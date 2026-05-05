@@ -44,6 +44,31 @@ export interface BackendModuleBoundaryCatalogResponse {
   message?: string;
 }
 
+export interface ExternalComponentDescriptor {
+  component_id: string;
+  display_name: string;
+  source_type: string;
+  integration_mode: string;
+  status: string;
+  product_role: string;
+  viable_capabilities: string[];
+  non_goals: string[];
+  adapter_boundary: string;
+  license_policy: string;
+  runtime_requirements?: string[];
+  risk_notes?: string[];
+  next_steps?: string[];
+}
+
+export interface ExternalComponentCatalogResponse {
+  version: number;
+  components: ExternalComponentDescriptor[];
+  total: number;
+  summary: JsonRecord;
+  policies: Record<string, string>;
+  message?: string;
+}
+
 export interface RuntimeConfigStatus {
   status: string;
   available?: boolean;
@@ -236,6 +261,9 @@ export const getRuntimeArchitectureAsync = () =>
 
 export const getRuntimeModuleBoundariesAsync = () =>
   httpClient.get<BackendModuleBoundaryCatalogResponse>(ENDPOINTS.alphaTraceAgentRuntimeModuleBoundaries);
+
+export const getRuntimeExternalComponentsAsync = () =>
+  httpClient.get<ExternalComponentCatalogResponse>(ENDPOINTS.alphaTraceAgentRuntimeExternalComponents);
 
 export const getRuntimeReadinessAsync = () =>
   httpClient.get<RuntimeReadinessResponse>(ENDPOINTS.alphaTraceAgentRuntimeReadiness);

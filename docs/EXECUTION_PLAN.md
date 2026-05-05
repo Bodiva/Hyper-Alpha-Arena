@@ -6268,3 +6268,32 @@ Validation:
 Rollback:
 
 Remove the external component catalog service, endpoint, architecture-index additions, and smoke additions.
+
+## M194 - Frontend External Component Contract
+
+Status: Completed
+
+Goal:
+
+Expose the external component integration catalog through typed frontend API helpers.
+
+Scope:
+
+1. Add `alphaTraceAgentRuntimeExternalComponents` endpoint constant.
+2. Add `ExternalComponentDescriptor` and `ExternalComponentCatalogResponse` frontend types.
+3. Add `getRuntimeExternalComponentsAsync` helper.
+4. Do not wire existing pages in this milestone.
+
+Acceptance:
+
+1. Frontend build passes.
+2. Typed helper compiles without new dependencies.
+3. No existing page wiring is changed.
+
+Validation:
+
+1. `pnpm --dir frontend build`.
+
+Rollback:
+
+Remove the endpoint constant, frontend types, and helper.

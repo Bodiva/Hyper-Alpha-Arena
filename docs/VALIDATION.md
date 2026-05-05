@@ -2673,3 +2673,18 @@ Expected:
 - External component catalog includes TradingAgents, LangAlpha, Bocha, and future professional market data.
 - Catalog states integration mode, non-goals, runtime requirements, and risk notes.
 - No external project is imported or executed.
+
+### M194 Frontend External Component Contract
+
+Required frontend build:
+
+```powershell
+pnpm --dir frontend build
+```
+
+Expected:
+
+- Build succeeds.
+- `frontend/app/shared/api/endpoints.ts` exports the external component endpoint.
+- `frontend/app/entities/runtime/api.ts` exports external component types and `getRuntimeExternalComponentsAsync`.
+- No existing page wiring is changed.

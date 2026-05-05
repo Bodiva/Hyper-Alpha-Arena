@@ -4686,3 +4686,22 @@ Notes:
 Next:
 - Validate and commit the catalog.
 
+
+## 2026-05-05 - M194 Frontend External Component Contract
+
+Goal:
+- Add typed frontend access to the external component integration catalog.
+
+Changes:
+- Updated `frontend/app/shared/api/endpoints.ts`.
+- Updated `frontend/app/entities/runtime/api.ts`.
+
+Validation:
+- `pnpm --dir frontend build`: passed.
+
+Notes:
+- This milestone only adds frontend API contracts.
+- Future diagnostics UI can compare TradingAgents, LangAlpha, Bocha, and professional data provider integration modes without hard-coded page logic.
+
+Next:
+- Validate build and commit.
