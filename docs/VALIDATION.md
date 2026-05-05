@@ -2905,3 +2905,17 @@ Expected:
 - `frontend/app/shared/ui/AgentSkillBindingPanel.tsx` compiles.
 - `ArchitectureReviewPanel` renders `agentSkillBindings` from the review bundle.
 - No new dependencies are introduced.
+
+### M208 Data Center Tool Skill Agent Flow Documentation
+
+Documentation-only check:
+
+```powershell
+Select-String -Path docs/engineering/72_data_center_tool_skill_agent_flow.md -Pattern "Data Center","Tool Registry","Skill Catalog","ClickHouse","TradingAgents","LangAlpha"
+```
+
+Expected:
+
+- Document describes the end-to-end Data Center -> Tool -> Skill -> Agent -> Store flow.
+- Bocha is documented as a backend tool provider.
+- MySQL and ClickHouse responsibilities are separated.

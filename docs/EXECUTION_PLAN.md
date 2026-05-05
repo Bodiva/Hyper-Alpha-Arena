@@ -6696,3 +6696,30 @@ Validation:
 Rollback:
 
 Remove `AgentSkillBindingPanel` and the ArchitectureReviewPanel binding additions.
+
+## M208 - Data Center Tool Skill Agent Flow Documentation
+
+Status: Completed
+
+Goal:
+
+Document the end-to-end Data Center -> Tool -> Skill -> Agent -> Store contract so future TradingAgents, LangAlpha, Bocha, and professional-data integrations share the same boundary.
+
+Scope:
+
+1. Add `docs/engineering/72_data_center_tool_skill_agent_flow.md`.
+2. Include control-plane definitions, Mermaid data flow, role binding flow, store routing, tool boundary, skill boundary, and external framework boundary.
+3. Do not modify business code.
+
+Acceptance:
+
+1. Document exists and mentions Data Center, Tool Registry, Skill Catalog, Agent Orchestrator, MySQL, ClickHouse, Bocha, TradingAgents, and LangAlpha.
+2. No build required because this is documentation-only.
+
+Validation:
+
+1. `Select-String -Path docs/engineering/72_data_center_tool_skill_agent_flow.md -Pattern "Data Center","Tool Registry","Skill Catalog","ClickHouse","TradingAgents","LangAlpha"`.
+
+Rollback:
+
+Remove `docs/engineering/72_data_center_tool_skill_agent_flow.md`.

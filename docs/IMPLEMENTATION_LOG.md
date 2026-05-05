@@ -4987,3 +4987,23 @@ Notes:
 
 Next:
 - Continue with M208: document and validate the end-to-end Data Center -> Tool -> Skill -> Agent -> Store data flow, then choose the next implementation slice.
+
+## 2026-05-05 - M208 Data Center Tool Skill Agent Flow Documentation
+
+Goal:
+- Document the end-to-end Data Center -> Tool -> Skill -> Agent -> Store contract for future external component integration.
+
+Changes:
+- Added `docs/engineering/72_data_center_tool_skill_agent_flow.md`.
+
+Validation:
+- `Select-String -Path docs/engineering/72_data_center_tool_skill_agent_flow.md -Pattern "Data Center","Tool Registry","Skill Catalog","ClickHouse","TradingAgents","LangAlpha"`: passed, 25 matches.
+
+Result:
+- M208 is complete. The end-to-end Data Center -> Tool -> Skill -> Agent -> Store contract is now documented.
+
+Notes:
+- Documentation-only milestone.
+
+Next:
+- Continue with M209: add a ClickHouse schema/catalog read model or schema design document for structured business data.
