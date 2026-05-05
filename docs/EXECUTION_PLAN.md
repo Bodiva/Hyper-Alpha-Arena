@@ -5689,3 +5689,30 @@ Validation:
 Rollback:
 
 Remove the added AgentArtifact types and helper.
+
+## M174 - Reusable AgentArtifact Preview Card
+
+Status: Completed
+
+Goal:
+
+Add a reusable frontend UI primitive for rendering AgentArtifact items.
+
+Scope:
+
+1. Add `AgentArtifactPreviewCard`.
+2. Support web URL, JSON, text, file/storage URI and generic artifact metadata.
+3. Do not wire pages in this milestone.
+
+Acceptance:
+
+1. Frontend build passes.
+2. Component compiles without new dependencies.
+
+Validation:
+
+1. `pnpm --dir frontend build`.
+
+Rollback:
+
+Remove `frontend/app/shared/ui/AgentArtifactPreviewCard.tsx`.

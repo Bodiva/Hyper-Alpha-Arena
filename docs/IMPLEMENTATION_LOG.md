@@ -4278,3 +4278,23 @@ Notes:
 
 Next:
 - M174 should add a small reusable artifact preview/view model component or continue backend event compaction/read-model work.
+
+## 2026-05-05 - M174 Reusable AgentArtifact Preview Card
+
+Goal:
+- Add a reusable frontend UI primitive for rendering AgentArtifact items without wiring existing pages yet.
+
+Changes:
+- Added `frontend/app/shared/ui/AgentArtifactPreviewCard.tsx`.
+
+Validation:
+- `pnpm --dir frontend build`: passed.
+
+Notes:
+- The card supports web URL, JSON, text, file/storage URI, and generic artifact metadata previews.
+- It deliberately avoids iframe embedding; source URLs remain the canonical navigation target.
+- Existing Vite chunk and browserslist warnings remain.
+- No existing page UI was changed, which avoids mixing this slice with unrelated dirty frontend files.
+
+Next:
+- Continue with a backend event/timeline compaction read model so `reasoning.chunk` and `metric.updated` events do not dominate AgentRunDetail timelines.

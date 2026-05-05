@@ -2336,3 +2336,17 @@ Expected:
 
 - Build succeeds.
 - `frontend/app/entities/runtime/api.ts` exports AgentArtifact types and `listAgentRunArtifactsAsync`.
+
+### M174 Reusable AgentArtifact Preview Card
+
+Required frontend build:
+
+```powershell
+pnpm --dir frontend build
+```
+
+Expected:
+
+- Build succeeds.
+- `frontend/app/shared/ui/AgentArtifactPreviewCard.tsx` compiles without new dependencies.
+- No existing page wiring is changed in this milestone.
