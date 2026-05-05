@@ -5373,3 +5373,37 @@ Notes:
 
 Result:
 - M222 is complete. Agent Run Progress recent events and Agent Timeline now compact chunk/metric noise more aggressively while keeping raw events available.
+
+## 2026-05-05 - M223 ClickHouse Import Field Mapping UI and API
+
+Goal:
+- Make the Data Import workflow practical for real ETF/index Excel files by allowing source columns to be mapped into the structured ClickHouse valuation wide table.
+
+Changes:
+- Backend:
+  - Added `fieldMapping` parsing for upload and local file import endpoints.
+  - Added explicit source-column validation and target-field validation.
+  - Added default field mapping detection from known Chinese/English column aliases.
+  - Added `sourceColumns` and `fieldMapping` to `FileImportResponse`.
+- Frontend:
+  - Added Data Import mapping controls from source columns to ClickHouse target columns.
+  - Replaced opaque payload display with wide-table preview/row rendering.
+  - Added frontend API support for passing `fieldMapping`.
+
+Validation:
+- `python -m py_compile backend/api/alpha_trace_data_source_routes.py backend/schemas/alpha_trace_data_source.py backend/services/etf_file_import_service.py`: passed.
+- `pnpm --dir frontend build`: passed with existing Vite chunk and Browserslist warnings.
+- HTTP dry-run on `8802` could not run because Docker Desktop was not available in this environment.
+- Service-level dry-run CSV import with explicit field mapping: passed.
+  - Source columns detected: `代码`, `名称`, `日期`, `收盘`, `PE`.
+  - Effective mapping included `index_code -> 代码`, `index_name -> 名称`, `trade_date -> 日期`, `close_price -> 收盘`, `pe_etf_weighted -> PE`.
+  - Preview payload parsed `close_price=4123.45` and `pe_etf_weighted=12.34`.
+- Service-level invalid mapping check: passed; missing source column raises `Mapped source column not found`.
+
+Notes:
+- This is still a ClickHouse structured data import path, not a real-time market feed.
+- This does not change AgentRun/Qwen/Native/TradingAgents execution.
+
+Result:
+- M223 is complete at code/build/service-validation level.
+- Docker/API runtime validation should be rerun when Docker Desktop is available.

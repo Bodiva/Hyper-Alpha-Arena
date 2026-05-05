@@ -68,6 +68,8 @@ class FileImportResponse(BaseModel):
     recordsSucceeded: int
     recordsFailed: int
     columns: List[str] = Field(default_factory=list)
+    sourceColumns: List[str] = Field(default_factory=list)
+    fieldMapping: Dict[str, str] = Field(default_factory=dict)
     previewRows: List[FileImportPreviewRow] = Field(default_factory=list)
     message: str
 

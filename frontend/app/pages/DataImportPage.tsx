@@ -6,6 +6,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -28,11 +35,79 @@ import ResearchWorkspaceNav from "@/shared/ui/ResearchWorkspaceNav";
 
 const MAX_DISPLAY_COLUMNS = 12;
 
+const WIDE_SCHEMA_COLUMNS = [
+  { key: "rowNumber", label: "row_number" },
+  { key: "assetSymbol", label: "index_code" },
+  { key: "assetName", label: "index_name" },
+  { key: "tradeDate", label: "trade_date" },
+  { key: "close_price", label: "close_price" },
+  { key: "pe_etf_weighted", label: "pe_etf_weighted" },
+  { key: "pe_market_cap_weighted", label: "pe_market_cap_weighted" },
+  { key: "pe_equal_weighted", label: "pe_equal_weighted" },
+  { key: "pb_etf_weighted", label: "pb_etf_weighted" },
+  { key: "pb_market_cap_weighted", label: "pb_market_cap_weighted" },
+  { key: "pb_equal_weighted", label: "pb_equal_weighted" },
+  { key: "dividend_yield_pct", label: "dividend_yield_pct" },
+  { key: "roe_pct", label: "roe_pct" },
+  { key: "ps", label: "ps" },
+  { key: "constituent_avg_rolling_net_profit_100m", label: "constituent_avg_rolling_net_profit_100m" },
+  { key: "constituent_avg_market_cap_100m", label: "constituent_avg_market_cap_100m" },
+  { key: "index_total_float_market_cap_100m", label: "index_total_float_market_cap_100m" },
+  { key: "index_total_market_cap_100m", label: "index_total_market_cap_100m" },
+] as const;
+
+const MAPPABLE_SCHEMA_FIELDS = WIDE_SCHEMA_COLUMNS.filter((column) => column.key !== "rowNumber");
+
+type WideRow = FileImportResponse["previewRows"][number] | ImportedFileRow;
+
 const formatBytes = (bytes: number): string => {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 };
+
+const formatCellValue = (value: unknown): string => {
+  if (value === null || value === undefined || value === "") return "-";
+  if (typeof value === "number") return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(6)));
+  return String(value);
+};
+
+const getWideRowValue = (row: WideRow, key: string): unknown => {
+  if (key === "rowNumber") return row.rowNumber;
+  if (key === "assetSymbol") return row.assetSymbol;
+  if (key === "assetName") return row.assetName;
+  if (key === "tradeDate") return row.tradeDate;
+  return row.payload[key];
+};
+
+function WideSchemaTable({ rows }: { rows: WideRow[] }) {
+  return (
+    <div className="overflow-auto rounded-md border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            {WIDE_SCHEMA_COLUMNS.map((column) => (
+              <TableHead key={column.key} className="min-w-[130px] whitespace-nowrap">
+                {column.label}
+              </TableHead>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((row) => (
+            <TableRow key={row.rowNumber}>
+              {WIDE_SCHEMA_COLUMNS.map((column) => (
+                <TableCell key={column.key} className="whitespace-nowrap">
+                  {formatCellValue(getWideRowValue(row, column.key))}
+                </TableCell>
+              ))}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
 
 export default function DataImportPage() {
   const [file, setFile] = useState<File | null>(null);
@@ -49,8 +124,22 @@ export default function DataImportPage() {
   const [selectedImport, setSelectedImport] = useState<ImportedFileBatch | null>(null);
   const [importRows, setImportRows] = useState<ImportedFileRow[]>([]);
   const [isLoadingImportedData, setIsLoadingImportedData] = useState(false);
+  const [fieldMapping, setFieldMapping] = useState<Record<string, string>>({});
 
   const visibleColumns = useMemo(() => result?.columns.slice(0, MAX_DISPLAY_COLUMNS) ?? [], [result]);
+  const sourceColumns = result?.sourceColumns ?? [];
+
+  const updateFieldMapping = (targetColumn: string, sourceColumn: string) => {
+    setFieldMapping((current) => {
+      const next = { ...current };
+      if (sourceColumn === "__unmapped__") {
+        delete next[targetColumn];
+      } else {
+        next[targetColumn] = sourceColumn;
+      }
+      return next;
+    });
+  };
 
   const loadLocalFiles = async () => {
     setIsLoadingLocalFiles(true);
@@ -125,8 +214,10 @@ export default function DataImportPage() {
         dataCategory,
         dryRun,
         previewLimit: 8,
+        fieldMapping,
       });
       setResult(response);
+      setFieldMapping(response.fieldMapping ?? {});
       if (!response.dryRun) {
         await loadImportedData();
         setSelectedImport({
@@ -159,8 +250,10 @@ export default function DataImportPage() {
         dataCategory,
         dryRun,
         previewLimit: 8,
+        fieldMapping,
       });
       setResult(response);
+      setFieldMapping(response.fieldMapping ?? {});
       if (!response.dryRun) {
         await loadImportedData();
         setSelectedImport({
@@ -208,6 +301,7 @@ export default function DataImportPage() {
                   setFile(event.target.files?.[0] ?? null);
                   setResult(null);
                   setError(null);
+                  setFieldMapping({});
                 }}
               />
               {file ? (
@@ -267,7 +361,7 @@ export default function DataImportPage() {
         <Card className="xl:col-span-3">
           <CardHeader className="pb-3">
             <CardTitle className="text-base">导入结果</CardTitle>
-            <CardDescription>服务端会保留原始行 JSON，并抽取 symbol、name、date 等索引字段</CardDescription>
+            <CardDescription>服务端会按 ClickHouse 宽表列解析指数估值指标</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             {!result ? (
@@ -316,32 +410,44 @@ export default function DataImportPage() {
                   ) : null}
                 </div>
 
-                <div className="overflow-auto rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>row</TableHead>
-                        <TableHead>symbol</TableHead>
-                        <TableHead>name</TableHead>
-                        <TableHead>date</TableHead>
-                        <TableHead>payload</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {result.previewRows.map((row) => (
-                        <TableRow key={row.rowNumber}>
-                          <TableCell>{row.rowNumber}</TableCell>
-                          <TableCell>{row.assetSymbol || "-"}</TableCell>
-                          <TableCell>{row.assetName || "-"}</TableCell>
-                          <TableCell>{row.tradeDate || "-"}</TableCell>
-                          <TableCell className="max-w-[440px] truncate">
-                            {JSON.stringify(row.payload)}
-                          </TableCell>
-                        </TableRow>
+                {sourceColumns.length > 0 ? (
+                  <div className="rounded-md border p-3">
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-medium">字段映射</p>
+                        <p className="text-xs text-muted-foreground">目标列是 ClickHouse 宽表 schema，默认按同名字段和已知中文表头匹配。</p>
+                      </div>
+                      <Badge variant="secondary">{sourceColumns.length} 个文件列</Badge>
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                      {MAPPABLE_SCHEMA_FIELDS.map((field) => (
+                        <div key={field.key} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-2">
+                          <span className="truncate text-xs font-medium" title={field.label}>
+                            {field.label}
+                          </span>
+                          <Select
+                            value={fieldMapping[field.key] ?? "__unmapped__"}
+                            onValueChange={(value) => updateFieldMapping(field.key, value)}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="未映射" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__unmapped__">未映射</SelectItem>
+                              {sourceColumns.map((sourceColumn) => (
+                                <SelectItem key={`${field.key}-${sourceColumn}`} value={sourceColumn}>
+                                  {sourceColumn}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
                       ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                    </div>
+                  </div>
+                ) : null}
+
+                <WideSchemaTable rows={result.previewRows} />
               </>
             )}
           </CardContent>
@@ -412,7 +518,7 @@ export default function DataImportPage() {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <CardTitle className="text-base">已导入 ClickHouse 数据</CardTitle>
-              <CardDescription>点击导入批次查看前 100 行原始 payload</CardDescription>
+              <CardDescription>点击导入批次查看前 100 行 ClickHouse 宽表指标列</CardDescription>
             </div>
             <Button size="sm" variant="outline" onClick={loadImportedData} disabled={isLoadingImportedData}>
               <RefreshCw className={isLoadingImportedData ? "h-4 w-4 animate-spin" : "h-4 w-4"} data-icon="inline-start" />
@@ -464,43 +570,18 @@ export default function DataImportPage() {
             </Table>
           </div>
 
-          <div className="xl:col-span-3 overflow-auto rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>row</TableHead>
-                  <TableHead>symbol</TableHead>
-                  <TableHead>name</TableHead>
-                  <TableHead>date</TableHead>
-                  <TableHead>payload</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {!selectedImport ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
-                      请选择一个导入批次。
-                    </TableCell>
-                  </TableRow>
-                ) : importRows.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
-                      {isLoadingImportedData ? "正在读取..." : "暂无数据。"}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  importRows.map((row) => (
-                    <TableRow key={`${selectedImport.importId}-${row.rowNumber}`}>
-                      <TableCell>{row.rowNumber}</TableCell>
-                      <TableCell>{row.assetSymbol || "-"}</TableCell>
-                      <TableCell>{row.assetName || "-"}</TableCell>
-                      <TableCell>{row.tradeDate || "-"}</TableCell>
-                      <TableCell className="max-w-[520px] truncate">{JSON.stringify(row.payload)}</TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+          <div className="xl:col-span-3">
+            {!selectedImport ? (
+              <div className="rounded-md border py-8 text-center text-sm text-muted-foreground">
+                请选择一个导入批次。
+              </div>
+            ) : importRows.length === 0 ? (
+              <div className="rounded-md border py-8 text-center text-sm text-muted-foreground">
+                {isLoadingImportedData ? "正在读取..." : "暂无数据。"}
+              </div>
+            ) : (
+              <WideSchemaTable rows={importRows} />
+            )}
           </div>
         </CardContent>
       </Card>

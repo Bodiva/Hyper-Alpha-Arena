@@ -7189,3 +7189,37 @@ Validation:
 Rollback:
 
 Revert `runtime-step-mapper.ts` and the AgentRunDetail timeline grouping condition.
+
+## M223 - ClickHouse Import Field Mapping UI and API
+
+Status: Completed
+
+Goal:
+
+Let users review and override source-file column mappings before importing ETF/index valuation data into the structured ClickHouse wide table.
+
+Scope:
+
+1. Add optional `fieldMapping` query payload for upload and local file import endpoints.
+2. Validate mapping target fields and source columns on the backend.
+3. Return `sourceColumns` and effective `fieldMapping` in `FileImportResponse`.
+4. Add Data Import UI controls for mapping source columns to ClickHouse target wide-table columns.
+5. Render imported/preview rows as structured wide-table columns instead of opaque JSON payload.
+6. Do not change ClickHouse table ownership, runner behavior, or legacy pages.
+
+Acceptance:
+
+1. Dry-run import can return detected source columns and default field mapping.
+2. Explicit field mapping can be passed and applied.
+3. Invalid field mapping returns a clear HTTP 400.
+4. Data Import page builds with mapping controls.
+
+Validation:
+
+1. `python -m py_compile backend/api/alpha_trace_data_source_routes.py backend/schemas/alpha_trace_data_source.py backend/services/etf_file_import_service.py`
+2. `pnpm --dir frontend build`
+3. Dry-run CSV import with explicit `fieldMapping`.
+
+Rollback:
+
+Revert data-source route/schema/import-service changes and DataImportPage mapping UI changes.

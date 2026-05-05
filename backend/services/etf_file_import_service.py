@@ -111,6 +111,13 @@ ETF_INDEX_VALUATION_METRIC_COLUMNS = [
     "index_total_market_cap_100m",
 ]
 
+ETF_INDEX_VALUATION_MAPPABLE_COLUMNS = [
+    "index_code",
+    "index_name",
+    "trade_date",
+    *ETF_INDEX_VALUATION_METRIC_COLUMNS,
+]
+
 _FLOAT_COLUMNS = {
     "close_price": {"收盘价", "close_price", "close"},
     "pe_etf_weighted": {"PE_ETF加权", "pe_etf_weighted"},
@@ -129,6 +136,13 @@ _FLOAT_COLUMNS = {
     "constituent_avg_market_cap_100m": {"成分股平均市值(亿)", "constituent_avg_market_cap_100m"},
     "index_total_float_market_cap_100m": {"指数总流通市值(亿)", "index_total_float_market_cap_100m"},
     "index_total_market_cap_100m": {"指数总市值(亿)", "index_total_market_cap_100m"},
+}
+
+_TARGET_FIELD_ALIASES = {
+    "index_code": _SYMBOL_COLUMNS,
+    "index_name": _NAME_COLUMNS,
+    "trade_date": _DATE_COLUMNS,
+    **_FLOAT_COLUMNS,
 }
 
 
@@ -203,8 +217,9 @@ def parse_etf_file(filename: str, content: bytes) -> ParsedImportRows:
 
 
 def _first_matching_value(record: dict[str, Any], candidates: set[str]) -> str:
+    normalized_candidates = {_lookup_key(candidate) for candidate in candidates}
     for key, value in record.items():
-        if _lookup_key(key) in candidates and value not in (None, ""):
+        if _lookup_key(key) in normalized_candidates and value not in (None, ""):
             return str(value).strip()
     return ""
 
@@ -243,10 +258,76 @@ def _to_float(value: Any) -> Optional[float]:
 
 
 def _first_matching_float(record: dict[str, Any], candidates: set[str]) -> Optional[float]:
+    raw = _first_matching_raw_value(record, candidates)
+    return _to_float(raw)
+
+
+def _first_matching_raw_value(record: dict[str, Any], candidates: set[str]) -> Any:
+    normalized_candidates = {_lookup_key(candidate) for candidate in candidates}
     for key, value in record.items():
-        if _lookup_key(key) in {_lookup_key(candidate) for candidate in candidates}:
-            return _to_float(value)
+        if _lookup_key(key) in normalized_candidates:
+            return value
     return None
+
+
+def _explicit_mapping_value(record: dict[str, Any], source_column: Optional[str]) -> Any:
+    if not source_column:
+        return None
+    return record.get(source_column)
+
+
+def _target_value(record: dict[str, Any], target_column: str, field_mapping: dict[str, str]) -> Any:
+    if target_column in field_mapping:
+        return _explicit_mapping_value(record, field_mapping[target_column])
+    return _first_matching_raw_value(record, _TARGET_FIELD_ALIASES.get(target_column, {target_column}))
+
+
+def _target_string(record: dict[str, Any], target_column: str, field_mapping: dict[str, str]) -> str:
+    value = _target_value(record, target_column, field_mapping)
+    return "" if value in (None, "") else str(value).strip()
+
+
+def _target_date(record: dict[str, Any], target_column: str, field_mapping: dict[str, str]) -> Optional[str]:
+    raw = _target_value(record, target_column, field_mapping)
+    if not raw:
+        return None
+    parsed = pd.to_datetime(raw, errors="coerce")
+    if pd.isna(parsed):
+        return None
+    return parsed.date().isoformat()
+
+
+def _target_float(record: dict[str, Any], target_column: str, field_mapping: dict[str, str]) -> Optional[float]:
+    return _to_float(_target_value(record, target_column, field_mapping))
+
+
+def _sanitize_field_mapping(field_mapping: Optional[dict[str, str]], source_columns: list[str]) -> dict[str, str]:
+    if not field_mapping:
+        return {}
+    allowed_targets = set(ETF_INDEX_VALUATION_MAPPABLE_COLUMNS)
+    source_column_set = set(source_columns)
+    sanitized: dict[str, str] = {}
+    for target_column, source_column in field_mapping.items():
+        if target_column not in allowed_targets:
+            raise EtfFileImportError(f"Unsupported target field mapping: {target_column}")
+        if source_column in (None, ""):
+            continue
+        if source_column not in source_column_set:
+            raise EtfFileImportError(f"Mapped source column not found: {source_column}")
+        sanitized[target_column] = source_column
+    return sanitized
+
+
+def default_etf_index_valuation_field_mapping(source_columns: list[str]) -> dict[str, str]:
+    mapping: dict[str, str] = {}
+    for target_column in ETF_INDEX_VALUATION_MAPPABLE_COLUMNS:
+        aliases = _TARGET_FIELD_ALIASES.get(target_column, {target_column})
+        normalized_aliases = {_lookup_key(alias) for alias in aliases}
+        for source_column in source_columns:
+            if _lookup_key(source_column) in normalized_aliases:
+                mapping[target_column] = source_column
+                break
+    return mapping
 
 
 def _metric_payload(row: dict[str, Any]) -> dict[str, Any]:
@@ -262,6 +343,7 @@ def _build_clickhouse_rows(
     data_category: str,
     records: Iterable[dict[str, Any]],
     imported_at: str,
+    field_mapping: dict[str, str],
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for index, record in enumerate(records, start=1):
@@ -272,12 +354,12 @@ def _build_clickhouse_rows(
                 "file_name": filename,
                 "file_sha256": file_sha256,
                 "row_number": index,
-                "index_code": _first_matching_value(record, _SYMBOL_COLUMNS),
-                "index_name": _first_matching_value(record, _NAME_COLUMNS),
-                "trade_date": _first_matching_date(record),
+                "index_code": _target_string(record, "index_code", field_mapping),
+                "index_name": _target_string(record, "index_name", field_mapping),
+                "trade_date": _target_date(record, "trade_date", field_mapping),
                 **{
-                    column: _first_matching_float(record, candidates)
-                    for column, candidates in _FLOAT_COLUMNS.items()
+                    column: _target_float(record, column, field_mapping)
+                    for column in ETF_INDEX_VALUATION_METRIC_COLUMNS
                 },
                 "data_category": data_category,
                 "imported_at": imported_at,
@@ -309,11 +391,15 @@ def import_etf_file_to_clickhouse(
     data_category: str = "MARKET_DATA",
     dry_run: bool = False,
     preview_limit: int = 5,
+    field_mapping: Optional[dict[str, str]] = None,
 ) -> FileImportResponse:
     max_rows = int(os.getenv("ALPHA_TRACE_FILE_IMPORT_MAX_ROWS", "100000"))
     parsed = parse_etf_file(filename, content)
     if len(parsed.rows) > max_rows:
         raise EtfFileImportError(f"File contains {len(parsed.rows)} rows, exceeding limit {max_rows}.")
+    effective_field_mapping = _sanitize_field_mapping(field_mapping, parsed.columns)
+    if not effective_field_mapping:
+        effective_field_mapping = default_etf_index_valuation_field_mapping(parsed.columns)
 
     import_id = f"etf_import_{uuid4().hex}"
     file_sha256 = hashlib.sha256(content).hexdigest()
@@ -327,6 +413,7 @@ def import_etf_file_to_clickhouse(
         data_category=data_category,
         records=parsed.rows,
         imported_at=imported_at,
+        field_mapping=effective_field_mapping,
     )
 
     if not dry_run:
@@ -348,6 +435,8 @@ def import_etf_file_to_clickhouse(
         recordsSucceeded=len(parsed.rows),
         recordsFailed=0,
         columns=ETF_INDEX_VALUATION_COLUMNS,
+        sourceColumns=parsed.columns,
+        fieldMapping=effective_field_mapping,
         previewRows=_to_preview_rows(clickhouse_rows, parsed.rows, preview_limit),
         message="File parsed successfully." if dry_run else "File imported into ClickHouse.",
     )
@@ -356,8 +445,10 @@ def import_etf_file_to_clickhouse(
 __all__ = [
     "ClickHouseStoreError",
     "ETF_INDEX_VALUATION_COLUMNS",
+    "ETF_INDEX_VALUATION_MAPPABLE_COLUMNS",
     "ETF_INDEX_VALUATION_METRIC_COLUMNS",
     "EtfFileImportError",
+    "default_etf_index_valuation_field_mapping",
     "import_etf_file_to_clickhouse",
     "parse_etf_file",
 ]

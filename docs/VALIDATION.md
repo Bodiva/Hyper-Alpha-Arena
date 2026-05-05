@@ -3157,3 +3157,27 @@ Expected:
 - Agent Run Progress recent events can use compacted `live.output` and `metric.updated.summary` items.
 - Agent Timeline groups `reasoning.chunk` / `debate.message` content even when `payload.streaming` is not present.
 - Raw Runtime Event Stream remains unchanged.
+
+## M223 Validation - ClickHouse Import Field Mapping UI and API
+
+Required checks:
+
+```powershell
+python -m py_compile backend/api/alpha_trace_data_source_routes.py backend/schemas/alpha_trace_data_source.py backend/services/etf_file_import_service.py
+pnpm --dir frontend build
+```
+
+Dry-run smoke:
+
+```powershell
+$csv = "代码,名称,日期,收盘,PE`n000300,沪深300,2026-05-05,4123.45,12.34`n"
+$mapping = [uri]::EscapeDataString('{"index_code":"代码","index_name":"名称","trade_date":"日期","close_price":"收盘","pe_etf_weighted":"PE"}')
+Invoke-RestMethod -Method Post "http://127.0.0.1:8802/api/alpha-trace/data-sources/file-imports?filename=field_mapping_smoke.csv&sourceName=FieldMappingSmoke&dataCategory=MARKET_DATA&dryRun=true&previewLimit=1&fieldMapping=$mapping" -Body ([Text.Encoding]::UTF8.GetBytes($csv)) -ContentType "text/csv"
+```
+
+Expected:
+
+- Response includes `sourceColumns`.
+- Response includes the supplied/effective `fieldMapping`.
+- Preview row payload contains mapped wide-table metrics.
+- No ClickHouse write occurs in dry-run mode.

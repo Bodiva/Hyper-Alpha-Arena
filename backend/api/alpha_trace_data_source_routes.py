@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 from datetime import datetime, timezone
@@ -56,6 +57,18 @@ def _quote_table_name(table_name: str) -> str:
     if not 1 <= len(parts) <= 2 or any(not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", part) for part in parts):
         raise HTTPException(status_code=500, detail=f"Invalid ClickHouse table name: {table_name}")
     return ".".join(f"`{part}`" for part in parts)
+
+
+def _parse_field_mapping(value: Optional[str]) -> Optional[dict[str, str]]:
+    if not value:
+        return None
+    try:
+        payload = json.loads(value)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="fieldMapping must be a JSON object.") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="fieldMapping must be a JSON object.")
+    return {str(key): str(mapped) for key, mapped in payload.items() if mapped not in (None, "")}
 
 
 def _get_local_import_dir() -> Path:
@@ -137,6 +150,7 @@ async def import_alpha_trace_etf_file(
     dataCategory: str = Query("MARKET_DATA", min_length=1),
     dryRun: bool = Query(False),
     previewLimit: int = Query(5, ge=0, le=20),
+    fieldMapping: Optional[str] = Query(None),
 ):
     max_bytes = int(os.getenv("ALPHA_TRACE_FILE_IMPORT_MAX_BYTES", str(50 * 1024 * 1024)))
     content = await request.body()
@@ -154,6 +168,7 @@ async def import_alpha_trace_etf_file(
             data_category=dataCategory.strip(),
             dry_run=dryRun,
             preview_limit=previewLimit,
+            field_mapping=_parse_field_mapping(fieldMapping),
         )
     except EtfFileImportError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -168,6 +183,7 @@ def import_alpha_trace_local_etf_file(
     dataCategory: str = Query("MARKET_DATA", min_length=1),
     dryRun: bool = Query(False),
     previewLimit: int = Query(5, ge=0, le=20),
+    fieldMapping: Optional[str] = Query(None),
 ):
     local_file = _resolve_local_import_file(relativePath)
     max_bytes = int(os.getenv("ALPHA_TRACE_FILE_IMPORT_MAX_BYTES", str(50 * 1024 * 1024)))
@@ -181,6 +197,7 @@ def import_alpha_trace_local_etf_file(
             data_category=dataCategory.strip(),
             dry_run=dryRun,
             preview_limit=previewLimit,
+            field_mapping=_parse_field_mapping(fieldMapping),
         )
     except EtfFileImportError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

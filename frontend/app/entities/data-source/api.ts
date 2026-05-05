@@ -76,6 +76,8 @@ export interface FileImportResponse {
   recordsSucceeded: number;
   recordsFailed: number;
   columns: string[];
+  sourceColumns: string[];
+  fieldMapping: Record<string, string>;
   previewRows: FileImportPreviewRow[];
   message: string;
 }
@@ -86,6 +88,7 @@ export interface UploadEtfFileImportParams {
   dataCategory?: string;
   dryRun?: boolean;
   previewLimit?: number;
+  fieldMapping?: Record<string, string>;
 }
 
 export interface LocalImportFile {
@@ -106,6 +109,7 @@ export interface ImportLocalEtfFileParams {
   dataCategory?: string;
   dryRun?: boolean;
   previewLimit?: number;
+  fieldMapping?: Record<string, string>;
 }
 
 export interface ImportedFileBatch {
@@ -232,6 +236,7 @@ export const importLocalEtfFileAsync = ({
   dataCategory = "MARKET_DATA",
   dryRun = false,
   previewLimit = 5,
+  fieldMapping,
 }: ImportLocalEtfFileParams): Promise<FileImportResponse> =>
   httpClient.post<FileImportResponse>(
     ENDPOINTS.alphaTraceDataSourceLocalImport,
@@ -243,6 +248,7 @@ export const importLocalEtfFileAsync = ({
         dataCategory,
         dryRun,
         previewLimit,
+        fieldMapping: fieldMapping ? JSON.stringify(fieldMapping) : undefined,
       },
       timeoutMs: 60000,
     },
@@ -254,6 +260,7 @@ export const uploadEtfFileImportAsync = async ({
   dataCategory = "MARKET_DATA",
   dryRun = false,
   previewLimit = 5,
+  fieldMapping,
 }: UploadEtfFileImportParams): Promise<FileImportResponse> => {
   const base = API_BASE_URL.endsWith("/") ? API_BASE_URL.slice(0, -1) : API_BASE_URL;
   const params = new URLSearchParams({
@@ -263,6 +270,9 @@ export const uploadEtfFileImportAsync = async ({
     dryRun: String(dryRun),
     previewLimit: String(previewLimit),
   });
+  if (fieldMapping) {
+    params.set("fieldMapping", JSON.stringify(fieldMapping));
+  }
 
   const response = await fetch(`${base}${ENDPOINTS.alphaTraceDataSourceFileImports}?${params.toString()}`, {
     method: "POST",
