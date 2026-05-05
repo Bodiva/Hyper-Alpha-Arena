@@ -2264,3 +2264,21 @@ Expected:
 
 - Build succeeds.
 - Existing Vite chunk/browserslist warnings are acceptable unless this milestone changes bundling behavior.
+
+### M169 LangAlpha Reuse Backlog
+
+Documentation-only.
+
+Required checks:
+
+```powershell
+git -C ..\LangAlpha log --oneline -1
+git -C ..\LangAlpha show HEAD:README.md
+git -C ..\LangAlpha show HEAD:pyproject.toml
+git -C ..\LangAlpha ls-tree -r --name-only HEAD
+```
+
+Expected:
+
+- `docs/engineering/70_langalpha_reuse_backlog.md` exists.
+- Document states LangAlpha should be adapter/reference, not AlphaTrace main backend.

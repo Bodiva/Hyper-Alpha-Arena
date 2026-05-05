@@ -5539,3 +5539,33 @@ Validation:
 Rollback:
 
 Remove `frontend/app/entities/runtime/api.ts` and endpoint additions.
+
+## M169 - LangAlpha Reuse Backlog
+
+Status: Completed
+
+Goal:
+
+Document which LangAlpha modules are useful for AlphaTrace and how they should be integrated without embedding LangAlpha as the main backend.
+
+Scope:
+
+1. Inspect sibling `../LangAlpha` via git HEAD because its worktree is currently deleted/empty except `.git`.
+2. Identify reusable concepts and non-reusable modules.
+3. Produce a concrete backlog for external adapter, PTC mapping, data provider comparison, SSE replay, and workspace/artifact strategy.
+4. Do not modify LangAlpha.
+
+Acceptance:
+
+1. Document exists.
+2. Document separates design reference, clean-room implementation, and external service adapter paths.
+3. TradingAgents and LangAlpha roles are clearly distinguished.
+
+Validation:
+
+1. Read LangAlpha `README.md`, `pyproject.toml`, and tree from `HEAD`.
+2. Documentation review.
+
+Rollback:
+
+Remove `docs/engineering/70_langalpha_reuse_backlog.md`.

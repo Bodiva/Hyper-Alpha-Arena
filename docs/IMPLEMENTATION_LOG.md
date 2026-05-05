@@ -4174,3 +4174,24 @@ Notes:
 
 Next:
 - M169 should either wire these APIs into a dedicated diagnostics page/panel after reconciling existing frontend dirty changes, or continue backend contracts for data source/tool result artifacts.
+
+## 2026-05-05 - M169 LangAlpha Reuse Backlog
+
+Goal:
+- Convert LangAlpha architecture review into a concrete AlphaTrace reuse backlog.
+
+Changes:
+- Added `docs/engineering/70_langalpha_reuse_backlog.md`.
+
+Validation:
+- `git -C ../LangAlpha log --oneline -1`: passed.
+- `git -C ../LangAlpha show HEAD:README.md`: passed.
+- `git -C ../LangAlpha show HEAD:pyproject.toml`: passed.
+- `git -C ../LangAlpha ls-tree -r --name-only HEAD`: passed.
+
+Notes:
+- The sibling LangAlpha worktree currently contains only `.git`; files were read from HEAD without modifying the repo.
+- Recommended path: LangAlpha as architecture reference or external service adapter, not embedded main backend.
+
+Next:
+- M170 should define a design-only LangAlpha adapter boundary in AlphaTrace code or continue strengthening data/tool artifact contracts.
