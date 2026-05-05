@@ -47,6 +47,7 @@ from services.agent_runners.registry import AgentRunnerConfigurationError, Agent
 from services.agent_runtime_store.registry import get_agent_run_store
 from services.agent_tool_registry import list_agent_tool_contracts
 from services.integration_adapters import build_default_integration_registry
+from services.async_tasks import get_async_task_store_type, get_mysql_async_task_store
 from services.system_config_store import get_mysql_system_config_store
 
 router = APIRouter(prefix="/api/alpha-trace/agent-runs", tags=["AlphaTrace Agent Runtime"])
@@ -389,6 +390,31 @@ def get_agent_runtime_logs_endpoint(limit: int = Query(400, ge=1, le=2000)):
 @router.get("/runtime/workers")
 def get_agent_runtime_workers_endpoint():
     return get_subprocess_worker_registry_snapshot()
+
+
+@router.get("/runtime/tasks")
+def get_agent_runtime_tasks_endpoint(limit: int = Query(50, ge=1, le=200)):
+    store_type = get_async_task_store_type()
+    if store_type != "mysql":
+        return {
+            "storeType": store_type,
+            "tasks": [],
+            "message": "Async task diagnostics are currently implemented for MySQL store only.",
+        }
+    try:
+        tasks = get_mysql_async_task_store().list_recent(limit=limit)
+        return {
+            "storeType": "mysql",
+            "tasks": [task.__dict__ for task in tasks],
+            "message": "Async task diagnostics are additive. Current AgentRun submit flow may not write task snapshots yet.",
+        }
+    except Exception as exc:  # noqa: BLE001 - diagnostics should fail softly.
+        return {
+            "storeType": "mysql",
+            "tasks": [],
+            "error": str(exc),
+            "message": "Async task store is not available or could not be queried.",
+        }
 
 
 @router.get("/runtime/store-health")

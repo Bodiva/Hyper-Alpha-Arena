@@ -4720,3 +4720,50 @@ Acceptance:
 Validation:
 
 1. Local Python smoke passed.
+
+## M139 - MySQL AsyncTaskStore Skeleton
+
+Status: Completed
+
+Goal:
+
+Add a durable MySQL task snapshot store skeleton for future AgentRun scheduler, cancellation, retry, and timeout management.
+
+Scope:
+
+1. Add `alpha_trace_async_tasks` table definition in a store class.
+2. Add save/get/list/update/cancellation-request helpers.
+3. Do not wire submit flow through this store yet.
+
+Acceptance:
+
+1. Store compiles and can be instantiated in a future runtime smoke.
+2. No existing AgentRun behavior changes.
+
+Validation:
+
+1. `python -m py_compile backend/services/async_tasks/mysql_store.py backend/services/async_tasks/__init__.py`.
+
+## M140 - AsyncTask Diagnostics Endpoint
+
+Status: Completed
+
+Goal:
+
+Expose a read-only diagnostics endpoint for future async task snapshots.
+
+Scope:
+
+1. Add `GET /api/alpha-trace/agent-runs/runtime/tasks`.
+2. Query MySQL async task store if available.
+3. Return safe empty/error diagnostics if store is unavailable.
+4. Do not wire submit flow to async task store yet.
+
+Acceptance:
+
+1. Endpoint is safe even before task snapshots are written.
+
+Validation:
+
+1. `python -m py_compile backend/api/alpha_trace_agent_runtime_routes.py backend/services/async_tasks/mysql_store.py`.
+2. Runtime API smoke after backend reload/restart window.

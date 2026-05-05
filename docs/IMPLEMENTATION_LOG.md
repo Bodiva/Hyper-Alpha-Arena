@@ -3612,3 +3612,32 @@ Validation:
 
 Notes:
 - Qwen reports missing in local host smoke because local Python environment does not share the running Docker/MySQL runtime config. The backend route should use runtime configuration when the app reloads.
+
+## 2026-05-05 - M139 MySQL AsyncTaskStore Skeleton
+
+Goal:
+- Create the durable task table/store boundary needed for future AgentRun worker scheduling, cancellation, retry, and timeout management.
+
+Changes:
+- Added `backend/services/async_tasks/mysql_store.py`.
+- Updated `backend/services/async_tasks/__init__.py` exports.
+
+Validation:
+- Pending py_compile.
+
+Notes:
+- Submit flow is not wired to this store yet. This keeps current runtime behavior stable.
+
+## 2026-05-05 - M140 AsyncTask Diagnostics Endpoint
+
+Goal:
+- Add a safe read-only endpoint for future async task store diagnostics.
+
+Changes:
+- Updated `backend/api/alpha_trace_agent_runtime_routes.py` with `GET /runtime/tasks`.
+
+Validation:
+- Pending py_compile.
+
+Notes:
+- Current submit flow is not yet writing task snapshots, so the endpoint may return an empty list until a later wiring milestone.

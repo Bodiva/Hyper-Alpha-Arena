@@ -1893,3 +1893,27 @@ python -m py_compile backend/services/integration_adapters/registry.py backend/s
 ### M138 Integration Registry Local Smoke
 
 Run a local Python smoke with `PYTHONPATH=backend` to instantiate `build_default_integration_registry()`, list diagnostics, and fail if obvious secret markers such as `sk-`, `Bearer`, or `api_key` appear in the output.
+
+### M139 MySQL AsyncTaskStore Skeleton
+
+Run:
+
+```powershell
+python -m py_compile backend/services/async_tasks/mysql_store.py backend/services/async_tasks/__init__.py
+```
+
+A real DB write smoke is deferred until this store is wired behind an endpoint or controlled script.
+
+### M140 AsyncTask Diagnostics Endpoint
+
+Run:
+
+```powershell
+python -m py_compile backend/api/alpha_trace_agent_runtime_routes.py backend/services/async_tasks/mysql_store.py
+```
+
+After backend reload/restart, smoke:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/agent-runs/runtime/tasks
+```
