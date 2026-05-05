@@ -7353,3 +7353,35 @@ Validation:
 Rollback:
 
 Revert only the M227 documentation entries. No runtime code changes are required.
+
+## M228 - ClickHouse ETF Valuation Schema Catalog Alignment
+
+Status: Completed
+
+Goal:
+
+Align the ClickHouse schema catalog with the implemented structured ETF/index valuation import table.
+
+Scope:
+
+1. Add `alpha_trace.etf_index_valuation_daily` to the schema catalog.
+2. Mark the table as `implemented`.
+3. Document the explicit wide-table columns used by `etf_file_import_service`.
+4. Keep `alpha_trace_market_facts` as a future generic planned table.
+5. Do not write ClickHouse data or change import behavior.
+
+Acceptance:
+
+1. Schema catalog includes `alpha_trace.etf_index_valuation_daily`.
+2. The table includes import lineage fields, index identity, trade date, close price, valuation metrics, and import timestamp.
+3. The table status is `implemented`.
+4. Existing schema catalog endpoint remains read-only.
+
+Validation:
+
+1. `python -m py_compile backend/services/clickhouse_schema_catalog.py backend/api/alpha_trace_agent_runtime_routes.py`
+2. Direct smoke validates the wide table exists, status is `implemented`, and key columns are present.
+
+Rollback:
+
+Remove the `alpha_trace.etf_index_valuation_daily` descriptor from `clickhouse_schema_catalog.py`.

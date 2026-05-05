@@ -3332,3 +3332,32 @@ Expected:
 
 - Projection emits normalized rows for runtime events, reports, evidence refs, and decisions.
 - Projection does not write to ClickHouse.
+
+## M228 Validation - ClickHouse ETF Valuation Schema Catalog Alignment
+
+Required checks:
+
+```powershell
+python -m py_compile backend/services/clickhouse_schema_catalog.py backend/api/alpha_trace_agent_runtime_routes.py
+```
+
+Direct smoke:
+
+```powershell
+$env:PYTHONPATH="backend"
+python - <<'PY'
+from services.clickhouse_schema_catalog import get_clickhouse_schema_catalog
+catalog = get_clickhouse_schema_catalog().to_response()
+tables = {table["table_name"]: table for table in catalog["tables"]}
+wide = tables["alpha_trace.etf_index_valuation_daily"]
+assert wide["status"] == "implemented"
+column_names = {column["name"] for column in wide["columns"]}
+for name in ["index_code", "trade_date", "close_price", "pe_etf_weighted", "import_id"]:
+    assert name in column_names
+PY
+```
+
+Expected:
+
+- Schema catalog includes the implemented ETF/index valuation wide table.
+- The generic market facts table remains planned.

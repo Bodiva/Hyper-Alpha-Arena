@@ -5510,3 +5510,27 @@ Notes:
 
 Result:
 - M227 is complete.
+
+## 2026-05-05 - M228 ClickHouse ETF Valuation Schema Catalog Alignment
+
+Goal:
+- Keep the ClickHouse schema catalog aligned with the implemented structured ETF/index valuation import table.
+
+Changes:
+- Updated `backend/services/clickhouse_schema_catalog.py`.
+- Added `alpha_trace.etf_index_valuation_daily` as an `implemented` table with 24 columns.
+- Kept `alpha_trace_market_facts` as a future generic planned market-data table.
+
+Validation:
+- `python -m py_compile backend/services/clickhouse_schema_catalog.py backend/api/alpha_trace_agent_runtime_routes.py`: passed.
+- Direct smoke without Docker/ClickHouse writes: passed.
+  - Catalog tables: 7.
+  - `alpha_trace.etf_index_valuation_daily` columns: 24.
+  - Key columns found: `import_id`, `index_code`, `trade_date`, `close_price`, `pe_etf_weighted`.
+
+Notes:
+- This milestone does not write data and does not alter import behavior.
+- It makes the architecture/runtime schema catalog reflect M218/M223 implementation reality.
+
+Result:
+- M228 is complete.
