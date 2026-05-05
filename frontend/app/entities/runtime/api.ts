@@ -69,6 +69,24 @@ export interface ExternalComponentCatalogResponse {
   message?: string;
 }
 
+export interface IntegrationDecision {
+  component_id: string;
+  recommended_path: string;
+  current_gate: string;
+  proceed_when: string[];
+  stop_if: string[];
+  alpha_trace_contracts: string[];
+  validation_required: string[];
+}
+
+export interface IntegrationDecisionGuideResponse {
+  version: number;
+  decisions: IntegrationDecision[];
+  total: number;
+  policies: Record<string, string>;
+  message?: string;
+}
+
 export interface RuntimeConfigStatus {
   status: string;
   available?: boolean;
@@ -264,6 +282,9 @@ export const getRuntimeModuleBoundariesAsync = () =>
 
 export const getRuntimeExternalComponentsAsync = () =>
   httpClient.get<ExternalComponentCatalogResponse>(ENDPOINTS.alphaTraceAgentRuntimeExternalComponents);
+
+export const getRuntimeIntegrationDecisionsAsync = () =>
+  httpClient.get<IntegrationDecisionGuideResponse>(ENDPOINTS.alphaTraceAgentRuntimeIntegrationDecisions);
 
 export const getRuntimeReadinessAsync = () =>
   httpClient.get<RuntimeReadinessResponse>(ENDPOINTS.alphaTraceAgentRuntimeReadiness);

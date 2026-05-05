@@ -4748,3 +4748,22 @@ Notes:
 Next:
 - Validate and commit the guide.
 
+
+## 2026-05-05 - M197 Frontend Integration Decision Contract
+
+Goal:
+- Add typed frontend access to the integration decision guide.
+
+Changes:
+- Updated `frontend/app/shared/api/endpoints.ts`.
+- Updated `frontend/app/entities/runtime/api.ts`.
+
+Validation:
+- `pnpm --dir frontend build`: passed.
+
+Notes:
+- This milestone only adds frontend API contracts.
+- Future review/diagnostics pages can render proceed/stop gates for TradingAgents, LangAlpha, Bocha, and professional data providers without hard-coded logic.
+
+Next:
+- Validate build and commit.

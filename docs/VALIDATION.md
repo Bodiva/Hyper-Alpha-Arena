@@ -2723,3 +2723,18 @@ Expected:
 - Integration decision guide includes proceed/stop criteria for TradingAgents, LangAlpha, Bocha, and future professional market data.
 - Architecture index links `/api/alpha-trace/agent-runs/runtime/integration-decisions`.
 - No external project is imported or executed.
+
+### M197 Frontend Integration Decision Contract
+
+Required frontend build:
+
+```powershell
+pnpm --dir frontend build
+```
+
+Expected:
+
+- Build succeeds.
+- `frontend/app/shared/api/endpoints.ts` exports the integration decision endpoint.
+- `frontend/app/entities/runtime/api.ts` exports integration decision types and `getRuntimeIntegrationDecisionsAsync`.
+- No existing page wiring is changed.
