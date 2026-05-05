@@ -2529,3 +2529,23 @@ Expected:
 - `frontend/app/shared/api/endpoints.ts` exports the Data API catalog endpoint.
 - `frontend/app/entities/data-source/api.ts` exports Data API catalog types and `getDataApiCatalogAsync`.
 - No existing page wiring is changed in this milestone.
+
+### M185 Professional Market Data Adapter Boundary
+
+Required backend compile:
+
+```powershell
+python -m py_compile backend/services/integration_adapters/market_data_adapter.py backend/services/integration_adapters/registry.py backend/services/integration_adapters/__init__.py
+```
+
+Required regression:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1
+```
+
+Expected:
+
+- Integration diagnostics include `professional_market_data_provider`.
+- Adapter does not call external providers.
+- Adapter health is disabled by default unless explicitly configured.

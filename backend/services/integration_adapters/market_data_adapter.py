@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import os
 from typing import Any, Mapping
 
 from services.integration_adapters.base import DataProviderAdapter, DataQueryRequest, DataQueryResult, IntegrationCapability, IntegrationHealth
@@ -82,4 +83,76 @@ class StaticMarketDataProviderAdapter:
         )
 
 
-__all__ = ["StaticMarketDataProviderAdapter"]
+class ProfessionalMarketDataProviderAdapter:
+    """Design-only adapter boundary for future ETF/fund/index/futures data vendors."""
+
+    adapter_id = "professional_market_data_provider"
+
+    def capability(self) -> IntegrationCapability:
+        return IntegrationCapability(
+            adapter_id=self.adapter_id,
+            adapter_type="data_provider",
+            display_name="Professional Market Data Provider",
+            supported_operations=(
+                "quote",
+                "snapshot",
+                "klines",
+                "indicators",
+                "fund_nav",
+                "index_constituents",
+                "announcements",
+                "macro",
+            ),
+            supports_streaming=False,
+            supports_artifacts=True,
+            production_ready=False,
+            notes=(
+                "Planned adapter boundary for commercial ETF/fund/index/futures data. "
+                "It is disabled by default and does not call any external provider in this phase."
+            ),
+        )
+
+    def health(self) -> IntegrationHealth:
+        enabled = (os.getenv("ALPHATRACE_PRO_MARKET_DATA_ENABLED") or "").strip().lower() == "true"
+        provider_id = (os.getenv("ALPHATRACE_PRO_MARKET_DATA_PROVIDER") or "").strip()
+        key_configured = bool((os.getenv("ALPHATRACE_PRO_MARKET_DATA_API_KEY") or "").strip())
+        if not enabled:
+            status = "disabled"
+            message = "Professional market data adapter is disabled; static AlphaTrace market data remains active."
+        elif not provider_id or not key_configured:
+            status = "missing_config"
+            message = "Professional market data adapter is enabled but provider id or backend API key is missing."
+        else:
+            status = "degraded"
+            message = "Professional market data config is present, but live provider calls are not implemented in this phase."
+        return IntegrationHealth(
+            adapter_id=self.adapter_id,
+            status=status,
+            source="environment",
+            message=message,
+            checked_at=datetime.now(timezone.utc).isoformat(),
+            details={
+                "enabled": enabled,
+                "providerConfigured": bool(provider_id),
+                "apiKeyConfigured": key_configured,
+                "implementation": "design_only",
+            },
+        )
+
+    def query(self, request: DataQueryRequest) -> DataQueryResult:
+        return DataQueryResult(
+            status="skipped",
+            provider_id=self.adapter_id,
+            message=(
+                "Professional market data provider is a design-only adapter in this phase. "
+                "Use alphatrace_static_market_data for current demo context."
+            ),
+            raw_metadata={
+                "assetId": request.asset_id,
+                "taskType": request.task_type,
+                "filters": dict(request.filters),
+            },
+        )
+
+
+__all__ = ["ProfessionalMarketDataProviderAdapter", "StaticMarketDataProviderAdapter"]

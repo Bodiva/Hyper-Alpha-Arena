@@ -6007,3 +6007,34 @@ Validation:
 Rollback:
 
 Remove the endpoint constant, types, and helper.
+
+## M185 - Professional Market Data Adapter Boundary
+
+Status: Completed
+
+Goal:
+
+Add a disabled-by-default adapter boundary for future professional ETF/fund/index/futures market data providers.
+
+Scope:
+
+1. Add `ProfessionalMarketDataProviderAdapter`.
+2. Register it in the integration adapter registry.
+3. Export it from integration adapters.
+4. Update backend abstraction smoke.
+5. Do not call any external market data provider.
+
+Acceptance:
+
+1. Backend py_compile passes.
+2. Backend abstraction smoke verifies adapter registration.
+3. Adapter health is disabled/missing/degraded, never falsely ready.
+
+Validation:
+
+1. `python -m py_compile backend/services/integration_adapters/market_data_adapter.py backend/services/integration_adapters/registry.py backend/services/integration_adapters/__init__.py`.
+2. `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`.
+
+Rollback:
+
+Remove the professional adapter class, registry/export entries, and smoke assertion.

@@ -4505,3 +4505,26 @@ Notes:
 
 Next:
 - Continue with a professional market data adapter interface or consolidated endpoint smoke pack.
+
+## 2026-05-05 - M185 Professional Market Data Adapter Boundary
+
+Goal:
+- Add a disabled-by-default adapter boundary for future professional ETF/fund/index/futures market data providers.
+
+Changes:
+- Updated `backend/services/integration_adapters/market_data_adapter.py`.
+- Updated `backend/services/integration_adapters/registry.py`.
+- Updated `backend/services/integration_adapters/__init__.py`.
+- Updated `scripts/alphatrace/smoke_backend_abstractions.ps1`.
+
+Validation:
+- `python -m py_compile backend/services/integration_adapters/market_data_adapter.py backend/services/integration_adapters/registry.py backend/services/integration_adapters/__init__.py`: passed.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`: passed.
+
+Notes:
+- The adapter never calls external market data in this phase.
+- Default health is `disabled`; if env flags are set it reports missing/degraded rather than ready because live calls are not implemented.
+- This keeps future ETF/fund/index/futures data vendors separate from legacy BTC/Hyperliquid APIs.
+
+Next:
+- Continue with endpoint smoke pack updates or frontend diagnostics wiring after isolating dirty page changes.

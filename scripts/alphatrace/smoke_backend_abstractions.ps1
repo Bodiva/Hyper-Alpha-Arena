@@ -72,6 +72,7 @@ $pythonSmoke = @(
   "assert len(items) >= 6, 'expected at least 6 integration diagnostics'",
   "adapter_ids = {item['capability']['adapter_id'] for item in items}",
   "assert 'langalpha_external_workbench' in adapter_ids, 'langalpha workbench adapter smoke failed'",
+  "assert 'professional_market_data_provider' in adapter_ids, 'professional market data adapter smoke failed'",
   "text = str(items).lower()",
   "assert 'sk-' not in text and 'bearer ' not in text and 'dashscope_api_key=' not in text and 'qwen_api_key=' not in text, 'token-shaped material leaked'",
   "evidence = EvidenceRetrieveToolAdapter().invoke(ToolInvocationRequest(tool_id='evidence.retrieve', run_id='smoke', args={'assetId':'asset_etf_510300','question':'ETF risk allocation','taskType':'single_asset_analysis','limit':2,'includeExternal':False}))",
