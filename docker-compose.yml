@@ -18,6 +18,26 @@ services:
       retries: 10
     restart: unless-stopped
 
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    container_name: hyper-arena-clickhouse
+    environment:
+      CLICKHOUSE_DB: alpha_trace
+      CLICKHOUSE_USER: alpha_user
+      CLICKHOUSE_PASSWORD: alpha_pass
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    ports:
+      - "127.0.0.1:${ALPHA_TRACE_CLICKHOUSE_HTTP_PORT:-8123}:8123"
+      - "127.0.0.1:${ALPHA_TRACE_CLICKHOUSE_NATIVE_PORT:-9000}:9000"
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--user", "alpha_user", "--password", "alpha_pass", "--query", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
   postgres:
     image: postgres:14
     container_name: hyper-arena-postgres
@@ -76,6 +96,12 @@ services:
       ALPHA_TRACE_DOMAIN_STORE: ${ALPHA_TRACE_DOMAIN_STORE:-mysql}
       # AlphaTrace MySQL target for AgentRunStore and domain stores.
       ALPHA_TRACE_MYSQL_DATABASE_URL: ${ALPHA_TRACE_MYSQL_DATABASE_URL:-mysql+pymysql://alpha_user:alpha_pass@mysql:3306/alpha_trace?charset=utf8mb4}
+      # AlphaTrace ClickHouse target for structured business/analytics imports.
+      ALPHA_TRACE_CLICKHOUSE_URL: ${ALPHA_TRACE_CLICKHOUSE_URL:-http://clickhouse:8123}
+      ALPHA_TRACE_CLICKHOUSE_USER: ${ALPHA_TRACE_CLICKHOUSE_USER:-alpha_user}
+      ALPHA_TRACE_CLICKHOUSE_PASSWORD: ${ALPHA_TRACE_CLICKHOUSE_PASSWORD:-alpha_pass}
+      ALPHA_TRACE_ETF_IMPORT_TABLE: ${ALPHA_TRACE_ETF_IMPORT_TABLE:-alpha_trace.etf_file_imports}
+      ALPHA_TRACE_FILE_IMPORT_DIR: ${ALPHA_TRACE_FILE_IMPORT_DIR:-/app/data/test}
       # AlphaTrace backend log tail for AgentRunDetail diagnostics.
       ALPHATRACE_BACKEND_LOG_PATH: ${ALPHATRACE_BACKEND_LOG_PATH:-/app/logs/backend-runtime.log}
       # Explicitly disable all proxy settings in container
@@ -92,6 +118,8 @@ services:
       postgres:
         condition: service_healthy
       mysql:
+        condition: service_healthy
+      clickhouse:
         condition: service_healthy
     volumes:
       # ========== Selective Backend Mounts for Hot Reload ==========
@@ -128,6 +156,8 @@ services:
 
       # Mount logs
       - ./logs:/app/logs
+      # Mount local ETF test data for server-side imports.
+      - ./data/test:/app/data/test:ro
       # Mount data for encryption key persistence
       - app_data:/app/data
     restart: unless-stopped
@@ -136,6 +166,8 @@ volumes:
   postgres_data:
     driver: local
   mysql_data:
+    driver: local
+  clickhouse_data:
     driver: local
   app_data:
     driver: local

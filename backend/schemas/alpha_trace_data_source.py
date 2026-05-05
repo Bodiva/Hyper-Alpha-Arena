@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -47,3 +47,38 @@ class DataSourceListResponse(BaseModel):
     total: int
     limit: int
     offset: int = 0
+
+
+class FileImportPreviewRow(BaseModel):
+    rowNumber: int
+    assetSymbol: str = ""
+    assetName: str = ""
+    tradeDate: Optional[str] = None
+    payload: Dict[str, Any] = Field(default_factory=dict)
+
+
+class FileImportResponse(BaseModel):
+    importId: str
+    sourceName: str
+    fileName: str
+    tableName: str
+    status: str
+    dryRun: bool = False
+    recordsFetched: int
+    recordsSucceeded: int
+    recordsFailed: int
+    columns: List[str] = Field(default_factory=list)
+    previewRows: List[FileImportPreviewRow] = Field(default_factory=list)
+    message: str
+
+
+class LocalImportFile(BaseModel):
+    relativePath: str
+    fileName: str
+    sizeBytes: int
+    modifiedAt: str
+
+
+class LocalImportFileListResponse(BaseModel):
+    basePath: str
+    items: List[LocalImportFile] = Field(default_factory=list)

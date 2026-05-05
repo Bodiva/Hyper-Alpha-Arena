@@ -6847,3 +6847,39 @@ Validation:
 Rollback:
 
 Documentation-only milestone. If live smoke fails, keep previous static route smoke and record the backend/proxy blocker in `docs/IMPLEMENTATION_LOG.md`.
+
+## M213 - ClickHouse ETF File Import Backend Smoke
+
+Status: Completed
+
+Goal:
+
+Turn the ClickHouse structured business data direction into a small, verifiable backend slice for ETF/index file import without migrating existing AgentRun runtime storage.
+
+Scope:
+
+1. Add a ClickHouse HTTP business store helper for controlled `JSONEachRow` inserts.
+2. Add an ETF/index file parser that accepts CSV/TSV/JSON/Excel/Parquet-style tabular files.
+3. Add Data Source file import endpoints for upload and server-side `data/test` files.
+4. Keep dry-run parsing available so demos can validate files without writing to ClickHouse.
+5. Use ClickHouse for structured market/business rows; keep MySQL for config/task-control and JSON fallback unchanged.
+
+Acceptance:
+
+1. Backend py_compile passes for the ClickHouse store, ETF file import service, data source schema, and data source routes.
+2. Local import file listing returns files from `/app/data/test`.
+3. Dry-run import parses `20260420_沪深300.xls` and extracts symbol/name/date/payload preview rows.
+4. Actual import smoke writes a two-row CSV into ClickHouse and returns `dryRun=false` success.
+5. ClickHouse query confirms the smoke import row count.
+
+Validation:
+
+1. `python -m py_compile backend/services/clickhouse_business_store.py backend/services/etf_file_import_service.py backend/schemas/alpha_trace_data_source.py backend/api/alpha_trace_data_source_routes.py`.
+2. `Invoke-RestMethod http://127.0.0.1:8802/api/alpha-trace/data-sources/file-imports/local-files`.
+3. `POST /api/alpha-trace/data-sources/file-imports/local-files/import?relativePath=20260420_沪深300.xls&dryRun=true&previewLimit=3`.
+4. `POST /api/alpha-trace/data-sources/file-imports?...dryRun=false` with a two-row CSV body.
+5. `SELECT count() FROM alpha_trace.etf_file_imports WHERE import_id = '<smoke_import_id>'` against ClickHouse.
+
+Rollback:
+
+Remove the ClickHouse business store helper, ETF file import service, data source import schemas/routes, ClickHouse docker/env additions, and endpoint constants if frontend import UI is later committed.

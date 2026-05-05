@@ -5100,3 +5100,32 @@ Notes:
 
 Next:
 - Continue with M213: choose the next implementation slice, likely a ClickHouse projection writer design/smoke or a Data Center UI integration pass.
+
+## 2026-05-05 - M213 ClickHouse ETF File Import Backend Smoke
+
+Goal:
+- Establish a minimal, testable ClickHouse path for AlphaTrace structured ETF/index file imports while keeping MySQL as config/task-control and JSON fallback unchanged.
+
+Changes:
+- Added a ClickHouse HTTP business store helper.
+- Added ETF/index file parsing and import service.
+- Extended Data Source API schemas and routes with file import endpoints.
+- Added Docker/env ClickHouse configuration and mounted `data/test` as read-only input for backend imports.
+
+Validation:
+- `python -m py_compile backend/services/clickhouse_business_store.py backend/services/etf_file_import_service.py backend/schemas/alpha_trace_data_source.py backend/api/alpha_trace_data_source_routes.py`: passed.
+- `GET http://127.0.0.1:8802/api/alpha-trace/data-sources/file-imports/local-files`: passed, 8 local Excel files returned from `/app/data/test`.
+- Dry-run import for `20260420_沪深300.xls`: passed, 5168 rows parsed, preview rows include `SH000300` / `沪深300` and payload fields.
+- Actual two-row CSV import to ClickHouse: passed, table `alpha_trace.etf_file_imports`, `recordsSucceeded=2`, importId `etf_import_859f23d3f7da4d589cf3071fcd744062`.
+- ClickHouse count query for the smoke importId with `alpha_user`: passed, returned 2.
+
+Result:
+- M213 is complete. AlphaTrace now has a small verified backend path for structured ETF/index file data into ClickHouse.
+
+Notes:
+- This does not migrate AgentRun/events/reports/decision storage to ClickHouse yet.
+- This does not change Qwen/Native/TradingAgents runner behavior.
+- Frontend Data Import UI files exist in the worktree but are not part of this backend smoke milestone unless committed in a later UI milestone.
+
+Next:
+- Continue with M214: either commit the Data Import UI route/page cleanly, or design the ClickHouse projection writer for AgentRun events/reports/evidence/decision.

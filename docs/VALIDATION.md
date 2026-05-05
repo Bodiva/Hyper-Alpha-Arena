@@ -2985,3 +2985,33 @@ Expected:
 - Health checks return `status=healthy`.
 - All runtime catalog and runner diagnostic endpoints return 2xx.
 - If Docker was running before route files were mounted, restart `app` and rerun after startup stabilizes.
+
+### M213 ClickHouse ETF File Import Backend Smoke
+
+Backend checks:
+
+```powershell
+python -m py_compile backend/services/clickhouse_business_store.py backend/services/etf_file_import_service.py backend/schemas/alpha_trace_data_source.py backend/api/alpha_trace_data_source_routes.py
+Invoke-RestMethod http://127.0.0.1:8802/api/alpha-trace/data-sources/file-imports/local-files
+```
+
+Dry-run import:
+
+```powershell
+$relative = [uri]::EscapeDataString('20260420_沪深300.xls')
+Invoke-RestMethod -Method Post "http://127.0.0.1:8802/api/alpha-trace/data-sources/file-imports/local-files/import?relativePath=$relative&dryRun=true&previewLimit=3"
+```
+
+ClickHouse write smoke:
+
+```powershell
+$csv = "symbol,name,date,close`nTEST001,AlphaTrace Test ETF,2026-05-05,1.23`nTEST002,AlphaTrace Test Index,2026-05-05,4.56`n"
+$bytes = [System.Text.Encoding]::UTF8.GetBytes($csv)
+Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8802/api/alpha-trace/data-sources/file-imports?filename=alphatrace_clickhouse_smoke.csv&sourceName=AlphaTrace%20ClickHouse%20Smoke&dataCategory=MARKET_DATA&dryRun=false&previewLimit=2" -Body $bytes -ContentType "text/csv"
+```
+
+Expected:
+
+- Dry-run returns preview rows without writing to ClickHouse.
+- Write smoke returns `dryRun=false`, `recordsSucceeded=2`, and table `alpha_trace.etf_file_imports`.
+- ClickHouse count query for the returned `importId` returns 2.
