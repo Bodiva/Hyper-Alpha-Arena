@@ -4007,3 +4007,17 @@ Validation:
 
 Next:
 - M161 should update architecture docs with the new abstraction modules and then choose the next code slice: frontend API client wiring or controlled backend reload/runtime endpoint smoke.
+
+## 2026-05-05 - M161 Architecture Documentation Sync for New Abstractions
+
+Goal:
+- Update canonical architecture documentation to include the new runtime config, async task, data API, adapter matrix, flow catalog, and artifact boundaries.
+
+Changes:
+- Updated `docs/ARCHITECTURE.md` backend directory roles and abstraction baseline.
+
+Validation:
+- Documentation review passed; no code build required.
+
+Next:
+- M162 should do a repository status checkpoint and decide whether to reload backend for HTTP endpoint smoke or continue static-safe refactoring.

@@ -2133,3 +2133,11 @@ Required script run:
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1
 ```
+
+### M161 Architecture Documentation Sync
+
+Documentation-only.
+
+Required checks:
+
+- `docs/ARCHITECTURE.md` mentions runtime_config, async_tasks scheduler, data_api catalog, agent_artifacts, adapter matrix, and flow catalog.

@@ -73,8 +73,13 @@ flowchart LR
 | `backend/schemas/alpha_trace_*.py` | AlphaTrace API/domain schemas | Frontend contracts are derived from these shapes. |
 | `backend/services/alpha_trace_agent_runtime_service.py` | Agent runtime orchestration service | Product runtime facade. |
 | `backend/services/agent_runners/` | Runner adapters | Execution engines only. Must map to AlphaTrace schemas. |
-| `backend/services/agent_orchestrator/` | Runner capability / execution policy | Declares runner availability, execution boundary, recommendations. |
+| `backend/services/agent_orchestrator/` | Runner capability / execution policy / flow descriptors / task specs | Declares runner availability, execution boundary, DAG vocabulary, and future scheduler inputs. |
 | `backend/services/agent_runtime_store/` | AgentRun persistence abstraction | MySQL / JSON / memory implementations. |
+| `backend/services/async_tasks/` | Async task specs, stores, and in-process scheduler boundary | Future worker/cancel/retry/timeout layer; current submit wiring remains guarded. |
+| `backend/services/runtime_config/` | Sanitized runtime config diagnostics | Qwen/Bocha/TradingAgents/LangAlpha readiness without exposing secrets. |
+| `backend/services/integration_adapters/` | Data/model/tool/workbench adapter contracts and wrappers | Entry point for Bocha, Qwen provider, market data, ToolAdapters, and future OSS components. |
+| `backend/services/data_api/` | AlphaTrace data API catalog | Product-owned API/provider/store catalog; separates ETF market data from legacy BTC routes. |
+| `backend/services/agent_artifacts/` | AgentArtifact contract/store/mappers | Product-owned artifacts for future files/tables/charts/web URLs from tools or external workbenches. |
 | `backend/services/domain_store/` | Shared MySQL domain store helpers | Product persistence infrastructure. |
 | `backend/services/*_store/` | Asset/Evidence/Strategy/Portfolio/Decision/Leaderboard/MarketData stores | Domain-specific read/write services. |
 | `backend/services/evidence_retrieval/` | Evidence retrieval, static seed, Bocha/external search, support scoring | Evidence is a first-class product domain. |
@@ -419,8 +424,17 @@ New additive backend interface locations:
 | Path | Purpose |
 |---|---|
 | `backend/services/integration_adapters/base.py` | Protocols/dataclasses for data providers, model providers, tool adapters, and external workbench adapters. |
+| `backend/services/integration_adapters/registry.py` | Default integration registry and diagnostics aggregation. |
+| `backend/services/integration_adapters/tool_adapters.py` | ToolAdapter wrappers for evidence retrieval and market context. |
+| `backend/services/runtime_config/facade.py` | Sanitized config/readiness facade for Qwen, Bocha, TradingAgents, and LangAlpha. |
 | `backend/services/async_tasks/base.py` | Execution-neutral task spec/status/scheduler protocol for in-process, subprocess, and future durable workers. |
+| `backend/services/async_tasks/in_process_scheduler.py` | Tested in-process scheduler boundary; not yet replacing AgentRun submit. |
 | `backend/services/agent_orchestrator/base.py` | Product-level orchestration plan/step/snapshot vocabulary. |
+| `backend/services/agent_orchestrator/task_spec_factory.py` | `SubmitAgentRunRequest` to `AsyncTaskSpec` mapper with defensive secret redaction. |
+| `backend/services/agent_orchestrator/adapter_matrix.py` | Runner/component composition matrix for Stub, Qwen, Native, TradingAgents, and LangAlpha. |
+| `backend/services/agent_orchestrator/flow_catalog.py` | Safe UI/diagnostic flow descriptors for Native, Qwen, TradingAgents, and LangAlpha. |
+| `backend/services/data_api/catalog.py` | Canonical AlphaTrace data API/provider/store catalog. |
+| `backend/services/agent_artifacts/` | AgentArtifact base, memory/MySQL stores, registry, and evidence URL mapper. |
 
 Design documents:
 
@@ -439,3 +453,5 @@ Architectural rule:
 1. New providers and open-source agent systems must enter through these interfaces or a deliberate adapter wrapper.
 2. `qwen_runner.py` remains the stable implementation for now but should be decomposed behind these contracts in small, tested slices.
 3. No external framework owns AlphaTrace frontend schema, MySQL product persistence, or evidence/decision contracts.
+4. `tradingagents` and `langalpha` flows exposed to the UI are AlphaTrace-owned descriptors, not raw internal state.
+5. Evidence URLs can be mapped into `AgentArtifact` web_url records; backend does not fetch or embed external pages.

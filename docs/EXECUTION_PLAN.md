@@ -5299,3 +5299,30 @@ Validation:
 Rollback:
 
 Revert script changes. Code modules remain unaffected.
+
+## M161 - Architecture Documentation Sync for New Abstractions
+
+Status: Completed
+
+Goal:
+
+Update canonical architecture documentation to include the new runtime config, async task, data API, adapter matrix, flow catalog, and artifact boundaries.
+
+Scope:
+
+1. Update backend directory roles.
+2. Update abstraction layer baseline table.
+3. Add architectural rules for external flow descriptors and evidence URL artifacts.
+
+Acceptance:
+
+1. `docs/ARCHITECTURE.md` names the new abstraction modules.
+2. No business code changes are required.
+
+Validation:
+
+1. Documentation review.
+
+Rollback:
+
+Revert the architecture doc update.
