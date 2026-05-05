@@ -3749,3 +3749,19 @@ Validation:
 
 Next:
 - M147 should start documenting/implementing the next safe extraction slice: Qwen model invocation adapter migration behind feature flag, or integration diagnostics UI when frontend changes are safe.
+
+## 2026-05-05 - M147-M148 Frontend Architecture Boundary Docs
+
+Goal:
+- Extend the architecture refactor beyond backend by documenting AlphaTrace frontend page/entity/shared boundaries and API client growth path.
+
+Changes:
+- Added `docs/engineering/68_frontend_boundary_audit.md`.
+- Added `docs/engineering/69_frontend_api_client_abstraction_plan.md`.
+- Updated `docs/EXECUTION_PLAN.md` and `docs/VALIDATION.md`.
+
+Validation:
+- Documentation-only; no frontend build required.
+
+Next:
+- M149 can implement `agent/api.ts` client methods for runtime tools/integrations/tasks/native plan when it is safe to touch frontend code.

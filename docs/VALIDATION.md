@@ -1965,3 +1965,12 @@ Run:
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1
 ```
+
+### M147-M148 Frontend Boundary and API Client Plans
+
+Documentation-only unless frontend code changes.
+
+Required docs:
+
+- `docs/engineering/68_frontend_boundary_audit.md`
+- `docs/engineering/69_frontend_api_client_abstraction_plan.md`

@@ -4901,3 +4901,47 @@ Acceptance:
 Validation:
 
 1. `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`.
+
+## M147 - Frontend Boundary Audit
+
+Status: Completed
+
+Goal:
+
+Define AlphaTrace frontend boundaries so backend adapters and external runtimes do not leak internal state into page components.
+
+Scope:
+
+1. Audit frontend directory roles.
+2. Identify page/entity/shared boundaries.
+3. Define future AgentRunDetail decomposition targets.
+
+Acceptance:
+
+1. `docs/engineering/68_frontend_boundary_audit.md` exists.
+
+Validation:
+
+1. Documentation review.
+
+## M148 - Frontend API Client Abstraction Plan
+
+Status: Completed
+
+Goal:
+
+Plan frontend API methods for runtime tools, integrations, tasks, and Native orchestration plans.
+
+Scope:
+
+1. Define future `agent/api.ts` surface.
+2. Preserve mock mode and error-detail rules.
+3. Do not modify frontend code in this milestone.
+
+Acceptance:
+
+1. `docs/engineering/69_frontend_api_client_abstraction_plan.md` exists.
+
+Validation:
+
+1. Documentation review.

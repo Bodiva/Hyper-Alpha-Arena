@@ -326,6 +326,7 @@ frontend/node_modules/
 REAL_TRADING_PLAN.md
 *_PLAN.md
 !docs/engineering/26_alphatrace_backend_implementation_plan.md
+!docs/engineering/69_frontend_api_client_abstraction_plan.md
 
 # Memory Bank and Prompts (local only)
 memory-bank/
