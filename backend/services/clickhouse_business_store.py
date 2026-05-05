@@ -95,15 +95,28 @@ class ClickHouseBusinessStore:
                 file_name String,
                 file_sha256 FixedString(64),
                 row_number UInt64,
-                asset_symbol String,
-                asset_name String,
+                index_code String,
+                index_name String,
                 trade_date Nullable(Date),
+                close_price Nullable(Float64),
+                pe_etf_weighted Nullable(Float64),
+                pe_market_cap_weighted Nullable(Float64),
+                pe_equal_weighted Nullable(Float64),
+                pb_etf_weighted Nullable(Float64),
+                pb_market_cap_weighted Nullable(Float64),
+                pb_equal_weighted Nullable(Float64),
+                dividend_yield_pct Nullable(Float64),
+                roe_pct Nullable(Float64),
+                ps Nullable(Float64),
+                constituent_avg_rolling_net_profit_100m Nullable(Float64),
+                constituent_avg_market_cap_100m Nullable(Float64),
+                index_total_float_market_cap_100m Nullable(Float64),
+                index_total_market_cap_100m Nullable(Float64),
                 data_category LowCardinality(String),
-                payload_json String,
                 imported_at DateTime64(3, 'UTC')
             )
             ENGINE = MergeTree
-            ORDER BY (source_name, asset_symbol, coalesce(trade_date, toDate('1970-01-01')), import_id, row_number)
+            ORDER BY (source_name, index_code, coalesce(trade_date, toDate('1970-01-01')), import_id, row_number)
             SETTINGS index_granularity = 8192
             """
         )
@@ -120,7 +133,11 @@ def get_clickhouse_business_store() -> ClickHouseBusinessStore:
 
 
 def get_etf_import_table_name() -> str:
-    return os.getenv("ALPHA_TRACE_ETF_IMPORT_TABLE", "alpha_trace.etf_file_imports")
+    return (
+        os.getenv("ALPHA_TRACE_ETF_INDEX_VALUATION_TABLE")
+        or os.getenv("ALPHA_TRACE_ETF_IMPORT_TABLE")
+        or "alpha_trace.etf_index_valuation_daily"
+    )
 
 
 __all__ = [

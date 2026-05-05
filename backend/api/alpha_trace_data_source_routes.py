@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import json
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -26,6 +25,7 @@ from services.data_api import get_data_api_catalog
 from services.data_source_store import get_data_source_store
 from services.etf_file_import_service import (
     ClickHouseStoreError,
+    ETF_INDEX_VALUATION_METRIC_COLUMNS,
     EtfFileImportError,
     import_etf_file_to_clickhouse,
 )
@@ -56,16 +56,6 @@ def _quote_table_name(table_name: str) -> str:
     if not 1 <= len(parts) <= 2 or any(not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", part) for part in parts):
         raise HTTPException(status_code=500, detail=f"Invalid ClickHouse table name: {table_name}")
     return ".".join(f"`{part}`" for part in parts)
-
-
-def _parse_payload_json(value: object) -> dict[str, object]:
-    if not isinstance(value, str) or not value:
-        return {}
-    try:
-        payload = json.loads(value)
-    except json.JSONDecodeError:
-        return {"raw": value}
-    return payload if isinstance(payload, dict) else {"value": payload}
 
 
 def _get_local_import_dir() -> Path:
@@ -235,8 +225,8 @@ def list_alpha_trace_file_import_batches(
                 any(source_name) AS source_name,
                 any(file_name) AS file_name,
                 count() AS rows,
-                any(asset_symbol) AS asset_symbol,
-                any(asset_name) AS asset_name,
+                any(index_code) AS asset_symbol,
+                any(index_name) AS asset_name,
                 min(trade_date) AS min_trade_date,
                 max(trade_date) AS max_trade_date,
                 max(imported_at) AS imported_at
@@ -294,7 +284,12 @@ def list_alpha_trace_file_import_rows(
         )
         payload = store.query_json(
             f"""
-            SELECT row_number, asset_symbol, asset_name, trade_date, payload_json
+            SELECT
+                row_number,
+                index_code AS asset_symbol,
+                index_name AS asset_name,
+                trade_date,
+                {", ".join(ETF_INDEX_VALUATION_METRIC_COLUMNS)}
             FROM {table_name}
             WHERE import_id = {import_id_sql}
             ORDER BY row_number ASC
@@ -312,7 +307,7 @@ def list_alpha_trace_file_import_rows(
             assetSymbol=str(row.get("asset_symbol", "")),
             assetName=str(row.get("asset_name", "")),
             tradeDate=row.get("trade_date") or None,
-            payload=_parse_payload_json(row.get("payload_json")),
+            payload={column: row.get(column) for column in ETF_INDEX_VALUATION_METRIC_COLUMNS},
         )
         for row in payload.get("data", [])
         if isinstance(row, dict)

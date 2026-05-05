@@ -48,8 +48,6 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
-    ports:
-      - "127.0.0.1:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U alpha_user -d alpha_arena"]
       interval: 10s
@@ -100,7 +98,7 @@ services:
       ALPHA_TRACE_CLICKHOUSE_URL: ${ALPHA_TRACE_CLICKHOUSE_URL:-http://clickhouse:8123}
       ALPHA_TRACE_CLICKHOUSE_USER: ${ALPHA_TRACE_CLICKHOUSE_USER:-alpha_user}
       ALPHA_TRACE_CLICKHOUSE_PASSWORD: ${ALPHA_TRACE_CLICKHOUSE_PASSWORD:-alpha_pass}
-      ALPHA_TRACE_ETF_IMPORT_TABLE: ${ALPHA_TRACE_ETF_IMPORT_TABLE:-alpha_trace.etf_file_imports}
+      ALPHA_TRACE_ETF_INDEX_VALUATION_TABLE: ${ALPHA_TRACE_ETF_INDEX_VALUATION_TABLE:-alpha_trace.etf_index_valuation_daily}
       ALPHA_TRACE_FILE_IMPORT_DIR: ${ALPHA_TRACE_FILE_IMPORT_DIR:-/app/data/test}
       # AlphaTrace backend log tail for AgentRunDetail diagnostics.
       ALPHATRACE_BACKEND_LOG_PATH: ${ALPHATRACE_BACKEND_LOG_PATH:-/app/logs/backend-runtime.log}

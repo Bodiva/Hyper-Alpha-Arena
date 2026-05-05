@@ -5232,3 +5232,39 @@ Notes:
 
 Next:
 - Continue with M218: audit and group the remaining frontend workspace simplification/API fallback batch, or split backend MySQL/runtime store hardening into a separate commit if it is coherent.
+
+## 2026-05-05 - M218 ClickHouse Structured ETF Index Valuation Table
+
+Goal:
+- Move ClickHouse file imports toward structured ETF/index business facts instead of opaque payload rows.
+
+Changes:
+- Added structured ClickHouse table default `alpha_trace.etf_index_valuation_daily`.
+- Added explicit metric columns for close, PE/PB variants, dividend yield, ROE, PS, constituent profit/market-cap, and index market-cap fields.
+- Updated file import mapper to parse common Chinese/English column names into typed Float64 fields.
+- Updated imported batch/row APIs to query `index_code` / `index_name` and metric columns.
+- Updated `.env.example`, `backend/.env.example`, and `docker-compose.yml` to prefer `ALPHA_TRACE_ETF_INDEX_VALUATION_TABLE` while keeping code fallback to `ALPHA_TRACE_ETF_IMPORT_TABLE`.
+- Kept AgentRun/runners unchanged.
+
+Validation:
+- `python -m py_compile ...`: passed before runtime smoke.
+
+Result:
+- Runtime smoke pending in this log entry until Docker app is recreated and the structured CSV import is tested.
+
+Next:
+- Recreate app, import a small structured CSV, query batch/rows, rerun frontend build, then commit M218.
+
+M218 runtime validation completion:
+- `docker compose up -d --force-recreate app` initially failed because legacy Postgres tried to bind host port 127.0.0.1:5432 and the host rejected it.
+- Applied minimal Docker fix: Postgres remains available inside the compose network, but no longer exposes host port 5432.
+- `docker compose up -d postgres` and `docker compose up -d --force-recreate --no-deps app`: passed.
+- `GET /api/health`: passed after startup.
+- Structured CSV import succeeded with importId `etf_import_64479dae79144024a5d9b2b305c78810`, table `alpha_trace.etf_index_valuation_daily`, 2 rows.
+- `GET /api/alpha-trace/data-sources/file-imports/imports?limit=3`: passed.
+- `GET /api/alpha-trace/data-sources/file-imports/imports/etf_import_64479dae79144024a5d9b2b305c78810/rows?limit=2`: passed and returned structured metric payload.
+- `GET` through 8805 proxy: passed.
+- `pnpm --dir frontend build`: passed with existing warnings.
+
+M218 result:
+- Complete. ClickHouse now has a structured ETF/index valuation import path.

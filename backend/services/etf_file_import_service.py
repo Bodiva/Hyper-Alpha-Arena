@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import io
-import json
 import math
 import os
 from dataclasses import dataclass
@@ -66,6 +65,70 @@ _DATE_COLUMNS = {
     "交易日期",
     "日期",
     "净值日期",
+}
+
+ETF_INDEX_VALUATION_COLUMNS = [
+    "import_id",
+    "source_name",
+    "file_name",
+    "file_sha256",
+    "row_number",
+    "index_code",
+    "index_name",
+    "trade_date",
+    "close_price",
+    "pe_etf_weighted",
+    "pe_market_cap_weighted",
+    "pe_equal_weighted",
+    "pb_etf_weighted",
+    "pb_market_cap_weighted",
+    "pb_equal_weighted",
+    "dividend_yield_pct",
+    "roe_pct",
+    "ps",
+    "constituent_avg_rolling_net_profit_100m",
+    "constituent_avg_market_cap_100m",
+    "index_total_float_market_cap_100m",
+    "index_total_market_cap_100m",
+    "data_category",
+    "imported_at",
+]
+
+ETF_INDEX_VALUATION_METRIC_COLUMNS = [
+    "close_price",
+    "pe_etf_weighted",
+    "pe_market_cap_weighted",
+    "pe_equal_weighted",
+    "pb_etf_weighted",
+    "pb_market_cap_weighted",
+    "pb_equal_weighted",
+    "dividend_yield_pct",
+    "roe_pct",
+    "ps",
+    "constituent_avg_rolling_net_profit_100m",
+    "constituent_avg_market_cap_100m",
+    "index_total_float_market_cap_100m",
+    "index_total_market_cap_100m",
+]
+
+_FLOAT_COLUMNS = {
+    "close_price": {"收盘价", "close_price", "close"},
+    "pe_etf_weighted": {"PE_ETF加权", "pe_etf_weighted"},
+    "pe_market_cap_weighted": {"PE_市值加权", "pe_market_cap_weighted"},
+    "pe_equal_weighted": {"PE_等权", "pe_equal_weighted"},
+    "pb_etf_weighted": {"PB_ETF加权", "pb_etf_weighted"},
+    "pb_market_cap_weighted": {"PB_市值加权", "pb_market_cap_weighted"},
+    "pb_equal_weighted": {"PB_等权", "pb_equal_weighted"},
+    "dividend_yield_pct": {"股息收益率 %", "股息收益率%", "dividend_yield_pct"},
+    "roe_pct": {"ROE %", "ROE%", "roe_pct"},
+    "ps": {"PS", "ps"},
+    "constituent_avg_rolling_net_profit_100m": {
+        "成分股平均滚动净利润(亿)",
+        "constituent_avg_rolling_net_profit_100m",
+    },
+    "constituent_avg_market_cap_100m": {"成分股平均市值(亿)", "constituent_avg_market_cap_100m"},
+    "index_total_float_market_cap_100m": {"指数总流通市值(亿)", "index_total_float_market_cap_100m"},
+    "index_total_market_cap_100m": {"指数总市值(亿)", "index_total_market_cap_100m"},
 }
 
 
@@ -162,6 +225,34 @@ def _json_default(value: Any) -> str:
     return str(value)
 
 
+def _to_float(value: Any) -> Optional[float]:
+    if value in (None, ""):
+        return None
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        if isinstance(value, float) and math.isnan(value):
+            return None
+        return float(value)
+    text = str(value).strip()
+    if not text or text in {"-", "--", "nan", "NaN", "NULL", "null"}:
+        return None
+    text = text.replace(",", "").replace("%", "")
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
+def _first_matching_float(record: dict[str, Any], candidates: set[str]) -> Optional[float]:
+    for key, value in record.items():
+        if _lookup_key(key) in {_lookup_key(candidate) for candidate in candidates}:
+            return _to_float(value)
+    return None
+
+
+def _metric_payload(row: dict[str, Any]) -> dict[str, Any]:
+    return {column: row.get(column) for column in ETF_INDEX_VALUATION_METRIC_COLUMNS}
+
+
 def _build_clickhouse_rows(
     *,
     import_id: str,
@@ -181,11 +272,14 @@ def _build_clickhouse_rows(
                 "file_name": filename,
                 "file_sha256": file_sha256,
                 "row_number": index,
-                "asset_symbol": _first_matching_value(record, _SYMBOL_COLUMNS),
-                "asset_name": _first_matching_value(record, _NAME_COLUMNS),
+                "index_code": _first_matching_value(record, _SYMBOL_COLUMNS),
+                "index_name": _first_matching_value(record, _NAME_COLUMNS),
                 "trade_date": _first_matching_date(record),
+                **{
+                    column: _first_matching_float(record, candidates)
+                    for column, candidates in _FLOAT_COLUMNS.items()
+                },
                 "data_category": data_category,
-                "payload_json": json.dumps(record, ensure_ascii=False, default=_json_default),
                 "imported_at": imported_at,
             }
         )
@@ -198,10 +292,10 @@ def _to_preview_rows(rows: list[dict[str, Any]], records: list[dict[str, Any]], 
         preview.append(
             FileImportPreviewRow(
                 rowNumber=int(row["row_number"]),
-                assetSymbol=str(row["asset_symbol"]),
-                assetName=str(row["asset_name"]),
+                assetSymbol=str(row["index_code"]),
+                assetName=str(row["index_name"]),
                 tradeDate=row["trade_date"],
-                payload=payload,
+                payload=_metric_payload(row),
             )
         )
     return preview
@@ -238,6 +332,8 @@ def import_etf_file_to_clickhouse(
     if not dry_run:
         store = get_clickhouse_business_store()
         table_name = store.ensure_etf_import_table(table_name)
+        import json
+
         json_lines = "\n".join(json.dumps(row, ensure_ascii=False, default=_json_default) for row in clickhouse_rows)
         store.insert_json_each_row(table_name, json_lines)
 
@@ -251,7 +347,7 @@ def import_etf_file_to_clickhouse(
         recordsFetched=len(parsed.rows),
         recordsSucceeded=len(parsed.rows),
         recordsFailed=0,
-        columns=parsed.columns,
+        columns=ETF_INDEX_VALUATION_COLUMNS,
         previewRows=_to_preview_rows(clickhouse_rows, parsed.rows, preview_limit),
         message="File parsed successfully." if dry_run else "File imported into ClickHouse.",
     )
@@ -259,6 +355,8 @@ def import_etf_file_to_clickhouse(
 
 __all__ = [
     "ClickHouseStoreError",
+    "ETF_INDEX_VALUATION_COLUMNS",
+    "ETF_INDEX_VALUATION_METRIC_COLUMNS",
     "EtfFileImportError",
     "import_etf_file_to_clickhouse",
     "parse_etf_file",

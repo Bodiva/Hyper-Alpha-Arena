@@ -7019,3 +7019,41 @@ Validation:
 Rollback:
 
 Remove DataImportPage, route/navigation additions, import batch/row API helpers, backend batch/row endpoints, and the `/data/` ignore rule.
+
+## M218 - ClickHouse Structured ETF Index Valuation Table
+
+Status: Completed
+
+Goal:
+
+Move ETF/index file imports from a generic row payload table toward a structured ClickHouse business fact table for index valuation and market metrics.
+
+Scope:
+
+1. Add `alpha_trace.etf_index_valuation_daily` as the default ClickHouse ETF/index import table.
+2. Map common Excel/CSV columns into explicit fields: index code/name, trade date, close, PE, PB, dividend yield, ROE, PS, market cap, and constituent profitability metrics.
+3. Keep old `ALPHA_TRACE_ETF_IMPORT_TABLE` as a fallback if `ALPHA_TRACE_ETF_INDEX_VALUATION_TABLE` is not set.
+4. Update import batch/row APIs to query structured columns instead of `payload_json`.
+5. Update environment examples and compose env names.
+6. Do not change AgentRun storage or runner behavior.
+
+Acceptance:
+
+1. Backend py_compile passes for ClickHouse import files/routes.
+2. Docker app restarts with the structured table environment variable.
+3. A small CSV can be imported into ClickHouse successfully.
+4. Imported batch and row APIs return structured metrics in `payload`.
+5. Existing Data Import frontend still builds.
+
+Validation:
+
+1. `python -m py_compile backend/services/clickhouse_business_store.py backend/services/etf_file_import_service.py backend/api/alpha_trace_data_source_routes.py backend/schemas/alpha_trace_data_source.py backend/services/agent_artifacts/registry.py`.
+2. `docker compose up -d --force-recreate app`.
+3. `POST /api/alpha-trace/data-sources/file-imports?filename=alphatrace_structured_smoke.csv&sourceName=AlphaTrace Structured Smoke&dataCategory=MARKET_DATA&dryRun=false&previewLimit=2`.
+4. `GET /api/alpha-trace/data-sources/file-imports/imports?limit=5`.
+5. `GET /api/alpha-trace/data-sources/file-imports/imports/{importId}/rows?limit=2`.
+6. `pnpm --dir frontend build`.
+
+Rollback:
+
+Set `ALPHA_TRACE_ETF_IMPORT_TABLE=alpha_trace.etf_file_imports` and revert the structured ClickHouse table/import mapper changes.
