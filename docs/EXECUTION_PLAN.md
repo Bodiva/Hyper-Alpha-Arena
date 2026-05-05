@@ -5479,3 +5479,34 @@ Validation:
 Rollback:
 
 Remove the catalog package import/endpoint and smoke additions. Runtime behavior remains unchanged.
+
+## M167 - AlphaTrace Runtime Architecture Index
+
+Status: Completed
+
+Goal:
+
+Provide a single backend index of AlphaTrace-owned architecture boundaries for frontend diagnostics and future external component integration.
+
+Scope:
+
+1. Add `get_alphatrace_architecture_index`.
+2. Add `GET /api/alpha-trace/agent-runs/runtime/architecture`.
+3. Summarize API layer, runtime config, data API catalog, model providers, orchestrators, runner adapters/flows, tools and artifacts.
+4. Do not expose TradingAgents or LangAlpha internal state.
+
+Acceptance:
+
+1. Backend py_compile passes.
+2. Local smoke verifies key architecture layers exist.
+3. Backend abstraction smoke script passes.
+
+Validation:
+
+1. `python -m py_compile backend/services/architecture_index.py backend/api/alpha_trace_agent_runtime_routes.py`.
+2. Local Python smoke for `get_alphatrace_architecture_index()`.
+3. `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`.
+
+Rollback:
+
+Remove architecture index helper and endpoint. Other catalogs remain available.

@@ -4132,3 +4132,26 @@ Notes:
 
 Next:
 - M167 should add a concise backend abstraction index endpoint or architecture doc that ties data APIs, model providers, orchestrators, runner flows, tools, and artifacts together for frontend consumption.
+
+## 2026-05-05 - M167 AlphaTrace Runtime Architecture Index
+
+Goal:
+- Add one product-owned backend index that ties together AlphaTrace API, runtime config, data API, model provider, orchestrator, runner, tool and artifact boundaries.
+
+Changes:
+- Added `backend/services/architecture_index.py`.
+- Added `GET /api/alpha-trace/agent-runs/runtime/architecture`.
+- Updated abstraction smoke scripts.
+
+Validation:
+- `python -m py_compile backend/services/architecture_index.py backend/api/alpha_trace_agent_runtime_routes.py`: passed.
+- Local smoke for `get_alphatrace_architecture_index()`: passed.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`: passed.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_abstraction_endpoints.ps1 -SkipHttp`: passed.
+
+Notes:
+- The index references TradingAgents/LangAlpha only through AlphaTrace-owned descriptors.
+- No external framework internal state is exposed.
+
+Next:
+- M168 should start consuming the new metrics/architecture endpoints in frontend diagnostics when safe, or add a static frontend architecture audit if existing frontend dirty changes make code edits risky.

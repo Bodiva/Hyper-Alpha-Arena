@@ -41,6 +41,7 @@ from services.alpha_trace_agent_runtime_service import (
 )
 from services.agent_runtime_health import find_stale_agent_runs
 from services.agent_runtime_metrics import get_agent_run_metrics_snapshot
+from services.architecture_index import get_alphatrace_architecture_index
 from services.agent_orchestrator.execution_policy import get_runner_execution_policy
 from services.agent_orchestrator.capability_matrix import get_runner_capability, list_runner_capabilities, resolve_recommended_runner
 from services.agent_orchestrator.native_plan import build_alphatrace_native_plan
@@ -357,6 +358,14 @@ def get_agent_runtime_config_endpoint(db: Session = Depends(get_db)):
     return {
         "config": get_runtime_config_facade().snapshot(db),
         "message": "Runtime configuration diagnostics are sanitized. No raw API keys or encrypted secret values are returned.",
+    }
+
+
+@router.get("/runtime/architecture")
+def get_agent_runtime_architecture_endpoint(db: Session = Depends(get_db)):
+    return {
+        **get_alphatrace_architecture_index(db),
+        "message": "AlphaTrace architecture index is a product-owned map of API, data, model, orchestration, runner, tool and artifact boundaries.",
     }
 
 

@@ -2231,3 +2231,23 @@ Runtime HTTP smoke after backend reload:
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/agent-runs/runtime/orchestrators
 ```
+
+### M167 AlphaTrace Runtime Architecture Index
+
+Required backend compile:
+
+```powershell
+python -m py_compile backend/services/architecture_index.py backend/api/alpha_trace_agent_runtime_routes.py
+```
+
+Required local smoke:
+
+- `get_alphatrace_architecture_index()` includes runtime config, model providers, orchestrators, runner adapters and tools/artifacts layers.
+- `scripts/alphatrace/smoke_backend_abstractions.ps1` passes.
+- `scripts/alphatrace/smoke_abstraction_endpoints.ps1 -SkipHttp` passes.
+
+Runtime HTTP smoke after backend reload:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/agent-runs/runtime/architecture
+```

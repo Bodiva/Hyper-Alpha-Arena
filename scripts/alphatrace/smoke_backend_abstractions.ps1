@@ -8,6 +8,7 @@ $env:PYTHONPATH = "backend"
 
 $files = @(
   "backend/api/alpha_trace_agent_runtime_routes.py",
+  "backend/services/architecture_index.py",
   "backend/services/agent_tool_registry.py",
   "backend/services/integration_adapters/base.py",
   "backend/services/integration_adapters/__init__.py",
@@ -49,6 +50,7 @@ Write-Host "[AlphaTrace] local registry/tool adapter smoke"
 $pythonSmoke = @(
   "from services.integration_adapters import EvidenceRetrieveToolAdapter, MarketContextToolAdapter, ToolInvocationRequest, build_default_integration_registry",
   "from services.agent_artifacts import AgentArtifact, MemoryAgentArtifactStore, evidence_to_web_artifact",
+  "from services.architecture_index import get_alphatrace_architecture_index",
   "from services.agent_orchestrator.adapter_matrix import get_adapter_composition_matrix",
   "from services.agent_orchestrator.flow_catalog import get_agent_flow_catalog",
   "from services.agent_orchestrator.orchestrator_catalog import list_orchestrator_descriptors",
@@ -83,6 +85,8 @@ $pythonSmoke = @(
   "providers = list_model_provider_descriptors()",
   "provider_ids = {provider['provider_id'] for provider in providers['providers']}",
   "assert {'qwen_openai_compatible','tradingagents_model_bridge','langalpha_byok_bridge'} <= provider_ids, 'model provider catalog smoke failed'",
+  "index = get_alphatrace_architecture_index()",
+  "assert 'runtime_config' in {layer['layerId'] for layer in index['layers']}, 'architecture index smoke failed'",
   "task_store = MemoryAsyncTaskStore()",
   "scheduler = InProcessAsyncTaskScheduler(store=task_store)",
   "spec = AsyncTaskSpec(task_id='task_smoke_script', run_id='run_smoke_script', runner_type='stub', task_type='smoke')",

@@ -7,6 +7,7 @@ $ErrorActionPreference = "Stop"
 
 $endpoints = @(
     "/alpha-trace/agent-runs/runtime/config",
+    "/alpha-trace/agent-runs/runtime/architecture",
     "/alpha-trace/agent-runs/runtime/model-providers",
     "/alpha-trace/agent-runs/runtime/orchestrators",
     "/alpha-trace/agent-runs/runtime/tools",
