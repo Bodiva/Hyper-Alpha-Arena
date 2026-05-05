@@ -4705,3 +4705,21 @@ Notes:
 
 Next:
 - Validate build and commit.
+
+## 2026-05-05 - M195 Reusable External Component Panel
+
+Goal:
+- Add a reusable frontend UI primitive for displaying external component integration boundaries.
+
+Changes:
+- Added `frontend/app/shared/ui/ExternalComponentPanel.tsx`.
+
+Validation:
+- `pnpm --dir frontend build`: passed.
+
+Notes:
+- The panel is not wired to existing pages in this milestone.
+- It gives future diagnostics pages a consistent way to show TradingAgents/LangAlpha/Bocha/professional-data integration decisions.
+
+Next:
+- Validate build and commit.

@@ -6297,3 +6297,31 @@ Validation:
 Rollback:
 
 Remove the endpoint constant, frontend types, and helper.
+
+## M195 - Reusable External Component Panel
+
+Status: Completed
+
+Goal:
+
+Add a reusable frontend UI primitive for displaying external component integration boundaries.
+
+Scope:
+
+1. Add `ExternalComponentPanel`.
+2. Support loading, error, empty, compact, integration/status badges, useful capabilities, non-goals, risks, and next steps.
+3. Do not wire existing pages in this milestone.
+
+Acceptance:
+
+1. Frontend build passes.
+2. Component compiles without new dependencies.
+3. Component can explain TradingAgents, LangAlpha, Bocha, and future professional market data boundaries.
+
+Validation:
+
+1. `pnpm --dir frontend build`.
+
+Rollback:
+
+Remove `frontend/app/shared/ui/ExternalComponentPanel.tsx`.

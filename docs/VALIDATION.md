@@ -2688,3 +2688,17 @@ Expected:
 - `frontend/app/shared/api/endpoints.ts` exports the external component endpoint.
 - `frontend/app/entities/runtime/api.ts` exports external component types and `getRuntimeExternalComponentsAsync`.
 - No existing page wiring is changed.
+
+### M195 Reusable External Component Panel
+
+Required frontend build:
+
+```powershell
+pnpm --dir frontend build
+```
+
+Expected:
+
+- Build succeeds.
+- `frontend/app/shared/ui/ExternalComponentPanel.tsx` compiles without new dependencies.
+- No existing page wiring is changed.
