@@ -49,6 +49,7 @@ import AssetDetailPage from '@/pages/AssetDetailPage'
 import AgentLabPage from '@/pages/AgentLabPage'
 import AgentRunDetailPage from '@/pages/AgentRunDetailPage'
 import StrategyLabPage from '@/pages/StrategyLabPage'
+import StrategyRadarPage from '@/pages/StrategyRadarPage'
 import LeaderboardPage from '@/pages/LeaderboardPage'
 import PortfolioWorkspacePage from '@/pages/PortfolioWorkspacePage'
 import EvidenceCenterPage from '@/pages/EvidenceCenterPage'
@@ -240,6 +241,7 @@ const getUnknownHashFallback = (hash: string, pathname: string): RouteTarget => 
       'assets',
       'agent-lab',
       'strategy-lab',
+      'strategy-radar',
       'evidence',
       'decision-attribution',
       'portfolio',
@@ -266,6 +268,7 @@ const ALPHA_TRACE_PAGE_KEYS = new Set([
   'agent-lab',
   'agent-run-detail',
   'strategy-lab',
+  'strategy-radar',
   'leaderboard',
   'portfolio-workspace',
   'evidence-center',
@@ -1034,6 +1037,10 @@ function App() {
 
         {currentPage === 'strategy-lab' && (
           <StrategyLabPage />
+        )}
+
+        {currentPage === 'strategy-radar' && (
+          <StrategyRadarPage />
         )}
 
         {currentPage === 'leaderboard' && (

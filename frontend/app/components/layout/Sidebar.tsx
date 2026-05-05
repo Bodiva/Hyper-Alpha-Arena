@@ -154,6 +154,7 @@ export default function Sidebar({ currentPage = 'comprehensive', onPageChange, o
       label: pick('投研', 'Research'),
       items: [
         { label: pick('总览', 'Overview'), page: 'dashboard', icon: BarChart3 },
+        { label: pick('策略雷达', 'Strategy Radar'), page: 'strategy-radar', icon: BarChart3 },
         { label: pick('资产研究', 'Assets'), page: 'asset-research', icon: Coins },
         { label: pick('Agent 实验室', 'Agent Lab'), page: 'agent-lab', icon: Bot },
         { label: pick('策略实验室', 'Strategy Lab'), page: 'strategy-lab', icon: FlaskConical },

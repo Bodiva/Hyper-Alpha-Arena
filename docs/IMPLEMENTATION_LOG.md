@@ -5614,3 +5614,27 @@ Notes:
 
 Result:
 - M231 is complete.
+
+## 2026-05-05 - M232 Frontend Dirty Worktree Review: Strategy Radar and Agent Lab Interaction Cleanup
+
+Goal:
+- Preserve Strategy Radar and clean up Agent Lab without deleting product capabilities.
+
+Changes:
+- Kept Strategy Radar as a routed AlphaTrace page.
+- Registered Strategy Radar in sidebar, hash routing, and Research Workspace navigation.
+- Restored Agent Lab quick actions for demo, stub, Qwen, AlphaTrace Native, and TradingAgents.
+- Restored Agent Lab runner capability and runtime worker diagnostics as a collapsed advanced section.
+- Kept the primary Agent Lab form visually simpler while preserving submit behavior and diagnostics.
+
+Validation:
+- `pnpm --dir frontend build`: passed.
+
+Notes:
+- "简化" is interpreted as cleaner information architecture and interaction, not functional deletion.
+- `frontend/app/pages/DataImportPage.tsx` still has unrelated local wording edits and was not included in the M232 scope.
+- Local screenshots remain untracked and are not part of the product commit.
+
+Result:
+- M232 is complete.
+- Next execution order per user: M234 ClickHouse runtime projection write path, then M235 Tool execution unification, then M233 Native runner deeper extraction.

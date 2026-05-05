@@ -7474,3 +7474,37 @@ Validation:
 Rollback:
 
 Remove the status-update notes and restored comparison wording.
+
+## M232 - Frontend Dirty Worktree Review: Strategy Radar and Agent Lab Interaction Cleanup
+
+Status: Completed
+
+Goal:
+
+Formalize the pending Strategy Radar route and review the Agent Lab cleanup so visual/interaction simplification does not remove product capabilities.
+
+Scope:
+
+1. Keep Strategy Radar as a first-class AlphaTrace research page.
+2. Register Strategy Radar in sidebar, hash routing, and research workspace navigation.
+3. Keep Agent Lab quick entries for demo, stub, Qwen, AlphaTrace Native, and TradingAgents.
+4. Keep Agent Lab runtime diagnostics for runner capabilities, workers, and credential sources in a collapsed advanced section.
+5. Do not simplify by deleting runner behavior, mock mode, diagnostics, or backend contracts.
+6. Do not commit local screenshot artifacts or unrelated DataImport wording changes.
+
+Acceptance:
+
+1. `/dashboard#strategy-radar` resolves to Strategy Radar.
+2. Agent Lab has a cleaner primary submit form and retains quick-submit capability.
+3. Runner capabilities and worker diagnostics remain accessible.
+4. Strategy Radar functionality is kept; only visual/interaction complexity is reduced.
+5. Frontend production build passes.
+
+Validation:
+
+1. `pnpm --dir frontend build`
+2. `git diff --stat` review confirms Strategy Radar and Agent Lab changes are scoped separately from unrelated artifacts.
+
+Rollback:
+
+Revert the Strategy Radar route/page files and AgentLabPage interaction changes in this milestone only.

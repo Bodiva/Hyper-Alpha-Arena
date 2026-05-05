@@ -16,6 +16,7 @@ interface ResearchWorkspaceNavProps {
 
 const NAV_ITEMS: NavItem[] = [
   { key: "dashboard", labelEn: "Dashboard", labelZh: "总览", path: "/dashboard" },
+  { key: "strategy-radar", labelEn: "Radar", labelZh: "雷达", path: "/strategy-radar" },
   { key: "asset-research", labelEn: "Assets", labelZh: "资产", path: "/assets" },
   { key: "agent-lab", labelEn: "Agents", labelZh: "Agent", path: "/agent-lab" },
   { key: "strategy-lab", labelEn: "Strategies", labelZh: "策略", path: "/strategy-lab" },

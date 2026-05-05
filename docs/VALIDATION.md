@@ -3415,3 +3415,26 @@ Expected:
 
 - Historical PostgreSQL-oriented documents clearly say PostgreSQL sections are historical context.
 - The active direction is MySQL for control-plane/config and ClickHouse for structured business/analytics data.
+
+## M232 Validation - Frontend Dirty Worktree Review
+
+Required checks:
+
+```powershell
+pnpm --dir frontend build
+```
+
+Manual review:
+
+```powershell
+git diff --stat
+git diff -- frontend/app/pages/AgentLabPage.tsx
+git diff -- frontend/app/pages/StrategyRadarPage.tsx frontend/app/components/layout/Sidebar.tsx frontend/app/main.tsx frontend/app/shared/lib/navigation.ts frontend/app/shared/ui/ResearchWorkspaceNav.tsx
+```
+
+Expected:
+
+- Strategy Radar route is present and renderable.
+- Agent Lab keeps demo/stub/qwen/native/tradingagents quick actions.
+- Agent Lab keeps runner capability and runtime worker diagnostics in an advanced section.
+- Simplification means simpler layout and interaction, not reduced function.

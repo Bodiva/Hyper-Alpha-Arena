@@ -49,6 +49,7 @@ const resolvePathToRouteTarget = (pathname: string): RouteTarget | null => {
   if (normalizedPath === "/assets") return { page: "asset-research" };
   if (normalizedPath === "/agent-lab") return { page: "agent-lab" };
   if (normalizedPath === "/strategy-lab") return { page: "strategy-lab" };
+  if (normalizedPath === "/strategy-radar") return { page: "strategy-radar" };
   if (normalizedPath === "/leaderboard") return { page: "leaderboard" };
   if (normalizedPath === "/portfolio") return { page: "portfolio-workspace" };
   if (normalizedPath === "/evidence") return { page: "evidence-center" };
@@ -122,6 +123,7 @@ export const parseAlphaTraceRoute = (value?: string): RouteTarget | null => {
     );
   }
   if (normalizedRoute === "strategy-lab") return createTarget("strategy-lab", undefined, hashQuery);
+  if (normalizedRoute === "strategy-radar") return createTarget("strategy-radar", undefined, hashQuery);
   if (normalizedRoute === "leaderboard") return createTarget("leaderboard", undefined, hashQuery);
   if (normalizedRoute === "portfolio") return createTarget("portfolio-workspace", undefined, hashQuery);
   if (normalizedRoute === "evidence") return createTarget("evidence-center", undefined, hashQuery);
@@ -164,6 +166,7 @@ export const routeTargetToAlphaTraceHash = (target: RouteTarget): string => {
     "asset-research": "assets",
     "agent-lab": "agent-lab",
     "strategy-lab": "strategy-lab",
+    "strategy-radar": "strategy-radar",
     leaderboard: "leaderboard",
     "portfolio-workspace": "portfolio",
     "evidence-center": "evidence",
