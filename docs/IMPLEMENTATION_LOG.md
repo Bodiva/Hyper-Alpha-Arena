@@ -4599,3 +4599,28 @@ Notes:
 
 Next:
 - Validate build, commit, and continue backend/frontend abstraction milestones.
+
+## 2026-05-05 - M190 Backend Module Boundary Catalog
+
+Goal:
+- Expose product-owned backend module boundaries for AlphaTrace refactor planning and future open-source component integration.
+
+Changes:
+- Added `backend/services/backend_module_boundaries.py`.
+- Updated `backend/api/alpha_trace_agent_runtime_routes.py`.
+- Updated `backend/services/architecture_index.py`.
+- Updated `scripts/alphatrace/smoke_backend_abstractions.ps1`.
+- Updated `scripts/alphatrace/smoke_abstraction_endpoints.ps1`.
+
+Validation:
+- `python -m py_compile backend/services/backend_module_boundaries.py backend/services/architecture_index.py backend/api/alpha_trace_agent_runtime_routes.py`: passed.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`: passed.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_abstraction_endpoints.ps1 -SkipHttp`: passed.
+
+Notes:
+- The catalog explicitly separates AlphaTrace-owned API/runtime/domain/integration layers from legacy BTC/Hyperliquid modules.
+- TradingAgents remains an optional external runner adapter; LangAlpha remains an external workbench/architecture reference boundary.
+
+Next:
+- Validate and commit this boundary read model.
+

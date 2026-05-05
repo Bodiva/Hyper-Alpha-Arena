@@ -43,6 +43,7 @@ from services.agent_runtime_health import find_stale_agent_runs
 from services.agent_runtime_metrics import get_agent_run_metrics_snapshot
 from services.agent_runtime_timeline import get_agent_run_timeline_summary
 from services.architecture_index import get_alphatrace_architecture_index
+from services.backend_module_boundaries import get_backend_module_boundary_catalog
 from services.agent_orchestrator.execution_policy import get_runner_execution_policy
 from services.agent_orchestrator.capability_matrix import get_runner_capability, list_runner_capabilities, resolve_recommended_runner
 from services.agent_orchestrator.native_plan import build_alphatrace_native_plan
@@ -377,6 +378,14 @@ def get_agent_runtime_architecture_endpoint(db: Session = Depends(get_db)):
     return {
         **get_alphatrace_architecture_index(db),
         "message": "AlphaTrace architecture index is a product-owned map of API, data, model, orchestration, runner, tool and artifact boundaries.",
+    }
+
+
+@router.get("/runtime/module-boundaries")
+def get_agent_runtime_module_boundaries_endpoint():
+    return {
+        **get_backend_module_boundary_catalog().to_response(),
+        "message": "Backend module boundaries separate AlphaTrace-owned product layers from legacy modules and optional external runtimes.",
     }
 
 

@@ -6147,3 +6147,35 @@ Validation:
 Rollback:
 
 Remove `frontend/app/shared/ui/DataApiCatalogPanel.tsx`.
+
+## M190 - Backend Module Boundary Catalog
+
+Status: Completed
+
+Goal:
+
+Expose a machine-readable backend module boundary map so future refactors and open-source integrations have a clear AlphaTrace-owned vs legacy vs external-runtime separation.
+
+Scope:
+
+1. Add `backend/services/backend_module_boundaries.py`.
+2. Add `GET /api/alpha-trace/agent-runs/runtime/module-boundaries`.
+3. Include the module boundary catalog in the architecture index.
+4. Add module boundary checks to backend abstraction smoke and endpoint smoke.
+
+Acceptance:
+
+1. Backend py_compile passes.
+2. Backend abstraction smoke passes.
+3. Endpoint smoke script syntax includes module boundaries.
+4. Boundaries explicitly identify AlphaTrace-owned layers, legacy crypto/trading modules, TradingAgents runtime, and LangAlpha external workbench.
+
+Validation:
+
+1. `python -m py_compile backend/services/backend_module_boundaries.py backend/services/architecture_index.py backend/api/alpha_trace_agent_runtime_routes.py`.
+2. `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`.
+3. `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_abstraction_endpoints.ps1 -SkipHttp`.
+
+Rollback:
+
+Remove the module boundary service, endpoint, architecture-index additions, and smoke additions.

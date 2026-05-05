@@ -2602,3 +2602,24 @@ Expected:
 - Build succeeds.
 - `frontend/app/shared/ui/DataApiCatalogPanel.tsx` compiles without new dependencies.
 - No existing page wiring is changed in this milestone.
+
+### M190 Backend Module Boundary Catalog
+
+Required backend compile:
+
+```powershell
+python -m py_compile backend/services/backend_module_boundaries.py backend/services/architecture_index.py backend/api/alpha_trace_agent_runtime_routes.py
+```
+
+Required regression:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_abstraction_endpoints.ps1 -SkipHttp
+```
+
+Expected:
+
+- Module boundary catalog includes AlphaTrace-owned, legacy, infrastructure-target, external-runner, and external-workbench boundaries.
+- Architecture index links `/api/alpha-trace/agent-runs/runtime/module-boundaries`.
+- Smoke scripts pass without external provider keys.
