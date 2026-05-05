@@ -87,6 +87,18 @@ export interface IntegrationDecisionGuideResponse {
   message?: string;
 }
 
+export interface ArchitectureReviewBundleResponse {
+  version: number;
+  architecture: RuntimeArchitectureIndex;
+  moduleBoundaries: BackendModuleBoundaryCatalogResponse;
+  externalComponents: ExternalComponentCatalogResponse;
+  integrationDecisions: IntegrationDecisionGuideResponse;
+  readiness: RuntimeReadinessResponse;
+  summary: JsonRecord;
+  policies: Record<string, string>;
+  message?: string;
+}
+
 export interface RuntimeConfigStatus {
   status: string;
   available?: boolean;
@@ -276,6 +288,9 @@ export interface RuntimeReadinessResponse {
 
 export const getRuntimeArchitectureAsync = () =>
   httpClient.get<RuntimeArchitectureIndex>(ENDPOINTS.alphaTraceAgentRuntimeArchitecture);
+
+export const getRuntimeArchitectureReviewAsync = () =>
+  httpClient.get<ArchitectureReviewBundleResponse>(ENDPOINTS.alphaTraceAgentRuntimeArchitectureReview);
 
 export const getRuntimeModuleBoundariesAsync = () =>
   httpClient.get<BackendModuleBoundaryCatalogResponse>(ENDPOINTS.alphaTraceAgentRuntimeModuleBoundaries);

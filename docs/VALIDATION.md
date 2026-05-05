@@ -2772,3 +2772,18 @@ Expected:
 
 - Architecture review bundle contains architecture, moduleBoundaries, externalComponents, integrationDecisions, readiness, summary, and policies.
 - No external project is imported or executed.
+
+### M200 Frontend Architecture Review Contract
+
+Required frontend build:
+
+```powershell
+pnpm --dir frontend build
+```
+
+Expected:
+
+- Build succeeds.
+- `frontend/app/shared/api/endpoints.ts` exports the architecture review endpoint.
+- `frontend/app/entities/runtime/api.ts` exports `ArchitectureReviewBundleResponse` and `getRuntimeArchitectureReviewAsync`.
+- No existing page wiring is changed.

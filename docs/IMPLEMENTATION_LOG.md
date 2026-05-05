@@ -4809,3 +4809,22 @@ Notes:
 Next:
 - Validate and commit the bundle.
 
+
+## 2026-05-05 - M200 Frontend Architecture Review Contract
+
+Goal:
+- Add typed frontend access to the consolidated architecture review bundle.
+
+Changes:
+- Updated `frontend/app/shared/api/endpoints.ts`.
+- Updated `frontend/app/entities/runtime/api.ts`.
+
+Validation:
+- `pnpm --dir frontend build`: passed.
+
+Notes:
+- This milestone only adds frontend API contracts.
+- Future architecture review UI can fetch one bundle instead of stitching architecture/readiness/boundaries/components/decision endpoints.
+
+Next:
+- Validate build and commit.

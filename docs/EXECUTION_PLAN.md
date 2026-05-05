@@ -6446,3 +6446,32 @@ Validation:
 Rollback:
 
 Remove the architecture review bundle service, endpoint, and smoke additions.
+
+## M200 - Frontend Architecture Review Contract
+
+Status: Completed
+
+Goal:
+
+Expose the consolidated architecture review bundle through typed frontend API helpers.
+
+Scope:
+
+1. Add `alphaTraceAgentRuntimeArchitectureReview` endpoint constant.
+2. Add `ArchitectureReviewBundleResponse` frontend type.
+3. Add `getRuntimeArchitectureReviewAsync` helper.
+4. Do not wire existing pages in this milestone.
+
+Acceptance:
+
+1. Frontend build passes.
+2. Typed helper compiles without new dependencies.
+3. No existing page wiring is changed.
+
+Validation:
+
+1. `pnpm --dir frontend build`.
+
+Rollback:
+
+Remove the endpoint constant, frontend type, and helper.
