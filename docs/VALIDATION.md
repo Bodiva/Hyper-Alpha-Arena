@@ -2941,3 +2941,17 @@ Expected:
 - ClickHouse schema catalog lists planned analytical tables for runtime, evidence, decision, market data, and leaderboard facts.
 - Architecture review bundle includes `clickHouseSchemas`.
 - No live ClickHouse dependency is introduced.
+
+### M210 Reusable ClickHouse Schema Panel
+
+Required frontend build:
+
+```powershell
+pnpm --dir frontend build
+```
+
+Expected:
+
+- `frontend/app/shared/ui/ClickHouseSchemaPanel.tsx` compiles.
+- `ArchitectureReviewPanel` renders `clickHouseSchemas` from the review bundle.
+- No new dependencies are introduced.

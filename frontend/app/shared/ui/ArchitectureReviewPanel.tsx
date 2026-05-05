@@ -1,6 +1,7 @@
 import type { ArchitectureReviewBundleResponse } from "@/entities/runtime/api";
 import AgentSkillBindingPanel from "./AgentSkillBindingPanel";
 import AgentSkillPanel from "./AgentSkillPanel";
+import ClickHouseSchemaPanel from "./ClickHouseSchemaPanel";
 import DataCenterPanel from "./DataCenterPanel";
 import ExternalComponentPanel from "./ExternalComponentPanel";
 import IntegrationDecisionPanel from "./IntegrationDecisionPanel";
@@ -50,6 +51,7 @@ export const ArchitectureReviewPanel = ({ review, loading = false, error = null,
     ["External", review.summary?.externalComponents],
     ["Decisions", review.summary?.integrationDecisions],
     ["Data Center", review.summary?.dataCenterConnectors],
+    ["CH Tables", review.summary?.clickHouseTables],
     ["Skills", review.summary?.skills],
     ["Bindings", review.summary?.agentSkillBindings],
     ["Readiness", review.summary?.readiness],
@@ -94,6 +96,7 @@ export const ArchitectureReviewPanel = ({ review, loading = false, error = null,
       <RuntimeReadinessPanel readiness={review.readiness} compact={compact} />
       <ModuleBoundaryPanel catalog={review.moduleBoundaries} compact={compact} />
       <DataCenterPanel catalog={review.dataCenter} compact={compact} />
+      <ClickHouseSchemaPanel catalog={review.clickHouseSchemas} compact={compact} />
       <AgentSkillPanel catalog={review.skills} compact={compact} />
       <AgentSkillBindingPanel catalog={review.agentSkillBindings} compact={compact} />
       <ExternalComponentPanel catalog={review.externalComponents} compact={compact} />

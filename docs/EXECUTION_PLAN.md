@@ -6758,3 +6758,32 @@ Validation:
 Rollback:
 
 Remove the ClickHouse schema catalog service, endpoint, frontend types/helper, smoke additions, and bundle/index additions.
+
+## M210 - Reusable ClickHouse Schema Panel
+
+Status: Completed
+
+Goal:
+
+Render planned ClickHouse structured business/analytics tables in a reusable frontend panel and include it in Architecture Review.
+
+Scope:
+
+1. Add `ClickHouseSchemaPanel`.
+2. Render table name, domain, status, source contracts, partition/order/TTL, and core columns.
+3. Add the panel to `ArchitectureReviewPanel` using `clickHouseSchemas` from the review bundle.
+4. Do not connect to ClickHouse or change persistence behavior.
+
+Acceptance:
+
+1. Frontend build passes.
+2. Architecture Review can show Data Center, ClickHouse schemas, Skills, and Role Binding Matrix together.
+3. No new dependencies are introduced.
+
+Validation:
+
+1. `pnpm --dir frontend build`.
+
+Rollback:
+
+Remove `ClickHouseSchemaPanel` and the ArchitectureReviewPanel additions.

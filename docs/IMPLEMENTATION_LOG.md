@@ -5032,3 +5032,24 @@ Notes:
 
 Next:
 - Continue with M210: add a reusable ClickHouse schema frontend panel and include it in Architecture Review.
+
+## 2026-05-05 - M210 Reusable ClickHouse Schema Panel
+
+Goal:
+- Add a reusable frontend panel for planned ClickHouse business/analytics schemas and include it in Architecture Review.
+
+Changes:
+- Added `frontend/app/shared/ui/ClickHouseSchemaPanel.tsx`.
+- Updated `frontend/app/shared/ui/ArchitectureReviewPanel.tsx` to render ClickHouse schemas.
+
+Validation:
+- pnpm --dir frontend build: passed. Existing Vite chunk/browserslist warnings remain.
+
+Result:
+- M210 is complete. Architecture Review can now render planned ClickHouse structured business/analytics schemas.
+
+Notes:
+- Frontend-only; no live ClickHouse dependency.
+
+Next:
+- Continue with M211: summarize current architecture directory structure and data flow after M204-M210, then decide next implementation slice.
