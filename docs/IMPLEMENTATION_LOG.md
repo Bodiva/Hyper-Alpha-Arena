@@ -4405,3 +4405,22 @@ Notes:
 
 Next:
 - Continue with frontend API typing for task spec diagnostics or a deeper runner/orchestrator split.
+
+## 2026-05-05 - M180 Frontend Task Spec API Contract
+
+Goal:
+- Expose runner task spec contracts to frontend API clients.
+
+Changes:
+- Updated `frontend/app/shared/api/endpoints.ts`.
+- Updated `frontend/app/entities/runtime/api.ts`.
+
+Validation:
+- `pnpm --dir frontend build`: passed.
+
+Notes:
+- This milestone only adds typed API access.
+- It supports future Settings/Agent Lab diagnostics for timeout, retry, and execution boundary policy.
+
+Next:
+- Continue with a consolidated runtime diagnostics endpoint or deeper backend module boundary documentation.

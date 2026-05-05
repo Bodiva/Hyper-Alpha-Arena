@@ -2445,3 +2445,18 @@ Expected:
 - Task spec catalog includes qwen, alphatrace_native, tradingagents, and langalpha runner contracts.
 - Secret-scrub and timeout policies are documented in the response.
 - Runtime architecture index links to `/runtime/task-specs`.
+
+### M180 Frontend Task Spec API Contract
+
+Required frontend build:
+
+```powershell
+pnpm --dir frontend build
+```
+
+Expected:
+
+- Build succeeds.
+- `frontend/app/shared/api/endpoints.ts` exports the task specs endpoint.
+- `frontend/app/entities/runtime/api.ts` exports task spec types and `getTaskSpecContractsAsync`.
+- No existing page wiring is changed in this milestone.

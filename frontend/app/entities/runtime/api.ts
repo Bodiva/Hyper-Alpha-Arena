@@ -171,6 +171,27 @@ export interface AgentArtifactCatalogResponse {
   message?: string;
 }
 
+export interface TaskSpecContractDescriptor {
+  runner_type: string;
+  supported_task_types: string[];
+  default_timeout_seconds: number;
+  max_timeout_seconds: number;
+  default_max_attempts: number;
+  max_attempts: number;
+  execution_boundary: string;
+  payload_policy: string;
+  secret_policy: string;
+  notes: string[];
+}
+
+export interface TaskSpecContractsResponse {
+  version: number;
+  contracts: TaskSpecContractDescriptor[];
+  total: number;
+  policies: JsonRecord;
+  message?: string;
+}
+
 export const getRuntimeArchitectureAsync = () =>
   httpClient.get<RuntimeArchitectureIndex>(ENDPOINTS.alphaTraceAgentRuntimeArchitecture);
 
@@ -194,3 +215,6 @@ export const getAgentRunTimelineSummaryAsync = (runId: string) =>
 
 export const getAgentArtifactCatalogAsync = () =>
   httpClient.get<AgentArtifactCatalogResponse>(ENDPOINTS.alphaTraceAgentRuntimeArtifactCatalog);
+
+export const getTaskSpecContractsAsync = () =>
+  httpClient.get<TaskSpecContractsResponse>(ENDPOINTS.alphaTraceAgentRuntimeTaskSpecs);

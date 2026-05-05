@@ -5863,3 +5863,31 @@ Validation:
 Rollback:
 
 Remove the catalog service, route, architecture index entry, and smoke additions.
+
+## M180 - Frontend Task Spec API Contract
+
+Status: Completed
+
+Goal:
+
+Expose runner task spec contracts to frontend API clients.
+
+Scope:
+
+1. Add `alphaTraceAgentRuntimeTaskSpecs` endpoint constant.
+2. Add task spec contract response and descriptor types.
+3. Add `getTaskSpecContractsAsync()`.
+4. Do not wire existing pages in this milestone.
+
+Acceptance:
+
+1. Frontend build passes.
+2. Task spec helper compiles without new dependencies.
+
+Validation:
+
+1. `pnpm --dir frontend build`.
+
+Rollback:
+
+Remove the endpoint constant, types, and helper.
