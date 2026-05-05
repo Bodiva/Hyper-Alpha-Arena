@@ -2390,3 +2390,23 @@ Expected:
 - `frontend/app/shared/api/endpoints.ts` exports the timeline-summary endpoint.
 - `frontend/app/entities/runtime/api.ts` exports timeline summary types and `getAgentRunTimelineSummaryAsync`.
 - No existing page wiring is changed in this milestone.
+
+### M177 AgentArtifact Catalog Contract
+
+Required backend compile:
+
+```powershell
+python -m py_compile backend/services/agent_artifacts/catalog.py backend/services/agent_artifacts/__init__.py backend/services/architecture_index.py backend/api/alpha_trace_agent_runtime_routes.py
+```
+
+Required regression:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1
+```
+
+Expected:
+
+- Artifact catalog includes all supported artifact types.
+- Catalog policies state canonical URL and HTML safety behavior.
+- Runtime architecture index links to `/runtime/artifacts/catalog`.

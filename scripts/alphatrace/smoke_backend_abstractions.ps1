@@ -35,6 +35,7 @@ $files = @(
   "backend/services/agent_artifacts/memory_store.py",
   "backend/services/agent_artifacts/mysql_store.py",
   "backend/services/agent_artifacts/registry.py",
+  "backend/services/agent_artifacts/catalog.py",
   "backend/services/agent_artifacts/evidence_mapper.py",
   "backend/services/agent_artifacts/tool_result_mapper.py",
   "backend/services/data_api/catalog.py",
@@ -51,7 +52,7 @@ python -m py_compile @files
 Write-Host "[AlphaTrace] local registry/tool adapter smoke"
 $pythonSmoke = @(
   "from services.integration_adapters import EvidenceRetrieveToolAdapter, MarketContextToolAdapter, ToolInvocationRequest, ToolInvocationResult, build_default_integration_registry",
-  "from services.agent_artifacts import AgentArtifact, MemoryAgentArtifactStore, evidence_to_web_artifact, tool_result_to_artifacts",
+  "from services.agent_artifacts import AgentArtifact, MemoryAgentArtifactStore, evidence_to_web_artifact, get_agent_artifact_catalog, tool_result_to_artifacts",
   "from services.architecture_index import get_alphatrace_architecture_index",
   "from services.agent_orchestrator.adapter_matrix import get_adapter_composition_matrix",
   "from services.agent_orchestrator.flow_catalog import get_agent_flow_catalog",
@@ -108,6 +109,8 @@ $pythonSmoke = @(
   "ev = EvidenceReference(evidenceId='ev_bocha_smoke', title='Smoke Evidence', evidenceType='external_search', sourceName='Bocha', qualityScore=80, summary='summary', url='https://example.com')",
   "artifact = evidence_to_web_artifact('run_smoke_script', ev)",
   "assert artifact and artifact.artifact_type == 'web_url', 'evidence artifact mapper smoke failed'",
+  "artifact_catalog = get_agent_artifact_catalog()",
+  "assert artifact_catalog['total'] >= 8 and 'securityPolicy' in artifact_catalog['policies'], 'artifact catalog smoke failed'",
   "tool_artifacts = tool_result_to_artifacts('run_smoke_script', ToolInvocationResult(status='completed', tool_id='bocha.search', content='x' * 100, payload={'webResults':[{'title':'Example','url':'https://example.com','summary':'summary'}]}), step_id='evidence_retrieval')",
   "artifact_types = {item.artifact_type for item in tool_artifacts}",
   "assert {'web_url','json','text'} <= artifact_types, 'tool result artifact mapper smoke failed'"

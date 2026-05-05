@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from services.agent_orchestrator.adapter_matrix import get_adapter_composition_matrix
 from services.agent_orchestrator.flow_catalog import get_agent_flow_catalog
 from services.agent_orchestrator.orchestrator_catalog import list_orchestrator_descriptors
+from services.agent_artifacts import get_agent_artifact_catalog
 from services.agent_tool_registry import list_agent_tool_contracts
 from services.data_api import get_data_api_catalog
 from services.model_providers import list_model_provider_descriptors
@@ -29,6 +30,7 @@ def get_alphatrace_architecture_index(db: Session | None = None) -> dict[str, An
     flow_catalog = get_agent_flow_catalog()
     flow_items = [flow.to_dict() for flow in flow_catalog.list_flows()]
     tools = [tool.to_payload() for tool in list_agent_tool_contracts()]
+    artifact_catalog = get_agent_artifact_catalog()
 
     return {
         "version": 1,
@@ -84,6 +86,7 @@ def get_alphatrace_architecture_index(db: Session | None = None) -> dict[str, An
                 "status": "active",
                 "contracts": (
                     "/api/alpha-trace/agent-runs/runtime/tools",
+                    "/api/alpha-trace/agent-runs/runtime/artifacts/catalog",
                     "/api/alpha-trace/agent-runs/{runId}/artifacts",
                 ),
             },
@@ -96,6 +99,7 @@ def get_alphatrace_architecture_index(db: Session | None = None) -> dict[str, An
             "runnerAdapters": {"total": adapter_matrix.get("total", 0)},
             "runnerFlows": {"total": len(flow_items)},
             "tools": {"total": len(tools)},
+            "artifacts": {"totalTypes": artifact_catalog.get("total", 0)},
         },
         "boundaries": {
             "externalFrameworkPolicy": (
@@ -113,6 +117,7 @@ def get_alphatrace_architecture_index(db: Session | None = None) -> dict[str, An
             "adapterMatrix": "/api/alpha-trace/agent-runs/runners/adapter-matrix",
             "flowCatalog": "/api/alpha-trace/agent-runs/runners/flows",
             "toolContracts": "/api/alpha-trace/agent-runs/runtime/tools",
+            "artifactCatalog": "/api/alpha-trace/agent-runs/runtime/artifacts/catalog",
         },
     }
 

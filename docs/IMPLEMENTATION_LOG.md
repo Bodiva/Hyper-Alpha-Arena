@@ -4339,3 +4339,27 @@ Notes:
 
 Next:
 - Continue with a backend artifact/timeline catalog or begin page wiring after resolving unrelated frontend dirty state.
+
+## 2026-05-05 - M177 AgentArtifact Catalog Contract
+
+Goal:
+- Expose artifact type, preview, canonical source, and security policies as a backend-owned contract.
+
+Changes:
+- Added `backend/services/agent_artifacts/catalog.py`.
+- Updated `backend/services/agent_artifacts/__init__.py`.
+- Added `GET /api/alpha-trace/agent-runs/runtime/artifacts/catalog`.
+- Updated `backend/services/architecture_index.py`.
+- Updated `scripts/alphatrace/smoke_backend_abstractions.ps1`.
+
+Validation:
+- `python -m py_compile backend/services/agent_artifacts/catalog.py backend/services/agent_artifacts/__init__.py backend/services/architecture_index.py backend/api/alpha_trace_agent_runtime_routes.py`: passed.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`: passed.
+
+Notes:
+- The catalog explicitly treats external URLs as canonical sources.
+- HTML preview is design-safe by default: no dangerous inline rendering.
+- LangAlpha/TradingAgents outputs must be mapped into AlphaTrace artifacts before UI rendering.
+
+Next:
+- Continue with frontend API typing for artifact catalog or a UI-safe diagnostics surface.

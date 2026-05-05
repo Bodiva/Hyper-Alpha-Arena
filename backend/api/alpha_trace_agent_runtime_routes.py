@@ -53,7 +53,7 @@ from services.agent_orchestrator.subprocess_orchestrator import get_subprocess_w
 from services.agent_runners.registry import AgentRunnerConfigurationError, AgentRunnerExecutionError, AgentRunnerNotImplementedError
 from services.agent_runtime_store.registry import get_agent_run_store
 from services.agent_tool_registry import list_agent_tool_contracts
-from services.agent_artifacts import get_agent_artifact_store
+from services.agent_artifacts import get_agent_artifact_catalog, get_agent_artifact_store
 from services.integration_adapters import build_default_integration_registry
 from services.async_tasks import get_async_task_store_type, get_mysql_async_task_store
 from services.system_config_store import get_mysql_system_config_store
@@ -342,6 +342,14 @@ def get_agent_runtime_tool_contracts_endpoint():
     return {
         "tools": [item.to_payload() for item in list_agent_tool_contracts()],
         "message": "Tool contracts describe backend actions that may appear in AgentRuntimeEvent tool.called/tool.result payloads.",
+    }
+
+
+@router.get("/runtime/artifacts/catalog")
+def get_agent_runtime_artifact_catalog_endpoint():
+    return {
+        **get_agent_artifact_catalog(),
+        "message": "AgentArtifact catalog is a frontend-safe contract for rendering tool/model/external workbench outputs.",
     }
 
 

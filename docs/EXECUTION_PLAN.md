@@ -5775,3 +5775,33 @@ Validation:
 Rollback:
 
 Remove the endpoint constant, types, and helper.
+
+## M177 - AgentArtifact Catalog Contract
+
+Status: Completed
+
+Goal:
+
+Expose a backend catalog that defines artifact renderability, source policy, and safety rules for tool/model/external workbench outputs.
+
+Scope:
+
+1. Add `agent_artifacts.catalog`.
+2. Add `GET /api/alpha-trace/agent-runs/runtime/artifacts/catalog`.
+3. Include artifact catalog in the runtime architecture index.
+4. Update backend abstraction smoke.
+
+Acceptance:
+
+1. Backend py_compile passes.
+2. Backend abstraction smoke verifies artifact catalog descriptors and safety policy.
+3. No runner execution path changes.
+
+Validation:
+
+1. `python -m py_compile backend/services/agent_artifacts/catalog.py backend/services/agent_artifacts/__init__.py backend/services/architecture_index.py backend/api/alpha_trace_agent_runtime_routes.py`.
+2. `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`.
+
+Rollback:
+
+Remove the catalog service, route, architecture index entry, and smoke additions.

@@ -1,4 +1,5 @@
 from services.agent_artifacts.base import AgentArtifact, AgentArtifactStore, ArtifactStatus, ArtifactType
+from services.agent_artifacts.catalog import ArtifactTypeDescriptor, get_agent_artifact_catalog
 from services.agent_artifacts.evidence_mapper import evidence_list_to_web_artifacts, evidence_to_web_artifact
 from services.agent_artifacts.memory_store import MemoryAgentArtifactStore
 from services.agent_artifacts.mysql_store import MysqlAgentArtifactStore, get_agent_artifact_store_type
@@ -10,6 +11,8 @@ __all__ = [
     "AgentArtifactStore",
     "ArtifactStatus",
     "ArtifactType",
+    "ArtifactTypeDescriptor",
+    "get_agent_artifact_catalog",
     "evidence_list_to_web_artifacts",
     "evidence_to_web_artifact",
     "MemoryAgentArtifactStore",
