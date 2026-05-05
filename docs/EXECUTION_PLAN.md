@@ -4117,7 +4117,7 @@ Validation:
 
 ## M113 - Native Risk Sub-Perspective Implementation
 
-Status: Pending
+Status: In Progress - implemented; runtime validation pending safe restart/no active run
 
 Goal:
 

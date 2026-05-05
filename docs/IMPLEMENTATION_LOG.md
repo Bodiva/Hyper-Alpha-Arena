@@ -3320,3 +3320,34 @@ Notes:
 
 Next:
 - Continue M113 - Native Risk Sub-Perspective Implementation.
+
+## 2026-05-05 - M113 Native Risk Sub-Perspective Implementation
+
+Goal:
+- Add Conservative / Neutral / Aggressive risk perspectives to the bounded Native/Qwen Risk Review step without adding extra model calls.
+
+Changes:
+- Updated `backend/services/agent_runners/qwen_runner.py`.
+- Risk Review prompt now explicitly asks for Conservative Risk Perspective, Neutral Risk Perspective, and Aggressive Risk Perspective.
+- Structured JSON example now includes `riskReview.riskPerspectives.conservative/neutral/aggressive`.
+- Risk Review output is normalized with fallback sections when the model does not explicitly separate all perspectives.
+- Mapper emits additive `risk.warning` runtime events with `riskPerspective=conservative|neutral|aggressive` when perspectives are available.
+- Updated `docs/EXECUTION_PLAN.md`: M113 marked in progress because runtime validation is pending.
+
+Validation:
+- `python -m py_compile backend/services/agent_runners/qwen_runner.py backend/services/agent_runners/native_multi_agent_runner.py`: passed.
+- Runner status API: qwen and alphatrace_native reported ready from `mysql_system_config`; tradingagents remained disabled by policy.
+- Runtime smoke attempted, but timed out on multiple read endpoints while an existing long-running Native run was active and `hyper-arena-app` CPU was high.
+
+Reason runtime validation is pending:
+- Existing active run(s) are still in `running` state and streaming slowly.
+- Restarting the app or cancelling active runs would interrupt user-visible runtime work.
+- M113 needs a safe validation window after current runs complete or after explicit approval to cancel stale runs/restart app.
+
+Notes:
+- No new event type was introduced; `risk.warning` is reused for schema compatibility.
+- This does not change TradingAgents or add extra model calls.
+
+Next:
+- When safe, restart/reload backend, submit one `runnerType=alphatrace_native` smoke run, and verify Risk Review report plus three `riskPerspective` events.
+- If current long-running runs remain stale, decide whether to cancel them before continuing runtime-heavy validation.

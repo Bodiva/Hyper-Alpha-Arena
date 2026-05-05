@@ -213,9 +213,11 @@ class QwenRunnerAdapter:
                 tool_name="qwen.risk_review",
                 title="Risk Review / Rebalance Suggestions" if is_portfolio_task else "Risk Review",
                 instructions=(
-                    "输入 Market / Bull / Bear / Research Manager 和组合上下文，诊断资产配置、风险暴露、调仓建议、最大回撤、波动、集中度、流动性和情景风险。必须引用 evidenceId。"
+                    "输入 Market / Bull / Bear / Research Manager 和组合上下文，诊断资产配置、风险暴露、调仓建议、最大回撤、波动、集中度、流动性和情景风险。"
+                    "必须输出 Conservative Risk Perspective、Neutral Risk Perspective、Aggressive Risk Perspective 三个小节，并引用 evidenceId。"
                     if is_portfolio_task
-                    else "输入 Market / Bull / Bear / Research Manager，评估最大回撤、波动、集中度、流动性、情景风险和需要观察的风险指标。必须引用 evidenceId。"
+                    else "输入 Market / Bull / Bear / Research Manager，评估最大回撤、波动、集中度、流动性、情景风险和需要观察的风险指标。"
+                    "必须输出 Conservative Risk Perspective、Neutral Risk Perspective、Aggressive Risk Perspective 三个小节，并引用 evidenceId。"
                 ),
                 prior_results={
                     "Market View": market_view,
@@ -227,6 +229,22 @@ class QwenRunnerAdapter:
                 portfolio_context=portfolio_context,
                 market_context=market_context,
             )
+            risk_review = self._ensure_risk_perspective_sections(risk_review)
+            for perspective, perspective_content in self._extract_risk_perspectives(risk_review).items():
+                self._append_event(
+                    context,
+                    run_id,
+                    "risk.warning",
+                    self._step_payload(
+                        "risk_review",
+                        progress=70,
+                        level="MEDIUM",
+                        riskPerspective=perspective,
+                        content=perspective_content[:1000],
+                    ),
+                    agent_name="Risk Analyst",
+                    team="risk_team",
+                )
 
             final_decision = self._run_qwen_agent_step(
                 request=request,
@@ -1107,7 +1125,8 @@ class QwenRunnerAdapter:
                     "回答末尾必须追加一个 ```json fenced code block```。",
                     (
                         "JSON schema: 根据 stepId 输出对应顶层字段 marketView / bullView / bearView / riskReview / finalDecision；"
-                        "research_manager 使用 researchManager；字段可包含 summary、consensus、disagreements、openQuestions、arguments、risks、riskItems、watchIndicators、action、confidence、horizon、thesis、evidenceIds。"
+                        "research_manager 使用 researchManager；risk_review 必须包含 riskPerspectives.conservative/neutral/aggressive；"
+                        "字段可包含 summary、consensus、disagreements、openQuestions、arguments、risks、riskItems、watchIndicators、action、confidence、horizon、thesis、evidenceIds。"
                     ),
                     "action 只能是 overweight / underweight / hold / watch / avoid 之一；confidence 必须是 0-1 数字。",
                     "evidenceIds 只能来自 availableEvidence；不要编造 evidenceId。",
@@ -1128,7 +1147,18 @@ class QwenRunnerAdapter:
                             "evidenceIds": ["ev_static_..."],
                         }
                     },
-                    "risk_review": {"riskReview": {"summary": "...", "riskItems": ["..."], "evidenceIds": ["ev_static_..."]}},
+                    "risk_review": {
+                        "riskReview": {
+                            "summary": "...",
+                            "riskItems": ["..."],
+                            "riskPerspectives": {
+                                "conservative": {"summary": "...", "watchItems": ["..."], "evidenceIds": ["ev_static_..."]},
+                                "neutral": {"summary": "...", "watchItems": ["..."], "evidenceIds": ["ev_static_..."]},
+                                "aggressive": {"summary": "...", "watchItems": ["..."], "evidenceIds": ["ev_static_..."]},
+                            },
+                            "evidenceIds": ["ev_static_..."],
+                        }
+                    },
                     "final_decision": {
                         "finalDecision": {
                             "action": "hold",
@@ -1819,6 +1849,20 @@ class QwenRunnerAdapter:
         add_event("report.generated", "Research Manager", "research_team", self._step_payload("research_manager", progress=95, reportId=reports[3].reportId, title=reports[3].title))
         add_event("agent.completed", "Research Manager", "research_team", self._step_payload("research_manager", progress=100))
         add_event("risk.warning", "Risk Analyst", "risk_team", self._step_payload("risk_review", progress=65, level="MEDIUM", content=sections["Risk Review"][:1000], evidenceIds=step_evidence_ids["risk"]))
+        for perspective, perspective_content in self._extract_risk_perspectives(sections["Risk Review"]).items():
+            add_event(
+                "risk.warning",
+                "Risk Analyst",
+                "risk_team",
+                self._step_payload(
+                    "risk_review",
+                    progress=70,
+                    level="MEDIUM",
+                    riskPerspective=perspective,
+                    content=perspective_content[:1000],
+                    evidenceIds=step_evidence_ids["risk"],
+                ),
+            )
         add_event("report.generated", "Risk Analyst", "risk_team", self._step_payload("risk_review", progress=95, reportId=reports[4].reportId, title=reports[4].title))
         add_event("agent.completed", "Risk Analyst", "risk_team", self._step_payload("risk_review", progress=100))
         add_event("reasoning.chunk", "Portfolio Manager", "portfolio_team", self._step_payload("final_decision", progress=65, content=final_decision_text[:1000]))
@@ -2079,9 +2123,71 @@ class QwenRunnerAdapter:
             {"title": "Final Decision", "agent": "Portfolio Manager", "team": "portfolio_team", "toolName": "qwen.final_decision"},
         ]
 
+    @classmethod
+    def _ensure_risk_perspective_sections(cls, risk_review: str) -> str:
+        perspectives = cls._extract_risk_perspectives(risk_review)
+        missing = [label for label in ("conservative", "neutral", "aggressive") if label not in perspectives]
+        if not missing:
+            return risk_review
+
+        fallback_sections = []
+        for key in missing:
+            title = {
+                "conservative": "Conservative Risk Perspective",
+                "neutral": "Neutral Risk Perspective",
+                "aggressive": "Aggressive Risk Perspective",
+            }[key]
+            fallback_sections.append(
+                f"### {title}\n"
+                "The model did not explicitly separate this risk perspective. "
+                "Use the main Risk Review above as fallback context and treat this perspective as low-structure output."
+            )
+        return f"{risk_review.rstrip()}\n\n" + "\n\n".join(fallback_sections)
+
+    @staticmethod
+    def _extract_risk_perspectives(risk_review: str) -> Dict[str, str]:
+        heading_pattern = re.compile(
+            r"(?im)^\s{0,3}(?:#{2,4}\s*)?(?P<label>Conservative|Neutral|Base|Balanced|Aggressive|Offensive|保守|中性|基准|平衡|进取|积极)"
+            r"(?:\s+(?:Risk\s+Perspective|Perspective|View|风险视角|风险观点))?\s*[:：]?\s*$"
+        )
+        matches = list(heading_pattern.finditer(risk_review))
+        perspectives: Dict[str, str] = {}
+        for index, match in enumerate(matches):
+            raw_label = match.group("label").lower()
+            if raw_label in {"conservative", "保守"}:
+                key = "conservative"
+            elif raw_label in {"aggressive", "offensive", "进取", "积极"}:
+                key = "aggressive"
+            else:
+                key = "neutral"
+            start = match.end()
+            end = matches[index + 1].start() if index + 1 < len(matches) else len(risk_review)
+            content = risk_review[start:end].strip()
+            if content:
+                perspectives[key] = content
+
+        if perspectives:
+            return perspectives
+
+        labels = {
+            "conservative": r"(?:Conservative|保守)",
+            "neutral": r"(?:Neutral|Base|Balanced|中性|基准|平衡)",
+            "aggressive": r"(?:Aggressive|Offensive|进取|积极)",
+        }
+        next_label = r"(?:Conservative|Neutral|Base|Balanced|Aggressive|Offensive|保守|中性|基准|平衡|进取|积极)"
+        for key, label_pattern in labels.items():
+            match = re.search(
+                rf"(?is){label_pattern}(?:\s+(?:Risk\s+Perspective|Perspective|View|风险视角|风险观点))?\s*[:：]\s*(.+?)(?={next_label}(?:\s+(?:Risk\s+Perspective|Perspective|View|风险视角|风险观点))?\s*[:：]|\Z)",
+                risk_review,
+            )
+            if match:
+                perspectives[key] = match.group(1).strip()
+        return perspectives
+
     def _parse_qwen_multistep_response(self, content: str) -> Dict[str, str]:
         structured_sections = self._parse_structured_qwen_json(content)
         if structured_sections:
+            structured_sections["Risk Review"] = self._ensure_risk_perspective_sections(structured_sections["Risk Review"])
             return structured_sections
 
         sections = {
@@ -2096,6 +2202,7 @@ class QwenRunnerAdapter:
         for name, value in list(sections.items()):
             if not value:
                 sections[name] = content[:1400] if name == "Final Decision" else f"{name} was not explicitly separated by Qwen. Fallback excerpt:\n{content[:1000]}"
+        sections["Risk Review"] = self._ensure_risk_perspective_sections(sections["Risk Review"])
         return sections
 
     @classmethod
