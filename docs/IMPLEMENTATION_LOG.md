@@ -3249,3 +3249,25 @@ Validation:
 Notes:
 - The currently running backend had not reloaded the new /evidence/search merge behavior during smoke, but list/detail already confirmed Bocha evidence exists and is traceable.
 - Existing unrelated Settings module preset changes remain uncommitted and are not part of M111.
+
+## 2026-05-05 - M112 Agent Timeline Aggregation Cleanup
+
+Goal:
+- Reduce AgentRunDetail timeline fragmentation caused by raw streaming chunks and frequent runtime metric events.
+
+Changes:
+- Updated `frontend/app/pages/AgentRunDetailPage.tsx`.
+- Agent Timeline now keeps only key lifecycle/tool/report/decision/risk events as individual rows.
+- Streaming `reasoning.chunk` / `debate.message` events are aggregated into `live.output.summary` rows per step/agent/type.
+- `metric.updated` events are aggregated into `metric.updated.summary` rows per step/agent with latest token estimates when available.
+- Raw chunk-level and metric-level details remain available in Runtime Event Stream; Agent Timeline is now a decision-chain summary view.
+
+Validation:
+- `pnpm --dir frontend build`: passed.
+- `GET http://127.0.0.1:8805/api/health`: healthy.
+
+Notes:
+- Existing unrelated Settings/layout changes remain uncommitted and were not included in this milestone.
+
+Next:
+- Continue with runtime log availability / backend log path hardening, or proceed to evidence preview UX depending on demo priority.

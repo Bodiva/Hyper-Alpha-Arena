@@ -317,6 +317,7 @@ interface DecisionTimelineItem {
   stepId?: string;
   stepLabel?: string;
   count?: number;
+  metricCount?: number;
   aggregated?: boolean;
 }
 
@@ -335,6 +336,50 @@ const STEP_LABEL: Record<string, string> = {
   research_manager: "Research Manager",
   risk_review: "Risk Review",
   final_decision: "Final Decision",
+};
+
+const TIMELINE_KEY_EVENT_TYPES = new Set([
+  "agent.run.started",
+  "agent.run.completed",
+  "agent.run.failed",
+  "agent.run.cancelled",
+  "agent.started",
+  "agent.completed",
+  "agent.failed",
+  "tool.called",
+  "tool.result",
+  "evidence.linked",
+  "report.generated",
+  "decision.updated",
+  "risk.warning",
+]);
+
+const formatTimelineType = (item: DecisionTimelineItem): string => {
+  if (item.type === "live.output.summary") return "live.output.summary";
+  if (item.type === "metric.updated.summary") return "metric.updated.summary";
+  return item.type in EVENT_LABEL ? EVENT_LABEL[item.type as AgentEvent["type"]] : item.type;
+};
+
+const summarizeMetricPayload = (payload: Record<string, unknown>, count: number): string => {
+  const metrics = typeof payload.metrics === "object" && payload.metrics !== null ? (payload.metrics as Record<string, unknown>) : payload;
+  const promptTokens = typeof metrics.promptTokens === "number" ? metrics.promptTokens : typeof metrics.prompt_tokens === "number" ? metrics.prompt_tokens : undefined;
+  const completionTokens =
+    typeof metrics.completionTokens === "number"
+      ? metrics.completionTokens
+      : typeof metrics.completion_tokens === "number"
+        ? metrics.completion_tokens
+        : undefined;
+  const totalTokens = typeof metrics.totalTokens === "number" ? metrics.totalTokens : typeof metrics.total_tokens === "number" ? metrics.total_tokens : undefined;
+
+  const tokenParts = [
+    promptTokens !== undefined ? `prompt ${promptTokens}` : "",
+    completionTokens !== undefined ? `completion ${completionTokens}` : "",
+    totalTokens !== undefined ? `total ${totalTokens}` : "",
+  ].filter(Boolean);
+
+  return tokenParts.length
+    ? `Runtime metrics aggregated ${count} updates. Latest token estimate: ${tokenParts.join(", ")}.`
+    : `Runtime metrics aggregated ${count} updates. Latest metrics were persisted for this run.`;
 };
 
 const summarizeRuntimeEvent = (event: AgentRuntimeEvent): string => {
@@ -407,6 +452,13 @@ const buildDecisionTimelineItems = (events: AgentRuntimeEvent[], legacyEvents: A
       count: number;
     }
   >();
+  const metricGroups = new Map<
+    string,
+    {
+      event: AgentRuntimeEvent;
+      count: number;
+    }
+  >();
 
   events
     .slice()
@@ -432,6 +484,22 @@ const buildDecisionTimelineItems = (events: AgentRuntimeEvent[], legacyEvents: A
         return;
       }
 
+      if (event.type === "metric.updated") {
+        const key = `${stepId || "general"}:${event.agentName ?? "System"}`;
+        const current = metricGroups.get(key);
+        if (current) {
+          current.event = event;
+          current.count += 1;
+        } else {
+          metricGroups.set(key, { event, count: 1 });
+        }
+        return;
+      }
+
+      if (!TIMELINE_KEY_EVENT_TYPES.has(event.type)) {
+        return;
+      }
+
       items.push({
         itemId: event.eventId,
         type: event.type,
@@ -449,13 +517,30 @@ const buildDecisionTimelineItems = (events: AgentRuntimeEvent[], legacyEvents: A
     const compactText = group.content.replace(/\s+/g, " ").trim();
     items.push({
       itemId: `stream-${key}`,
-      type: `${group.event.type}.stream`,
+      type: "live.output.summary",
       agentName: group.event.agentName ?? "System",
       timestamp: group.event.timestamp,
-      summary: `Live output streamed ${group.count} chunks / ${group.content.length} chars. ${compactText.slice(0, 240)}${compactText.length > 240 ? "..." : ""}`,
+      summary: `Live output aggregated ${group.count} chunks / ${group.content.length} chars. ${compactText.slice(0, 260)}${compactText.length > 260 ? "..." : ""}`,
       stepId,
       stepLabel: STEP_LABEL[stepId],
       count: group.count,
+      aggregated: true,
+    });
+  });
+
+  metricGroups.forEach((group, key) => {
+    const payload = runtimePayload(group.event);
+    const stepId = typeof payload.stepId === "string" ? payload.stepId : "";
+    items.push({
+      itemId: `metrics-${key}`,
+      type: "metric.updated.summary",
+      agentName: group.event.agentName ?? "System",
+      timestamp: group.event.timestamp,
+      summary: summarizeMetricPayload(payload, group.count),
+      stepId,
+      stepLabel: STEP_LABEL[stepId],
+      count: group.count,
+      metricCount: group.count,
       aggregated: true,
     });
   });
@@ -2048,10 +2133,10 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge variant={item.aggregated ? "secondary" : "outline"}>
-                        {item.type in EVENT_LABEL ? EVENT_LABEL[item.type as AgentEvent["type"]] : item.type}
+                        {formatTimelineType(item)}
                       </Badge>
                       {item.stepLabel ? <Badge variant="outline">{item.stepLabel}</Badge> : null}
-                      {item.count ? <Badge variant="outline">{item.count} chunks</Badge> : null}
+                      {item.count ? <Badge variant="outline">{item.metricCount ? `${item.count} updates` : `${item.count} chunks`}</Badge> : null}
                     </div>
                     <span className="text-muted-foreground">{formatDateTime(item.timestamp)}</span>
                   </div>
