@@ -5631,3 +5631,34 @@ Validation:
 Rollback:
 
 Remove the mapper and exports. Artifact store and evidence mapper remain unaffected.
+
+## M172 - ToolExecutor Artifact Mapping Hook
+
+Status: Completed
+
+Goal:
+
+Let `ToolExecutor` expose mapped AgentArtifacts in execution records and result payloads, with optional default-off persistence.
+
+Scope:
+
+1. Map tool results to artifacts during `ToolExecutor.execute`.
+2. Add artifact ids to `tool.result` payload metadata.
+3. Persist artifacts only when `ALPHATRACE_PERSIST_TOOL_RESULT_ARTIFACTS=true`.
+4. Do not change runner execution paths.
+
+Acceptance:
+
+1. Backend py_compile passes.
+2. Local smoke verifies Bocha-like tool output produces artifact ids in result payload.
+3. Backend abstraction smoke script passes.
+
+Validation:
+
+1. `python -m py_compile backend/services/agent_orchestrator/tool_executor.py backend/services/agent_artifacts/tool_result_mapper.py`.
+2. Local ToolExecutor artifact mapping smoke.
+3. `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`.
+
+Rollback:
+
+Remove artifact mapping from `ToolExecutor.execute`. The standalone mapper remains usable.

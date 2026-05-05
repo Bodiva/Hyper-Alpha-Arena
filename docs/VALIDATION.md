@@ -2309,3 +2309,17 @@ Required local smoke:
 
 - Bocha-like `ToolInvocationResult` maps to `web_url`, `json`, and `text` artifacts.
 - `scripts/alphatrace/smoke_backend_abstractions.ps1` passes.
+
+### M172 ToolExecutor Artifact Mapping Hook
+
+Required backend compile:
+
+```powershell
+python -m py_compile backend/services/agent_orchestrator/tool_executor.py backend/services/agent_artifacts/tool_result_mapper.py
+```
+
+Required local smoke:
+
+- Fake tool with Bocha-like web result produces `ToolExecutionRecord.artifacts`.
+- `result_payload.artifactIds` includes mapped artifact ids.
+- `scripts/alphatrace/smoke_backend_abstractions.ps1` passes.

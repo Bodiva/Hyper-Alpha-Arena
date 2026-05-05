@@ -4240,3 +4240,23 @@ Notes:
 
 Next:
 - M172 should add a default-off tool-result artifact persistence path or expose artifact mapping in ToolExecutor records.
+
+## 2026-05-05 - M172 ToolExecutor Artifact Mapping Hook
+
+Goal:
+- Let ToolExecutor records expose mapped AgentArtifacts and artifact ids without changing default persistence behavior.
+
+Changes:
+- Updated `backend/services/agent_orchestrator/tool_executor.py`.
+
+Validation:
+- `python -m py_compile backend/services/agent_orchestrator/tool_executor.py backend/services/agent_artifacts/tool_result_mapper.py`: passed.
+- Local ToolExecutor artifact mapping smoke: passed.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`: passed.
+
+Notes:
+- Artifacts are persisted only when `ALPHATRACE_PERSIST_TOOL_RESULT_ARTIFACTS=true`.
+- Default runner behavior remains unchanged.
+
+Next:
+- M173 should define a frontend artifact API model/view contract or add a backend artifact catalog endpoint for UI discovery.
