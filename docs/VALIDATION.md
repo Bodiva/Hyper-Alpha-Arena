@@ -2154,3 +2154,17 @@ Required local smoke:
 
 - Old running run is detected.
 - Completed run is ignored.
+
+### M163 Qwen Adapter Health Configuration Alignment
+
+Required backend compile:
+
+```powershell
+python -m py_compile backend/services/integration_adapters/qwen_model_adapter.py backend/services/runtime_config/facade.py
+```
+
+Required local smoke:
+
+- `QwenModelProviderAdapter().health()` returns `ready` or `missing_config`.
+- Health source is consistent with runtime config diagnostics.
+- Response contains no raw token-shaped credential such as `sk-` or `Bearer ...`.

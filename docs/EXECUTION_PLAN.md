@@ -5355,3 +5355,33 @@ Validation:
 Rollback:
 
 Remove helper and endpoint. Existing runtime behavior remains unaffected.
+
+## M163 - Qwen Adapter Health Configuration Alignment
+
+Status: Completed
+
+Goal:
+
+Make the Qwen model provider adapter health check use the same runtime configuration facade as Agent Lab runner status and Settings diagnostics.
+
+Scope:
+
+1. Reuse `RuntimeConfigFacade.qwen()` in `QwenModelProviderAdapter.health()`.
+2. Do not change the adapter invocation path.
+3. Do not expose raw API keys.
+4. Do not change QwenRunner behavior.
+
+Acceptance:
+
+1. Backend py_compile passes.
+2. Local smoke can call `QwenModelProviderAdapter().health()`.
+3. Health status is either `ready` or `missing_config` with a clear source and no raw credential value.
+
+Validation:
+
+1. `python -m py_compile backend/services/integration_adapters/qwen_model_adapter.py backend/services/runtime_config/facade.py`.
+2. Local Python smoke for adapter health and credential redaction.
+
+Rollback:
+
+Restore `QwenModelProviderAdapter.health()` to its previous `_resolve_config()`-based implementation. Model invocation remains unaffected either way.

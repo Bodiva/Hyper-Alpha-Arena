@@ -13,6 +13,7 @@ from services.integration_adapters.base import (
     ModelInvocationRequest,
     ModelInvocationResult,
 )
+from services.runtime_config import get_runtime_config_facade
 
 
 QWEN_DEFAULT_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
@@ -62,20 +63,19 @@ class QwenModelProviderAdapter:
         )
 
     def health(self) -> IntegrationHealth:
-        config = self._resolve_config()
-        api_key = config.get("api_key")
-        if not api_key:
+        status = get_runtime_config_facade().qwen()
+        if not status.available:
             return IntegrationHealth(
                 adapter_id=self.adapter_id,
                 status="missing_config",
-                source=config.get("source") or "missing",
-                message="Qwen/DashScope API key is not configured for this provider adapter.",
+                source=status.source,
+                message=status.message,
                 checked_at=datetime.now(timezone.utc).isoformat(),
             )
         return IntegrationHealth(
             adapter_id=self.adapter_id,
             status="ready",
-            source=config.get("source") or "environment_or_mysql_system_config",
+            source=status.source,
             message="Qwen/DashScope API key is configured. Network health is checked during invocation.",
             checked_at=datetime.now(timezone.utc).isoformat(),
         )

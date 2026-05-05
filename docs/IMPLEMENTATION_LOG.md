@@ -4040,3 +4040,26 @@ Runtime observation:
 
 Next:
 - M163 should either add a safe stale-run UI/client plan or perform a backend reload only after confirming no active user-important run should continue.
+
+## 2026-05-05 - M163 Qwen Adapter Health Configuration Alignment
+
+Goal:
+- Keep Qwen integration diagnostics consistent with Settings and Agent Lab runner status by reusing the unified runtime configuration facade.
+
+Changes:
+- Updated `backend/services/integration_adapters/qwen_model_adapter.py`.
+- `QwenModelProviderAdapter.health()` now calls `RuntimeConfigFacade.qwen()`.
+- Model invocation remains unchanged; this is a diagnostics-only boundary cleanup.
+
+Validation:
+- `python -m py_compile backend/services/integration_adapters/qwen_model_adapter.py backend/services/runtime_config/facade.py`: passed.
+- Local smoke for `QwenModelProviderAdapter().health()`: passed.
+- Smoke returned `missing_config` in the local shell because that shell did not have Qwen env/MySQL config loaded; this is expected for the isolated local smoke and does not expose a raw key.
+
+Notes:
+- No frontend changes.
+- No Docker/package changes.
+- No runner behavior change.
+
+Next:
+- M164 should continue backend abstraction cleanup around model provider/catalog boundaries or add runtime-safe HTTP smoke after a backend reload window.
