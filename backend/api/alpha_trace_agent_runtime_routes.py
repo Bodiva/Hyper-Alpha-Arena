@@ -48,6 +48,7 @@ from services.agent_orchestrator.subprocess_orchestrator import get_subprocess_w
 from services.agent_runners.registry import AgentRunnerConfigurationError, AgentRunnerExecutionError, AgentRunnerNotImplementedError
 from services.agent_runtime_store.registry import get_agent_run_store
 from services.agent_tool_registry import list_agent_tool_contracts
+from services.agent_artifacts import get_agent_artifact_store
 from services.integration_adapters import build_default_integration_registry
 from services.async_tasks import get_async_task_store_type, get_mysql_async_task_store
 from services.system_config_store import get_mysql_system_config_store
@@ -549,6 +550,28 @@ def get_agent_run_worker_artifacts_endpoint(
         if work_dir.exists()
         else "No subprocess worker artifacts were found for this run. This is expected for Qwen, Stub, and older runs.",
     }
+
+
+@router.get("/{run_id}/artifacts")
+def list_agent_run_artifacts_endpoint(run_id: str):
+    if not get_agent_run(run_id):
+        raise _not_found(run_id)
+    try:
+        artifacts = get_agent_artifact_store().list_artifacts_for_run(run_id)
+        return {
+            "runId": run_id,
+            "artifacts": [artifact.__dict__ for artifact in artifacts],
+            "total": len(artifacts),
+            "message": "AgentArtifact store is additive. Existing Qwen/Native runs may have no artifacts until artifact-producing tools are wired.",
+        }
+    except Exception as exc:  # noqa: BLE001 - diagnostics should be explicit and non-fatal.
+        return {
+            "runId": run_id,
+            "artifacts": [],
+            "total": 0,
+            "error": str(exc),
+            "message": "AgentArtifact store could not be queried.",
+        }
 
 
 @router.get("", response_model=AgentRunListResponse)

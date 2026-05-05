@@ -2086,3 +2086,15 @@ Full HTTP smoke after backend reload:
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_abstraction_endpoints.ps1
 ```
+
+### M157 AgentArtifact Store Boundary
+
+Required backend compile:
+
+```powershell
+python -m py_compile backend/services/agent_artifacts/base.py backend/services/agent_artifacts/memory_store.py backend/services/agent_artifacts/mysql_store.py backend/services/agent_artifacts/registry.py backend/services/agent_artifacts/__init__.py backend/api/alpha_trace_agent_runtime_routes.py
+```
+
+Required local smoke:
+
+- Save/get/list a `web_url` artifact in `MemoryAgentArtifactStore`.

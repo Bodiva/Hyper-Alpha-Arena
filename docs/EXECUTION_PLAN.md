@@ -5183,3 +5183,33 @@ Validation:
 Rollback:
 
 Remove the script. Runtime behavior remains unaffected.
+
+## M157 - AgentArtifact Store Boundary
+
+Status: Completed
+
+Goal:
+
+Add a product-owned artifact persistence boundary for future LangAlpha/workbench files, tables, charts, web previews, and tool outputs.
+
+Scope:
+
+1. Add memory and MySQL AgentArtifact stores.
+2. Add registry with `ALPHA_TRACE_AGENT_ARTIFACT_STORE=memory|mysql`.
+3. Add `GET /api/alpha-trace/agent-runs/{run_id}/artifacts`.
+4. Do not wire artifact-producing tools yet.
+
+Acceptance:
+
+1. Backend py_compile passes.
+2. Local memory store smoke can save/get/list an artifact.
+3. Existing runs can return an empty artifact list safely.
+
+Validation:
+
+1. `python -m py_compile backend/services/agent_artifacts/base.py backend/services/agent_artifacts/memory_store.py backend/services/agent_artifacts/mysql_store.py backend/services/agent_artifacts/registry.py backend/services/agent_artifacts/__init__.py backend/api/alpha_trace_agent_runtime_routes.py`.
+2. Local Python smoke for `MemoryAgentArtifactStore`.
+
+Rollback:
+
+Remove artifact store files and endpoint. Current reports/evidence/decision behavior remains unaffected.

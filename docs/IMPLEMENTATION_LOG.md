@@ -3928,3 +3928,26 @@ Notes:
 
 Next:
 - Continue backend abstraction work that can be validated statically; schedule endpoint HTTP smoke after a reload window.
+
+## 2026-05-05 - M157 AgentArtifact Store Boundary
+
+Goal:
+- Add a product-owned artifact persistence boundary for future LangAlpha/workbench files, tables, charts, web previews, and tool outputs.
+
+Changes:
+- Added `backend/services/agent_artifacts/memory_store.py`.
+- Added `backend/services/agent_artifacts/mysql_store.py`.
+- Added `backend/services/agent_artifacts/registry.py`.
+- Updated artifact package exports.
+- Added `GET /api/alpha-trace/agent-runs/{run_id}/artifacts`.
+
+Validation:
+- `python -m py_compile backend/services/agent_artifacts/base.py backend/services/agent_artifacts/memory_store.py backend/services/agent_artifacts/mysql_store.py backend/services/agent_artifacts/registry.py backend/services/agent_artifacts/__init__.py backend/api/alpha_trace_agent_runtime_routes.py`: passed.
+- Local memory artifact store smoke passed for save/get/list.
+
+Notes:
+- Existing Qwen/Native runs may return empty artifacts until artifact-producing tools are wired.
+- This store prevents LangAlpha-style workspace/file objects from becoming frontend product state directly.
+
+Next:
+- M158 should add a lightweight Artifact mapping design for Bocha URL previews and LangAlpha external files, then decide whether Evidence detail should create web_url artifacts.
