@@ -4109,3 +4109,26 @@ Notes:
 
 Next:
 - M166 should either adjust frontend AgentRunDetail to consume the metrics snapshot, or continue backend orchestration abstraction with a formal task scheduler registry.
+
+## 2026-05-05 - M166 Orchestrator Catalog Boundary
+
+Goal:
+- Make execution boundaries explicit for current inline runner execution, in-process scheduler, subprocess workers, TradingAgents LangGraph PoC, and future LangAlpha external service adapter.
+
+Changes:
+- Added `backend/services/agent_orchestrator/orchestrator_catalog.py`.
+- Added `GET /api/alpha-trace/agent-runs/runtime/orchestrators`.
+- Updated backend abstraction smoke scripts to include orchestrator catalog checks.
+
+Validation:
+- `python -m py_compile backend/services/agent_orchestrator/orchestrator_catalog.py backend/api/alpha_trace_agent_runtime_routes.py`: passed.
+- Local smoke for `list_orchestrator_descriptors()`: passed.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`: passed.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_abstraction_endpoints.ps1 -SkipHttp`: passed.
+
+Notes:
+- No submit behavior changed.
+- TradingAgents remains opt-in PoC and LangAlpha remains design-only.
+
+Next:
+- M167 should add a concise backend abstraction index endpoint or architecture doc that ties data APIs, model providers, orchestrators, runner flows, tools, and artifacts together for frontend consumption.

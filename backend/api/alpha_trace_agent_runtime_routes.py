@@ -46,6 +46,7 @@ from services.agent_orchestrator.capability_matrix import get_runner_capability,
 from services.agent_orchestrator.native_plan import build_alphatrace_native_plan
 from services.agent_orchestrator.adapter_matrix import get_adapter_composition_matrix
 from services.agent_orchestrator.flow_catalog import get_agent_flow_catalog
+from services.agent_orchestrator.orchestrator_catalog import list_orchestrator_descriptors
 from services.agent_orchestrator.subprocess_orchestrator import get_subprocess_worker_registry_snapshot
 from services.agent_runners.registry import AgentRunnerConfigurationError, AgentRunnerExecutionError, AgentRunnerNotImplementedError
 from services.agent_runtime_store.registry import get_agent_run_store
@@ -364,6 +365,14 @@ def get_agent_runtime_model_providers_endpoint(db: Session = Depends(get_db)):
     return {
         **list_model_provider_descriptors(db),
         "message": "Model provider diagnostics describe backend model boundaries and contain no raw credentials.",
+    }
+
+
+@router.get("/runtime/orchestrators")
+def get_agent_runtime_orchestrators_endpoint():
+    return {
+        **list_orchestrator_descriptors(),
+        "message": "Orchestrator diagnostics describe execution boundaries. They do not expose external runner internal state.",
     }
 
 

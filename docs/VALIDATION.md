@@ -2211,3 +2211,23 @@ Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/agent-runs/<runId>/metri
 Expected:
 
 - Response includes `metrics`, `counts`, `eventCounts`, `agentEventCounts`, and `persistence`.
+
+### M166 Orchestrator Catalog Boundary
+
+Required backend compile:
+
+```powershell
+python -m py_compile backend/services/agent_orchestrator/orchestrator_catalog.py backend/api/alpha_trace_agent_runtime_routes.py
+```
+
+Required local smoke:
+
+- `list_orchestrator_descriptors()` includes inline background thread, subprocess worker, TradingAgents LangGraph runtime, and LangAlpha external service descriptors.
+- `scripts/alphatrace/smoke_backend_abstractions.ps1` passes.
+- `scripts/alphatrace/smoke_abstraction_endpoints.ps1 -SkipHttp` passes.
+
+Runtime HTTP smoke after backend reload:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/agent-runs/runtime/orchestrators
+```

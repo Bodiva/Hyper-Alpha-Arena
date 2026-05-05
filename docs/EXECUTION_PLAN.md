@@ -5448,3 +5448,34 @@ Validation:
 Rollback:
 
 Remove the helper and endpoint. Existing AgentRun metrics and `metric.updated` events remain unchanged.
+
+## M166 - Orchestrator Catalog Boundary
+
+Status: Completed
+
+Goal:
+
+Expose a product-owned orchestrator catalog that distinguishes current inline runner execution, future scheduler execution, subprocess workers, TradingAgents LangGraph PoC, and LangAlpha external service boundaries.
+
+Scope:
+
+1. Add orchestrator descriptors with execution boundary, durable state, supported runners, cancel/retry/event capabilities, and production readiness.
+2. Add `GET /api/alpha-trace/agent-runs/runtime/orchestrators`.
+3. Include the orchestrator catalog in backend abstraction smoke scripts.
+4. Do not replace current submit behavior.
+
+Acceptance:
+
+1. Backend py_compile passes.
+2. Local smoke verifies inline, subprocess, TradingAgents, and LangAlpha orchestrator descriptors exist.
+3. Backend abstraction smoke script passes.
+
+Validation:
+
+1. `python -m py_compile backend/services/agent_orchestrator/orchestrator_catalog.py backend/api/alpha_trace_agent_runtime_routes.py`.
+2. Local Python smoke for `list_orchestrator_descriptors()`.
+3. `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`.
+
+Rollback:
+
+Remove the catalog package import/endpoint and smoke additions. Runtime behavior remains unchanged.
