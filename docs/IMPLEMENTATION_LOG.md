@@ -4828,3 +4828,21 @@ Notes:
 
 Next:
 - Validate build and commit.
+
+## 2026-05-05 - M201 Reusable Architecture Review Panel
+
+Goal:
+- Add a reusable frontend UI primitive for the consolidated architecture review bundle.
+
+Changes:
+- Added `frontend/app/shared/ui/ArchitectureReviewPanel.tsx`.
+
+Validation:
+- `pnpm --dir frontend build`: passed.
+
+Notes:
+- The panel composes existing diagnostic panels and is not wired to current pages.
+- This gives future Settings/Diagnostics/Architecture pages a single component for full backend/frontend boundary review.
+
+Next:
+- Validate build and commit.

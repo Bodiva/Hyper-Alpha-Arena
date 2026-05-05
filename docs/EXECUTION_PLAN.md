@@ -6475,3 +6475,32 @@ Validation:
 Rollback:
 
 Remove the endpoint constant, frontend type, and helper.
+
+## M201 - Reusable Architecture Review Panel
+
+Status: Completed
+
+Goal:
+
+Add a reusable frontend UI primitive that renders the consolidated architecture review bundle.
+
+Scope:
+
+1. Add `ArchitectureReviewPanel`.
+2. Compose `RuntimeReadinessPanel`, `ModuleBoundaryPanel`, `ExternalComponentPanel`, and `IntegrationDecisionPanel`.
+3. Support loading, error, empty, compact, summary cards, and policies.
+4. Do not wire existing pages in this milestone.
+
+Acceptance:
+
+1. Frontend build passes.
+2. Component compiles without new dependencies.
+3. Component can render the architecture review bundle from one API response.
+
+Validation:
+
+1. `pnpm --dir frontend build`.
+
+Rollback:
+
+Remove `frontend/app/shared/ui/ArchitectureReviewPanel.tsx`.

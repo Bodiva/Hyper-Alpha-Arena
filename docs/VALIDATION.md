@@ -2787,3 +2787,17 @@ Expected:
 - `frontend/app/shared/api/endpoints.ts` exports the architecture review endpoint.
 - `frontend/app/entities/runtime/api.ts` exports `ArchitectureReviewBundleResponse` and `getRuntimeArchitectureReviewAsync`.
 - No existing page wiring is changed.
+
+### M201 Reusable Architecture Review Panel
+
+Required frontend build:
+
+```powershell
+pnpm --dir frontend build
+```
+
+Expected:
+
+- Build succeeds.
+- `frontend/app/shared/ui/ArchitectureReviewPanel.tsx` compiles without new dependencies.
+- No existing page wiring is changed.
