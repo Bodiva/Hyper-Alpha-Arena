@@ -4581,3 +4581,21 @@ Notes:
 
 Next:
 - Continue with a reusable DataApiCatalog panel or backend module boundary map.
+
+## 2026-05-05 - M189 Reusable Data API Catalog Panel
+
+Goal:
+- Add a reusable frontend UI primitive for displaying AlphaTrace data API resources and provider boundaries.
+
+Changes:
+- Added `frontend/app/shared/ui/DataApiCatalogPanel.tsx`.
+
+Validation:
+- `pnpm --dir frontend build`: passed.
+
+Notes:
+- This milestone does not wire existing pages because several page files already contain unrelated dirty work.
+- Future Data Sources / Settings / diagnostics views can consume the typed Data API catalog without duplicating rendering logic.
+
+Next:
+- Validate build, commit, and continue backend/frontend abstraction milestones.

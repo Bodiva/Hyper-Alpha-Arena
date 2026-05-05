@@ -2588,3 +2588,17 @@ Expected:
 - Build succeeds.
 - `frontend/app/shared/ui/RuntimeReadinessPanel.tsx` compiles without new dependencies.
 - No existing page wiring is changed in this milestone.
+
+### M189 Reusable Data API Catalog Panel
+
+Required frontend build:
+
+```powershell
+pnpm --dir frontend build
+```
+
+Expected:
+
+- Build succeeds.
+- `frontend/app/shared/ui/DataApiCatalogPanel.tsx` compiles without new dependencies.
+- No existing page wiring is changed in this milestone.

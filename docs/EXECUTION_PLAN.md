@@ -6119,3 +6119,31 @@ Validation:
 Rollback:
 
 Remove `frontend/app/shared/ui/RuntimeReadinessPanel.tsx`.
+
+## M189 - Reusable Data API Catalog Panel
+
+Status: Completed
+
+Goal:
+
+Add a reusable frontend UI primitive for rendering AlphaTrace data API resource and provider boundaries.
+
+Scope:
+
+1. Add `DataApiCatalogPanel`.
+2. Support loading, error, empty, compact, provider status badges, provider notes, and resource paths.
+3. Do not wire existing pages in this milestone to avoid mixing with unrelated dirty page work.
+
+Acceptance:
+
+1. Frontend build passes.
+2. Component compiles without new dependencies.
+3. The component can render resources and providers from `DataApiCatalogResponse`.
+
+Validation:
+
+1. `pnpm --dir frontend build`.
+
+Rollback:
+
+Remove `frontend/app/shared/ui/DataApiCatalogPanel.tsx`.
