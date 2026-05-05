@@ -29,15 +29,19 @@ import {
   MARKET_OPTIONS,
   TAG_OPTIONS,
   deleteBochaRuntimeConfig,
+  deleteWorkspaceDefaultPreset,
   getRuntimeCredentialStatus,
   getSettings,
+  getWorkspaceDefaultPresets,
   saveBochaRuntimeConfig,
   saveQwenRuntimeConfig,
+  saveWorkspaceDefaultPreset,
   testCurrentQwenRuntimeConfig,
   type DataSourceDefaultStatus,
   type DecisionDefaultStatus,
   type EvidenceQualityThreshold,
   type LeaderboardSortMetric,
+  type WorkspaceDefaultPresetPayload,
 } from "@/entities/settings/api";
 import { API_BASE_URL } from "@/shared/api/api-config";
 import { navigateTo } from "@/shared/lib/navigation";
@@ -109,17 +113,10 @@ interface FieldBlockProps {
   children: ReactNode;
 }
 
-interface WorkspaceDefaultPreset {
+interface WorkspaceDefaultPreset extends WorkspaceDefaultPresetPayload {
   id: string;
-  name: string;
   description: string;
-  assetTypes: string[];
-  markets: string[];
-  tags: string[];
-  leaderboardSortMetric: LeaderboardSortMetric;
-  evidenceQualityThreshold: EvidenceQualityThreshold;
-  decisionDefaultStatus: DecisionDefaultStatus;
-  dataSourceDefaultStatus: DataSourceDefaultStatus;
+  source: "builtin" | "database";
 }
 
 const SETTINGS_NAV = [
@@ -143,6 +140,7 @@ const WORKSPACE_DEFAULT_PRESETS: WorkspaceDefaultPreset[] = [
     evidenceQualityThreshold: "GE_80",
     decisionDefaultStatus: "VERIFIED",
     dataSourceDefaultStatus: "NORMAL",
+    source: "builtin",
   },
   {
     id: "etf-index",
@@ -155,6 +153,7 @@ const WORKSPACE_DEFAULT_PRESETS: WorkspaceDefaultPreset[] = [
     evidenceQualityThreshold: "GE_80",
     decisionDefaultStatus: "VERIFIED",
     dataSourceDefaultStatus: "NORMAL",
+    source: "builtin",
   },
   {
     id: "fund-selection",
@@ -167,6 +166,7 @@ const WORKSPACE_DEFAULT_PRESETS: WorkspaceDefaultPreset[] = [
     evidenceQualityThreshold: "GE_90",
     decisionDefaultStatus: "VERIFIED",
     dataSourceDefaultStatus: "NORMAL",
+    source: "builtin",
   },
   {
     id: "futures-macro",
@@ -179,6 +179,7 @@ const WORKSPACE_DEFAULT_PRESETS: WorkspaceDefaultPreset[] = [
     evidenceQualityThreshold: "GE_70",
     decisionDefaultStatus: "ALL",
     dataSourceDefaultStatus: "ALL",
+    source: "builtin",
   },
   {
     id: "portfolio-risk",
@@ -191,6 +192,7 @@ const WORKSPACE_DEFAULT_PRESETS: WorkspaceDefaultPreset[] = [
     evidenceQualityThreshold: "GE_90",
     decisionDefaultStatus: "PENDING",
     dataSourceDefaultStatus: "WARNING",
+    source: "builtin",
   },
 ];
 
@@ -277,6 +279,10 @@ export default function SettingsPage() {
   const [dataSourcePolicy, setDataSourcePolicy] = useState(settings.dataSourcePolicy);
   const [pagePreferences, setPagePreferences] = useState(settings.pagePreferences);
   const [activeWorkspacePresetId, setActiveWorkspacePresetId] = useState("balanced-research");
+  const [databaseWorkspacePresets, setDatabaseWorkspacePresets] = useState<WorkspaceDefaultPreset[]>([]);
+  const [workspacePresetName, setWorkspacePresetName] = useState("");
+  const [workspacePresetLoading, setWorkspacePresetLoading] = useState(false);
+  const [workspacePresetSaving, setWorkspacePresetSaving] = useState(false);
   const [operationNote, setOperationNote] = useState("当前配置面板已支持 Runtime Credentials 写入后端；其余产品偏好仍为前端本地状态。");
 
   const [runtimeConfigLoading, setRuntimeConfigLoading] = useState(false);
@@ -318,6 +324,29 @@ export default function SettingsPage() {
 
   useEffect(() => {
     void loadRuntimeCredentials();
+  }, []);
+
+  const normalizeDatabasePreset = (preset: WorkspaceDefaultPresetPayload): WorkspaceDefaultPreset => ({
+    ...preset,
+    id: preset.id || `custom-${preset.name}`,
+    description: preset.description || "自定义工作台默认模板",
+    source: "database",
+  });
+
+  const loadWorkspacePresets = async () => {
+    setWorkspacePresetLoading(true);
+    try {
+      const result = await getWorkspaceDefaultPresets();
+      setDatabaseWorkspacePresets((result.presets || []).map(normalizeDatabasePreset));
+    } catch (error) {
+      setOperationNote(getErrorMessage(error, "读取自定义工作台模板失败。"));
+    } finally {
+      setWorkspacePresetLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadWorkspacePresets();
   }, []);
 
   const saveQwenCredentials = async () => {
@@ -397,6 +426,10 @@ export default function SettingsPage() {
 
   const availableMarkets = useMemo(() => Array.from(new Set(assets.map((asset) => asset.market))), [assets]);
   const availableTags = useMemo(() => Array.from(new Set(assets.flatMap((asset) => asset.tags))), [assets]);
+  const workspacePresetOptions = useMemo(
+    () => [...WORKSPACE_DEFAULT_PRESETS, ...databaseWorkspacePresets],
+    [databaseWorkspacePresets],
+  );
 
   const applyWorkspacePreset = (preset: WorkspaceDefaultPreset) => {
     setDefaultAssetTypes(preset.assetTypes);
@@ -408,6 +441,55 @@ export default function SettingsPage() {
     setDataSourceDefaultStatus(preset.dataSourceDefaultStatus);
     setActiveWorkspacePresetId(preset.id);
     setOperationNote(`已套用“${preset.name}”工作台默认模板（当前为前端本地状态）。`);
+  };
+
+  const saveCurrentWorkspacePreset = async () => {
+    const name = workspacePresetName.trim();
+    if (!name) {
+      setOperationNote("请输入自定义模板名称。");
+      return;
+    }
+
+    setWorkspacePresetSaving(true);
+    try {
+      const result = await saveWorkspaceDefaultPreset({
+        name,
+        description: `保存于 Settings：${previewSummary.assetScopeSummary}`,
+        assetTypes: defaultAssetTypes,
+        markets: defaultMarkets,
+        tags: defaultTags,
+        leaderboardSortMetric,
+        evidenceQualityThreshold,
+        decisionDefaultStatus,
+        dataSourceDefaultStatus,
+      });
+      const nextPresets = (result.presets || []).map(normalizeDatabasePreset);
+      setDatabaseWorkspacePresets(nextPresets);
+      setActiveWorkspacePresetId(result.preset.id || nextPresets[0]?.id || activeWorkspacePresetId);
+      setWorkspacePresetName("");
+      setOperationNote(`已保存自定义模板“${result.preset.name}”到数据库。`);
+    } catch (error) {
+      setOperationNote(getErrorMessage(error, "保存自定义工作台模板失败。"));
+    } finally {
+      setWorkspacePresetSaving(false);
+    }
+  };
+
+  const removeWorkspacePreset = async (preset: WorkspaceDefaultPreset) => {
+    if (preset.source !== "database") return;
+    setWorkspacePresetSaving(true);
+    try {
+      const result = await deleteWorkspaceDefaultPreset(preset.id);
+      setDatabaseWorkspacePresets((result.presets || []).map(normalizeDatabasePreset));
+      if (activeWorkspacePresetId === preset.id) {
+        setActiveWorkspacePresetId("balanced-research");
+      }
+      setOperationNote(`已删除自定义模板“${preset.name}”。`);
+    } catch (error) {
+      setOperationNote(getErrorMessage(error, "删除自定义工作台模板失败。"));
+    } finally {
+      setWorkspacePresetSaving(false);
+    }
   };
 
   const previewSummary = useMemo(
@@ -604,36 +686,74 @@ export default function SettingsPage() {
               <div className="mb-3 flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
                 <div>
                   <h2 className="text-sm font-semibold">预设模板</h2>
-                  <p className="text-xs text-muted-foreground">选择一个常用工作流模板，自动套用资产范围和默认筛选偏好。</p>
+                  <p className="text-xs text-muted-foreground">选择一个常用工作流模板，自动套用资产范围和默认筛选偏好；自定义模板会保存到数据库。</p>
                 </div>
                 <Badge variant="outline">
-                  当前模板：{WORKSPACE_DEFAULT_PRESETS.find((preset) => preset.id === activeWorkspacePresetId)?.name ?? "自定义"}
+                  当前模板：{workspacePresetOptions.find((preset) => preset.id === activeWorkspacePresetId)?.name ?? "自定义"}
                 </Badge>
               </div>
+              <div className="mb-4 flex flex-col gap-2 rounded-md border bg-muted/20 p-3 md:flex-row md:items-center">
+                <Input
+                  value={workspacePresetName}
+                  onChange={(event) => setWorkspacePresetName(event.target.value)}
+                  placeholder="输入自定义模板名称，例如：我的 ETF 低波模板"
+                  className="md:max-w-sm"
+                />
+                <Button size="sm" onClick={() => void saveCurrentWorkspacePreset()} disabled={workspacePresetSaving}>
+                  <Save className="h-4 w-4" />
+                  {workspacePresetSaving ? "保存中..." : "保存当前为模板"}
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => void loadWorkspacePresets()} disabled={workspacePresetLoading}>
+                  <RefreshCcw className="h-4 w-4" />
+                  {workspacePresetLoading ? "读取中..." : "刷新模板"}
+                </Button>
+              </div>
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-                {WORKSPACE_DEFAULT_PRESETS.map((preset) => (
-                  <button
+                {workspacePresetOptions.map((preset) => (
+                  <div
                     key={preset.id}
-                    type="button"
-                    onClick={() => applyWorkspacePreset(preset)}
                     className={`rounded-lg border p-3 text-left transition hover:border-primary hover:bg-muted/50 ${
                       activeWorkspacePresetId === preset.id ? "border-primary bg-primary/5" : "bg-card"
                     }`}
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm font-semibold">{preset.name}</p>
-                      {activeWorkspacePresetId === preset.id ? <Badge variant="default">active</Badge> : null}
-                    </div>
-                    <p className="mt-2 min-h-[2.5rem] text-xs text-muted-foreground">{preset.description}</p>
-                    <div className="mt-3 flex flex-wrap gap-1">
-                      {preset.assetTypes.slice(0, 3).map((item) => (
-                        <Badge key={`${preset.id}-${item}`} variant="outline">{item}</Badge>
-                      ))}
-                      {preset.assetTypes.length > 3 ? <Badge variant="outline">+{preset.assetTypes.length - 3}</Badge> : null}
-                    </div>
-                  </button>
+                    <button type="button" onClick={() => applyWorkspacePreset(preset)} className="block w-full text-left">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm font-semibold">{preset.name}</p>
+                        {activeWorkspacePresetId === preset.id ? (
+                          <Badge variant="default">active</Badge>
+                        ) : (
+                          <Badge variant="outline">{preset.source === "database" ? "custom" : "built-in"}</Badge>
+                        )}
+                      </div>
+                      <p className="mt-2 min-h-[2.5rem] text-xs text-muted-foreground">{preset.description}</p>
+                      <div className="mt-3 flex flex-wrap gap-1">
+                        {preset.assetTypes.slice(0, 3).map((item) => (
+                          <Badge key={`${preset.id}-${item}`} variant="outline">{item}</Badge>
+                        ))}
+                        {preset.assetTypes.length > 3 ? <Badge variant="outline">+{preset.assetTypes.length - 3}</Badge> : null}
+                      </div>
+                    </button>
+                    {preset.source === "database" ? (
+                      <div className="mt-3 border-t pt-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 w-full text-xs"
+                          onClick={() => void removeWorkspacePreset(preset)}
+                          disabled={workspacePresetSaving}
+                        >
+                          删除自定义模板
+                        </Button>
+                      </div>
+                    ) : null}
+                  </div>
                 ))}
               </div>
+              {databaseWorkspacePresets.length > 0 ? (
+                <div className="mt-3 text-xs text-muted-foreground">
+                  数据库自定义模板：{databaseWorkspacePresets.length} 个
+                </div>
+              ) : null}
             </div>
 
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">

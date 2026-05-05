@@ -5,8 +5,10 @@ System config API routes
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from typing import Optional
+from typing import Any, Dict, List, Optional
 import logging
+import json
+import re
 
 from database.connection import SessionLocal
 from database.models import SystemConfig, GlobalSamplingConfig
@@ -29,6 +31,94 @@ class ConfigUpdateRequest(BaseModel):
     key: str
     value: str
     description: Optional[str] = None
+
+
+WORKSPACE_PRESETS_CONFIG_KEY = "alphatrace_workspace_default_presets"
+
+
+class WorkspacePresetRequest(BaseModel):
+    id: Optional[str] = None
+    name: str
+    description: Optional[str] = ""
+    assetTypes: List[str]
+    markets: List[str]
+    tags: List[str]
+    leaderboardSortMetric: str
+    evidenceQualityThreshold: str
+    decisionDefaultStatus: str
+    dataSourceDefaultStatus: str
+
+
+def _slugify_preset_id(name: str) -> str:
+    slug = re.sub(r"[^a-zA-Z0-9\u4e00-\u9fff]+", "-", name.strip()).strip("-").lower()
+    return f"custom-{slug or 'workspace-preset'}"
+
+
+def _normalize_workspace_preset(raw: Dict[str, Any]) -> Dict[str, Any]:
+    name = str(raw.get("name") or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="preset name is required")
+
+    preset_id = str(raw.get("id") or "").strip() or _slugify_preset_id(name)
+    if not preset_id.startswith("custom-"):
+        preset_id = f"custom-{preset_id}"
+
+    def list_of_strings(key: str) -> List[str]:
+        value = raw.get(key)
+        if not isinstance(value, list):
+            raise HTTPException(status_code=400, detail=f"{key} must be a list")
+        return [str(item).strip() for item in value if str(item).strip()]
+
+    return {
+        "id": preset_id,
+        "name": name,
+        "description": str(raw.get("description") or "").strip(),
+        "assetTypes": list_of_strings("assetTypes"),
+        "markets": list_of_strings("markets"),
+        "tags": list_of_strings("tags"),
+        "leaderboardSortMetric": str(raw.get("leaderboardSortMetric") or "COMPOSITE_SCORE"),
+        "evidenceQualityThreshold": str(raw.get("evidenceQualityThreshold") or "GE_80"),
+        "decisionDefaultStatus": str(raw.get("decisionDefaultStatus") or "VERIFIED"),
+        "dataSourceDefaultStatus": str(raw.get("dataSourceDefaultStatus") or "NORMAL"),
+        "source": "database",
+    }
+
+
+def _load_workspace_presets(db: Session) -> List[Dict[str, Any]]:
+    config = db.query(SystemConfig).filter(SystemConfig.key == WORKSPACE_PRESETS_CONFIG_KEY).first()
+    if not config or not config.value:
+        return []
+    try:
+        payload = json.loads(config.value)
+    except json.JSONDecodeError:
+        logger.warning("Invalid workspace presets JSON in SystemConfig")
+        return []
+    if not isinstance(payload, list):
+        return []
+    presets = []
+    for item in payload:
+        if isinstance(item, dict):
+            try:
+                presets.append(_normalize_workspace_preset(item))
+            except HTTPException:
+                logger.warning("Skipping invalid workspace preset: %s", item)
+    return presets
+
+
+def _save_workspace_presets(db: Session, presets: List[Dict[str, Any]]) -> None:
+    config = db.query(SystemConfig).filter(SystemConfig.key == WORKSPACE_PRESETS_CONFIG_KEY).first()
+    value = json.dumps(presets, ensure_ascii=False)
+    if config:
+        config.value = value
+        config.description = "AlphaTrace custom workspace default presets"
+    else:
+        config = SystemConfig(
+            key=WORKSPACE_PRESETS_CONFIG_KEY,
+            value=value,
+            description="AlphaTrace custom workspace default presets",
+        )
+        db.add(config)
+    db.commit()
 
 
 @router.get("/check-required")
@@ -136,6 +226,50 @@ async def update_global_sampling_config(payload: dict, db: Session = Depends(get
     except Exception as e:
         logger.error(f"Failed to update global sampling config: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to update global sampling config: {str(e)}")
+
+
+@router.get("/workspace-presets")
+async def get_workspace_presets(db: Session = Depends(get_db)):
+    """Get custom AlphaTrace workspace default presets stored in SystemConfig."""
+    try:
+        return {"presets": _load_workspace_presets(db)}
+    except Exception as e:
+        logger.error(f"Failed to get workspace presets: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get workspace presets: {str(e)}")
+
+
+@router.post("/workspace-presets")
+async def upsert_workspace_preset(payload: WorkspacePresetRequest, db: Session = Depends(get_db)):
+    """Create or update a custom AlphaTrace workspace default preset."""
+    try:
+        preset = _normalize_workspace_preset(payload.dict())
+        presets = _load_workspace_presets(db)
+        next_presets = [item for item in presets if item.get("id") != preset["id"]]
+        next_presets.insert(0, preset)
+        _save_workspace_presets(db, next_presets)
+        return {"preset": preset, "presets": next_presets}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to save workspace preset: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to save workspace preset: {str(e)}")
+
+
+@router.delete("/workspace-presets/{preset_id}")
+async def delete_workspace_preset(preset_id: str, db: Session = Depends(get_db)):
+    """Delete a custom AlphaTrace workspace default preset."""
+    try:
+        presets = _load_workspace_presets(db)
+        next_presets = [item for item in presets if item.get("id") != preset_id]
+        if len(next_presets) == len(presets):
+            raise HTTPException(status_code=404, detail="workspace preset not found")
+        _save_workspace_presets(db, next_presets)
+        return {"success": True, "presets": next_presets}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete workspace preset: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete workspace preset: {str(e)}")
 
 
 # Generic system config update - must be after specific routes to avoid path conflicts

@@ -82,6 +82,28 @@ export interface SaveQwenConfigPayload {
   baseUrl?: string;
 }
 
+export interface WorkspaceDefaultPresetPayload {
+  id?: string;
+  name: string;
+  description?: string;
+  assetTypes: string[];
+  markets: string[];
+  tags: string[];
+  leaderboardSortMetric: LeaderboardSortMetric;
+  evidenceQualityThreshold: EvidenceQualityThreshold;
+  decisionDefaultStatus: DecisionDefaultStatus;
+  dataSourceDefaultStatus: DataSourceDefaultStatus;
+  source?: "builtin" | "database";
+}
+
+export interface WorkspacePresetListResponse {
+  presets: WorkspaceDefaultPresetPayload[];
+}
+
+export interface WorkspacePresetSaveResponse extends WorkspacePresetListResponse {
+  preset: WorkspaceDefaultPresetPayload;
+}
+
 export const getRuntimeCredentialStatus = async (): Promise<RuntimeCredentialStatus> => {
   const [providersResponse, profile, toolsResponse] = await Promise.all([
     httpClient.get<{ providers: RuntimeProviderOption[] }>("/hyper-ai/providers"),
@@ -115,3 +137,14 @@ export const saveBochaRuntimeConfig = async (apiKey: string, validateKey = false
 
 export const deleteBochaRuntimeConfig = async (): Promise<{ success: boolean; tool_name: string }> =>
   httpClient.delete("/hyper-ai/tools/bocha/config");
+
+export const getWorkspaceDefaultPresets = async (): Promise<WorkspacePresetListResponse> =>
+  httpClient.get("/config/workspace-presets");
+
+export const saveWorkspaceDefaultPreset = async (
+  payload: WorkspaceDefaultPresetPayload,
+): Promise<WorkspacePresetSaveResponse> =>
+  httpClient.post("/config/workspace-presets", payload);
+
+export const deleteWorkspaceDefaultPreset = async (presetId: string): Promise<WorkspacePresetListResponse & { success: boolean }> =>
+  httpClient.delete(`/config/workspace-presets/${encodeURIComponent(presetId)}`);
