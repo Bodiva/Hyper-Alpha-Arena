@@ -44,6 +44,7 @@ from services.agent_runtime_metrics import get_agent_run_metrics_snapshot
 from services.agent_runtime_timeline import get_agent_run_timeline_summary
 from services.architecture_index import get_alphatrace_architecture_index
 from services.backend_module_boundaries import get_backend_module_boundary_catalog
+from services.external_component_catalog import get_external_component_catalog
 from services.agent_orchestrator.execution_policy import get_runner_execution_policy
 from services.agent_orchestrator.capability_matrix import get_runner_capability, list_runner_capabilities, resolve_recommended_runner
 from services.agent_orchestrator.native_plan import build_alphatrace_native_plan
@@ -386,6 +387,14 @@ def get_agent_runtime_module_boundaries_endpoint():
     return {
         **get_backend_module_boundary_catalog().to_response(),
         "message": "Backend module boundaries separate AlphaTrace-owned product layers from legacy modules and optional external runtimes.",
+    }
+
+
+@router.get("/runtime/external-components")
+def get_agent_runtime_external_components_endpoint():
+    return {
+        **get_external_component_catalog().to_response(),
+        "message": "External component catalog defines safe adapter boundaries for TradingAgents, LangAlpha, Bocha, and future data providers.",
     }
 
 

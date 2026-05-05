@@ -12,6 +12,7 @@ from services.agent_artifacts import get_agent_artifact_catalog
 from services.agent_tool_registry import list_agent_tool_contracts
 from services.backend_module_boundaries import get_backend_module_boundary_catalog
 from services.data_api import get_data_api_catalog
+from services.external_component_catalog import get_external_component_catalog
 from services.model_providers import list_model_provider_descriptors
 from services.runtime_config import get_runtime_config_facade
 
@@ -35,6 +36,7 @@ def get_alphatrace_architecture_index(db: Session | None = None) -> dict[str, An
     tools = [tool.to_payload() for tool in list_agent_tool_contracts()]
     artifact_catalog = get_agent_artifact_catalog()
     module_boundaries = get_backend_module_boundary_catalog().to_response()
+    external_components = get_external_component_catalog().to_response()
 
     return {
         "version": 1,
@@ -65,6 +67,12 @@ def get_alphatrace_architecture_index(db: Session | None = None) -> dict[str, An
                 "displayName": "Backend Module Boundary Catalog",
                 "status": "active",
                 "contracts": ("/api/alpha-trace/agent-runs/runtime/module-boundaries",),
+            },
+            {
+                "layerId": "external_components",
+                "displayName": "External Component Integration Catalog",
+                "status": "active",
+                "contracts": ("/api/alpha-trace/agent-runs/runtime/external-components",),
             },
             {
                 "layerId": "data_api",
@@ -121,6 +129,10 @@ def get_alphatrace_architecture_index(db: Session | None = None) -> dict[str, An
                 "total": module_boundaries.get("total", 0),
                 "summary": module_boundaries.get("summary", {}),
             },
+            "externalComponents": {
+                "total": external_components.get("total", 0),
+                "summary": external_components.get("summary", {}),
+            },
         },
         "boundaries": {
             "externalFrameworkPolicy": (
@@ -134,6 +146,7 @@ def get_alphatrace_architecture_index(db: Session | None = None) -> dict[str, An
             "runtimeConfig": "/api/alpha-trace/agent-runs/runtime/config",
             "runtimeReadiness": "/api/alpha-trace/agent-runs/runtime/readiness",
             "moduleBoundaries": "/api/alpha-trace/agent-runs/runtime/module-boundaries",
+            "externalComponents": "/api/alpha-trace/agent-runs/runtime/external-components",
             "modelProviders": "/api/alpha-trace/agent-runs/runtime/model-providers",
             "orchestrators": "/api/alpha-trace/agent-runs/runtime/orchestrators",
             "taskSpecs": "/api/alpha-trace/agent-runs/runtime/task-specs",

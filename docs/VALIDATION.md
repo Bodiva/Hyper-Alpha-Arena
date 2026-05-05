@@ -2652,3 +2652,24 @@ Expected:
 - Build succeeds.
 - `frontend/app/shared/ui/ModuleBoundaryPanel.tsx` compiles without new dependencies.
 - No existing page wiring is changed.
+
+### M193 External Component Integration Catalog
+
+Required backend compile:
+
+```powershell
+python -m py_compile backend/services/external_component_catalog.py backend/services/architecture_index.py backend/api/alpha_trace_agent_runtime_routes.py
+```
+
+Required regression:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_abstraction_endpoints.ps1 -SkipHttp
+```
+
+Expected:
+
+- External component catalog includes TradingAgents, LangAlpha, Bocha, and future professional market data.
+- Catalog states integration mode, non-goals, runtime requirements, and risk notes.
+- No external project is imported or executed.

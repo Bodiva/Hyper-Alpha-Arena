@@ -6236,3 +6236,35 @@ Validation:
 Rollback:
 
 Remove `frontend/app/shared/ui/ModuleBoundaryPanel.tsx`.
+
+## M193 - External Component Integration Catalog
+
+Status: Completed
+
+Goal:
+
+Expose a product-safe catalog for external open-source runtimes, workbenches, APIs, and future data providers.
+
+Scope:
+
+1. Add `backend/services/external_component_catalog.py`.
+2. Add `GET /api/alpha-trace/agent-runs/runtime/external-components`.
+3. Include external component summaries in the architecture index.
+4. Add checks to backend abstraction smoke and endpoint smoke.
+
+Acceptance:
+
+1. Backend py_compile passes.
+2. Backend abstraction smoke passes.
+3. Endpoint smoke script syntax includes external components.
+4. Catalog covers TradingAgents, LangAlpha, Bocha, and future professional market data without importing or running external projects.
+
+Validation:
+
+1. `python -m py_compile backend/services/external_component_catalog.py backend/services/architecture_index.py backend/api/alpha_trace_agent_runtime_routes.py`.
+2. `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`.
+3. `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_abstraction_endpoints.ps1 -SkipHttp`.
+
+Rollback:
+
+Remove the external component catalog service, endpoint, architecture-index additions, and smoke additions.

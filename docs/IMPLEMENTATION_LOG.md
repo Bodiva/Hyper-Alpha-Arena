@@ -4661,3 +4661,28 @@ Notes:
 
 Next:
 - Validate build and commit.
+
+## 2026-05-05 - M193 External Component Integration Catalog
+
+Goal:
+- Add a backend read model for safe integration boundaries around TradingAgents, LangAlpha, Bocha, and future market data providers.
+
+Changes:
+- Added `backend/services/external_component_catalog.py`.
+- Updated `backend/api/alpha_trace_agent_runtime_routes.py`.
+- Updated `backend/services/architecture_index.py`.
+- Updated `scripts/alphatrace/smoke_backend_abstractions.ps1`.
+- Updated `scripts/alphatrace/smoke_abstraction_endpoints.ps1`.
+
+Validation:
+- `python -m py_compile backend/services/external_component_catalog.py backend/services/architecture_index.py backend/api/alpha_trace_agent_runtime_routes.py`: passed.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`: passed.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_abstraction_endpoints.ps1 -SkipHttp`: passed.
+
+Notes:
+- The catalog is a control-plane contract; it does not import or execute TradingAgents or LangAlpha.
+- It makes clear which capabilities can be used through adapters and which responsibilities remain AlphaTrace-owned.
+
+Next:
+- Validate and commit the catalog.
+
