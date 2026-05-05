@@ -5534,3 +5534,26 @@ Notes:
 
 Result:
 - M228 is complete.
+
+## 2026-05-05 - M229 Architecture Index Public Tool/Skill Link Alignment
+
+Goal:
+- Keep architecture diagnostics aligned with the public Tool/Skill Catalog API added in M224.
+
+Changes:
+- Updated `backend/services/architecture_index.py`.
+- Added public links:
+  - `toolCatalog`: `/api/alpha-trace/tools`
+  - `skillCatalog`: `/api/alpha-trace/skills`
+  - `skillBindings`: `/api/alpha-trace/skills/bindings`
+- Kept runtime diagnostic links in place.
+
+Validation:
+- `python -m py_compile backend/services/architecture_index.py backend/services/architecture_review_bundle.py backend/api/alpha_trace_agent_runtime_routes.py backend/api/alpha_trace_tool_skill_routes.py`: passed.
+- Direct architecture index smoke: passed.
+  - Layers: 13.
+  - Tools summary total: 12.
+  - Skills summary total: 6.
+
+Result:
+- M229 is complete.

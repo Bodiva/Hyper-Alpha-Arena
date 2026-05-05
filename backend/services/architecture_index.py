@@ -113,6 +113,8 @@ def get_alphatrace_architecture_index(db: Session | None = None) -> dict[str, An
                 "displayName": "Agent Skill Catalog",
                 "status": "active",
                 "contracts": (
+                    "/api/alpha-trace/skills",
+                    "/api/alpha-trace/skills/bindings",
                     "/api/alpha-trace/agent-runs/runtime/skills",
                     "/api/alpha-trace/agent-runs/runtime/agent-skill-bindings",
                 ),
@@ -146,6 +148,7 @@ def get_alphatrace_architecture_index(db: Session | None = None) -> dict[str, An
                 "displayName": "Tool Contracts and Agent Artifacts",
                 "status": "active",
                 "contracts": (
+                    "/api/alpha-trace/tools",
                     "/api/alpha-trace/agent-runs/runtime/tools",
                     "/api/alpha-trace/agent-runs/runtime/artifacts/catalog",
                     "/api/alpha-trace/agent-runs/{runId}/artifacts",
@@ -202,6 +205,9 @@ def get_alphatrace_architecture_index(db: Session | None = None) -> dict[str, An
             "dataApiCatalog": "/api/alpha-trace/data-sources/api-catalog",
             "dataCenter": "/api/alpha-trace/agent-runs/runtime/data-center",
             "clickHouseSchemas": "/api/alpha-trace/agent-runs/runtime/clickhouse-schema-catalog",
+            "toolCatalog": "/api/alpha-trace/tools",
+            "skillCatalog": "/api/alpha-trace/skills",
+            "skillBindings": "/api/alpha-trace/skills/bindings",
             "skills": "/api/alpha-trace/agent-runs/runtime/skills",
             "agentSkillBindings": "/api/alpha-trace/agent-runs/runtime/agent-skill-bindings",
             "adapterMatrix": "/api/alpha-trace/agent-runs/runners/adapter-matrix",

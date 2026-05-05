@@ -7385,3 +7385,33 @@ Validation:
 Rollback:
 
 Remove the `alpha_trace.etf_index_valuation_daily` descriptor from `clickhouse_schema_catalog.py`.
+
+## M229 - Architecture Index Public Tool/Skill Link Alignment
+
+Status: Completed
+
+Goal:
+
+Align the architecture index with the product-level Tool/Skill Catalog API added in M224.
+
+Scope:
+
+1. Add `/api/alpha-trace/tools` to the architecture index tool layer.
+2. Add `/api/alpha-trace/skills` and `/api/alpha-trace/skills/bindings` to the architecture index skill layer.
+3. Keep existing runtime diagnostics links for backward compatibility.
+4. Do not change catalog contents or runtime behavior.
+
+Acceptance:
+
+1. Architecture index `links` includes `toolCatalog`, `skillCatalog`, and `skillBindings`.
+2. Architecture index layers include the public Tool/Skill Catalog API contracts.
+3. Runtime diagnostic links remain present.
+
+Validation:
+
+1. `python -m py_compile backend/services/architecture_index.py backend/services/architecture_review_bundle.py backend/api/alpha_trace_agent_runtime_routes.py backend/api/alpha_trace_tool_skill_routes.py`
+2. Direct smoke validates public tool/skill links in `get_alphatrace_architecture_index`.
+
+Rollback:
+
+Revert the `architecture_index.py` link/contract additions.

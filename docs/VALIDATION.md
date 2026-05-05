@@ -3361,3 +3361,30 @@ Expected:
 
 - Schema catalog includes the implemented ETF/index valuation wide table.
 - The generic market facts table remains planned.
+
+## M229 Validation - Architecture Index Public Tool/Skill Link Alignment
+
+Required checks:
+
+```powershell
+python -m py_compile backend/services/architecture_index.py backend/services/architecture_review_bundle.py backend/api/alpha_trace_agent_runtime_routes.py backend/api/alpha_trace_tool_skill_routes.py
+```
+
+Direct smoke:
+
+```powershell
+$env:PYTHONPATH="backend"
+python - <<'PY'
+from services.architecture_index import get_alphatrace_architecture_index
+index = get_alphatrace_architecture_index(None)
+assert index["links"]["toolCatalog"] == "/api/alpha-trace/tools"
+assert index["links"]["skillCatalog"] == "/api/alpha-trace/skills"
+assert any("/api/alpha-trace/tools" in layer["contracts"] for layer in index["layers"])
+assert any("/api/alpha-trace/skills" in layer["contracts"] for layer in index["layers"])
+PY
+```
+
+Expected:
+
+- Architecture diagnostics link to public Tool/Skill Catalog APIs.
+- Runtime diagnostic links remain available.
