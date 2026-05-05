@@ -134,6 +134,14 @@ const request = async <T>(url: string, options: RequestOptions = {}): Promise<T>
       };
       throw apiError;
     }
+    if (error instanceof TypeError) {
+      const apiError: ApiError = {
+        code: "NETWORK_ERROR",
+        message: `Failed to reach backend API at ${finalUrl}. Check that the local backend is running and VITE_ALPHA_TRACE_API_BASE_URL points to the same backend used by this page.`,
+        details: { url: finalUrl, originalMessage: error.message },
+      };
+      throw apiError;
+    }
     throw error;
   } finally {
     window.clearTimeout(timeout);

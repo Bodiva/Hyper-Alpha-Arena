@@ -325,6 +325,7 @@ frontend/node_modules/
 # Development Plans (sensitive information)
 REAL_TRADING_PLAN.md
 *_PLAN.md
+!docs/engineering/26_alphatrace_backend_implementation_plan.md
 
 # Memory Bank and Prompts (local only)
 memory-bank/
@@ -336,4 +337,14 @@ prompts/
 
 # Internal docs (not for public repo)
 docs/*.md
+!docs/ARCHITECTURE.md
+!docs/PROJECT_SPEC.md
+!docs/EXECUTION_PLAN.md
+!docs/IMPLEMENTATION_LOG.md
+!docs/VALIDATION.md
 backend/scripts/
+
+# AlphaTrace local run artifacts
+/IMPLEMENTATION_LOG.md
+/last_*.txt
+

@@ -85,26 +85,28 @@ const AgentRunProgressCard = ({ progress, runStatus, runtimeStatus, className = 
         ) : null}
 
         {expanded ? (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            <div className="space-y-2">
+          <div className="grid grid-cols-1 lg:grid-cols-2 items-stretch gap-3">
+            <div className="flex h-full flex-col space-y-2">
               <p className="font-medium">步骤状态</p>
               {progress.steps.map((step) => (
                 <StepRow key={step.stepId} step={step} />
               ))}
             </div>
-            <div className="space-y-2">
+            <div className="flex h-full min-h-0 flex-col space-y-2">
               <p className="font-medium">最近事件</p>
-              <div className="max-h-72 overflow-auto space-y-2 pr-1">
+              <div className="min-h-[24rem] flex-1 overflow-auto rounded border bg-muted/10 p-2">
                 {progress.recentEvents.length ? (
-                  progress.recentEvents.slice(0, 20).map((event) => (
-                    <div key={event.eventId} className="rounded border bg-background p-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <Badge variant="outline">{event.type}</Badge>
-                        <span className="text-muted-foreground">{new Date(event.timestamp).toLocaleTimeString("zh-CN", { hour12: false })}</span>
+                  <div className="space-y-2">
+                    {progress.recentEvents.slice(0, 20).map((event) => (
+                      <div key={event.eventId} className="rounded border bg-background p-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <Badge variant="outline">{event.type}</Badge>
+                          <span className="text-muted-foreground">{new Date(event.timestamp).toLocaleTimeString("zh-CN", { hour12: false })}</span>
+                        </div>
+                        <p className="mt-1 text-muted-foreground">{event.agentName ? `${event.agentName}: ` : ""}{event.summary}</p>
                       </div>
-                      <p className="mt-1 text-muted-foreground">{event.agentName ? `${event.agentName}: ` : ""}{event.summary}</p>
-                    </div>
-                  ))
+                    ))}
+                  </div>
                 ) : (
                   <p className="text-muted-foreground">暂无 runtime event。</p>
                 )}

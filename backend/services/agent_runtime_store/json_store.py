@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -74,7 +75,15 @@ class JsonAgentRunStore(MemoryAgentRunStore):
                 "runs": {run_id: run.model_dump() for run_id, run in self._runs.items()},
                 "evidence": {item_id: item.model_dump() for item_id, item in self._evidence.items()},
             }
-        tmp_path = self.path.with_suffix(f"{self.path.suffix}.tmp")
-        tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        os.replace(tmp_path, self.path)
-
+            tmp_path = self.path.with_suffix(f"{self.path.suffix}.{os.getpid()}.tmp")
+            tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            last_error: OSError | None = None
+            for attempt in range(5):
+                try:
+                    os.replace(tmp_path, self.path)
+                    return
+                except PermissionError as exc:
+                    last_error = exc
+                    time.sleep(0.05 * (attempt + 1))
+            if last_error:
+                raise last_error

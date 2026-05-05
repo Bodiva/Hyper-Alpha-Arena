@@ -56,17 +56,135 @@ export interface SubmitAgentRunPayload {
     includeMarketSnapshot?: boolean;
   };
   runnerConfig?: {
-    runnerType?: "stub" | "qwen" | "tradingagents" | "custom_runner";
+    runnerType?: "stub" | "qwen" | "alphatrace_native" | "tradingagents" | "langalpha" | "custom_runner";
     modelProvider?: string;
     modelName?: string;
     enableStreaming?: boolean;
+    extraParams?: Record<string, unknown>;
   };
+}
+
+export interface AgentRunnerStatusItem {
+  runnerType: "stub" | "qwen" | "alphatrace_native" | "tradingagents" | "langalpha" | "custom_runner";
+  executionMode?: "in_process" | "subprocess" | "external_disabled" | "custom" | string;
+  executionPolicyReason?: string;
+  capabilities?: {
+    runner_type?: string;
+    runnerType?: string;
+    execution_mode?: string;
+    executionMode?: string;
+    supported_task_types?: string[];
+    supportedTaskTypes?: string[];
+    supports_streaming?: boolean;
+    supportsStreaming?: boolean;
+    supports_evidence?: boolean;
+    supportsEvidence?: boolean;
+    supports_portfolio_context?: boolean;
+    supportsPortfolioContext?: boolean;
+    supports_external_tools?: boolean;
+    supportsExternalTools?: boolean;
+    production_ready?: boolean;
+    productionReady?: boolean;
+    notes?: string;
+  };
+  enabled: boolean;
+  available: boolean;
+  status: string;
+  message: string;
+  repoPathConfigured?: boolean;
+  repoPathExists?: boolean | null;
+  repoPath?: string | null;
+  importable?: boolean;
+  importError?: string | null;
+  qwenKeyConfigured?: boolean;
+  qwenConfigSource?: string;
+}
+
+export interface AgentRunnerCapability {
+  runner_type?: string;
+  runnerType?: string;
+  execution_mode?: string;
+  executionMode?: string;
+  supported_task_types?: string[];
+  supportedTaskTypes?: string[];
+  supports_streaming?: boolean;
+  supportsStreaming?: boolean;
+  supports_evidence?: boolean;
+  supportsEvidence?: boolean;
+  supports_portfolio_context?: boolean;
+  supportsPortfolioContext?: boolean;
+  supports_external_tools?: boolean;
+  supportsExternalTools?: boolean;
+  production_ready?: boolean;
+  productionReady?: boolean;
+  notes?: string;
+}
+
+export interface AgentRunnerRecommendation {
+  requestedRunnerType?: string | null;
+  recommendedRunnerType: string;
+  taskType: string;
+  supported: boolean;
+  reason: string;
+  capability?: AgentRunnerCapability;
+}
+
+export interface AgentRunnerCapabilitiesResponse {
+  capabilities: AgentRunnerCapability[];
+  recommendation: AgentRunnerRecommendation;
+  message: string;
+}
+
+export interface AgentRuntimeLogResponse {
+  path: string;
+  exists: boolean;
+  limit: number;
+  truncated: boolean;
+  lines: string[];
+  message?: string;
+}
+
+export interface AgentWorkerArtifactFileStatus {
+  path: string;
+  exists: boolean;
+  sizeBytes: number;
+}
+
+export interface AgentWorkerArtifactsResponse {
+  runId: string;
+  workerRoot: string;
+  workDir: string;
+  exists: boolean;
+  files: Record<string, AgentWorkerArtifactFileStatus>;
+  stdoutLines: string[];
+  stderrLines: string[];
+  events: Array<Record<string, unknown>>;
+  result?: Record<string, unknown> | null;
+  message?: string | null;
+}
+
+export interface AgentRuntimeWorkerStatus {
+  runId: string;
+  pid: number;
+  running: boolean;
+  returnCode?: number | null;
+}
+
+export interface AgentRuntimeWorkersResponse {
+  workerType: string;
+  activeCount: number;
+  registeredCount: number;
+  workers: AgentRuntimeWorkerStatus[];
+}
+
+interface BackendAgentRunnerStatusResponse {
+  runners: AgentRunnerStatusItem[];
 }
 
 interface BackendSubmitAgentRunResponse {
   runId: string;
   status: string;
-  mode: "stub" | "qwen" | "tradingagents" | "custom_runner";
+  mode: "stub" | "qwen" | "tradingagents" | "langalpha" | "custom_runner";
   message: string;
   run: BackendAgentRun;
 }
@@ -190,7 +308,7 @@ const mapRunStatus = (status: string): AgentRunStatus => {
 
 const mapAgentStatus = (status: string): AgentStatus => {
   const normalized = upperSnake(status);
-  if (["IDLE", "RUNNING", "COMPLETED", "FAILED"].includes(normalized)) return normalized as AgentStatus;
+  if (["IDLE", "RUNNING", "COMPLETED", "FAILED", "CANCELLED"].includes(normalized)) return normalized as AgentStatus;
   return "IDLE";
 };
 
@@ -577,6 +695,16 @@ export const getAgentRunDecisionAsync = async (runId: string, delayMs?: number):
   return mapBackendAgentDecision(await httpClient.get<BackendAgentDecision>(ENDPOINTS.alphaTraceAgentRunDecision(runId)));
 };
 
+export const cancelAgentRunAsync = async (runId: string): Promise<AgentRun> => {
+  if (shouldUseMockData()) {
+    const run = agentRunsMock.find((item) => item.runId === runId);
+    if (!run) throw new Error("Mock Agent Run not found.");
+    return mockDelay({ ...run, status: "CANCELLED" });
+  }
+
+  return mapBackendAgentRun(await httpClient.post<BackendAgentRun>(ENDPOINTS.alphaTraceAgentRunCancel(runId), {}));
+};
+
 export const createDemoAgentRunAsync = async (
   payload: CreateDemoAgentRunPayload,
   delayMs?: number,
@@ -649,6 +777,7 @@ export const submitAgentRunAsync = async (
           modelProvider: payload.runnerConfig?.modelProvider ?? "none",
           modelName: payload.runnerConfig?.modelName ?? "none",
           enableStreaming: payload.runnerConfig?.enableStreaming ?? true,
+          extraParams: payload.runnerConfig?.extraParams ?? {},
         },
       },
       { timeoutMs: AGENT_RUN_SUBMIT_TIMEOUT_MS },
@@ -663,4 +792,208 @@ export const submitAgentRunAsync = async (
           : "Agent task submit failed";
     throw new Error(`Failed to submit agent task: ${message}`);
   }
+};
+
+export const getAgentRunnerStatusAsync = async (): Promise<AgentRunnerStatusItem[]> => {
+  if (shouldUseMockData()) {
+    return [
+      {
+        runnerType: "stub",
+        executionMode: "in_process",
+        executionPolicyReason: "Mock mode uses in-process sample data.",
+        capabilities: {
+          supportedTaskTypes: ["single_asset_analysis"],
+          supportsStreaming: false,
+          supportsEvidence: false,
+          supportsPortfolioContext: false,
+          supportsExternalTools: false,
+          productionReady: false,
+          notes: "Mock sample data only.",
+        },
+        enabled: true,
+        available: true,
+        status: "ready",
+        message: "Mock mode uses local sample AgentRun data.",
+      },
+      {
+        runnerType: "qwen",
+        executionMode: "in_process",
+        executionPolicyReason: "Qwen real runner is not called in Mock Mode.",
+        capabilities: {
+          supportedTaskTypes: ["single_asset_analysis", "portfolio_diagnosis"],
+          supportsStreaming: true,
+          supportsEvidence: true,
+          supportsPortfolioContext: true,
+          supportsExternalTools: true,
+          productionReady: false,
+          notes: "Real API mode only.",
+        },
+        enabled: false,
+        available: false,
+        status: "mock",
+        message: "Qwen real runner is not called in Mock Mode.",
+      },
+      {
+        runnerType: "tradingagents",
+        executionMode: "subprocess",
+        executionPolicyReason: "TradingAgents PoC uses subprocess isolation in Real API mode.",
+        capabilities: {
+          supportedTaskTypes: ["single_asset_analysis"],
+          supportsStreaming: true,
+          supportsEvidence: true,
+          supportsPortfolioContext: false,
+          supportsExternalTools: true,
+          productionReady: false,
+          notes: "Real API PoC only.",
+        },
+        enabled: false,
+        available: false,
+        status: "mock",
+        message: "TradingAgents PoC requires Real API mode and local backend 8812.",
+      },
+      {
+        runnerType: "langalpha",
+        executionMode: "external_disabled",
+        executionPolicyReason: "LangAlpha is design-only.",
+        capabilities: {
+          supportedTaskTypes: [],
+          supportsStreaming: false,
+          supportsEvidence: false,
+          supportsPortfolioContext: false,
+          supportsExternalTools: false,
+          productionReady: false,
+          notes: "Design-only.",
+        },
+        enabled: false,
+        available: false,
+        status: "design_only",
+        message: "LangAlpha is design-only.",
+      },
+    ];
+  }
+
+  const response = await httpClient.get<BackendAgentRunnerStatusResponse>(
+    ENDPOINTS.alphaTraceAgentRunnerStatus,
+    { timeoutMs: 5000 },
+  );
+  return response.runners;
+};
+
+export const getAgentRunnerCapabilitiesAsync = async (
+  params: { taskType?: string; requestedRunnerType?: string } = {},
+): Promise<AgentRunnerCapabilitiesResponse> => {
+  if (shouldUseMockData()) {
+    return mockDelay({
+      capabilities: [
+        {
+          runnerType: "stub",
+          executionMode: "in_process",
+          supportedTaskTypes: ["single_asset_analysis"],
+          supportsStreaming: false,
+          supportsEvidence: false,
+          supportsPortfolioContext: false,
+          supportsExternalTools: false,
+          productionReady: false,
+          notes: "Mock sample data only.",
+        },
+        {
+          runnerType: "qwen",
+          executionMode: "in_process",
+          supportedTaskTypes: ["single_asset_analysis", "portfolio_diagnosis"],
+          supportsStreaming: true,
+          supportsEvidence: true,
+          supportsPortfolioContext: true,
+          supportsExternalTools: true,
+          productionReady: false,
+          notes: "Default MVP research runner.",
+        },
+        {
+          runnerType: "tradingagents",
+          executionMode: "subprocess",
+          supportedTaskTypes: ["single_asset_analysis"],
+          supportsStreaming: true,
+          supportsEvidence: true,
+          supportsPortfolioContext: false,
+          supportsExternalTools: true,
+          productionReady: false,
+          notes: "PoC only.",
+        },
+      ],
+      recommendation: {
+        requestedRunnerType: params.requestedRunnerType ?? null,
+        recommendedRunnerType: params.requestedRunnerType ?? "qwen",
+        taskType: params.taskType ?? "single_asset_analysis",
+        supported: true,
+        reason: "Mock Mode preview mirrors the AlphaTrace capability matrix.",
+      },
+      message: "Mock runner capability preview.",
+    });
+  }
+
+  return httpClient.get<AgentRunnerCapabilitiesResponse>(ENDPOINTS.alphaTraceAgentRunnerCapabilities, {
+    params: {
+      taskType: params.taskType,
+      requestedRunnerType: params.requestedRunnerType,
+    },
+    timeoutMs: 5000,
+  });
+};
+
+export const getAgentRuntimeLogsAsync = async (limit = 400): Promise<AgentRuntimeLogResponse> => {
+  if (shouldUseMockData()) {
+    return mockDelay({
+      path: "mock",
+      exists: false,
+      limit,
+      truncated: false,
+      lines: [],
+      message: "Mock Mode does not expose backend runtime logs.",
+    });
+  }
+
+  return httpClient.get<AgentRuntimeLogResponse>(ENDPOINTS.alphaTraceAgentRuntimeLogs, {
+    params: { limit },
+    timeoutMs: 5000,
+  });
+};
+
+export const getAgentWorkerArtifactsAsync = async (
+  runId: string,
+  logLimit = 200,
+  eventLimit = 200,
+): Promise<AgentWorkerArtifactsResponse> => {
+  if (shouldUseMockData()) {
+    return mockDelay({
+      runId,
+      workerRoot: "mock",
+      workDir: "mock",
+      exists: false,
+      files: {},
+      stdoutLines: [],
+      stderrLines: [],
+      events: [],
+      result: null,
+      message: "Mock Mode does not expose worker artifacts.",
+    });
+  }
+
+  return httpClient.get<AgentWorkerArtifactsResponse>(ENDPOINTS.alphaTraceAgentRunWorkerArtifacts(runId), {
+    params: { logLimit, eventLimit },
+    timeoutMs: 5000,
+  });
+};
+
+export const getAgentRuntimeWorkersAsync = async (): Promise<AgentRuntimeWorkersResponse> => {
+  if (shouldUseMockData()) {
+    return mockDelay({
+      workerType: "subprocess",
+      activeCount: 0,
+      registeredCount: 0,
+      workers: [],
+    });
+  }
+
+  return httpClient.get<AgentRuntimeWorkersResponse>(ENDPOINTS.alphaTraceAgentRuntimeWorkers, {
+    timeoutMs: 5000,
+  });
 };

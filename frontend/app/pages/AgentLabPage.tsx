@@ -3,8 +3,19 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { AgentRun, AgentRunStatus, AgentRunTaskType } from "@/entities/agent/model";
-import { createDemoAgentRunAsync, listAgentRunsAsync, submitAgentRunAsync } from "@/entities/agent/api";
+import {
+  createDemoAgentRunAsync,
+  getAgentRunnerCapabilitiesAsync,
+  getAgentRunnerStatusAsync,
+  getAgentRuntimeWorkersAsync,
+  listAgentRunsAsync,
+  submitAgentRunAsync,
+  type AgentRuntimeWorkersResponse,
+  type AgentRunnerCapabilitiesResponse,
+  type AgentRunnerStatusItem,
+} from "@/entities/agent/api";
 import { listAssets } from "@/entities/asset/api";
+import { getRuntimeCredentialStatus, type RuntimeCredentialStatus } from "@/entities/settings/api";
 import { getApiMode } from "@/shared/api/api-mode";
 import { getCurrentHashQueryParams, navigateTo } from "@/shared/lib/navigation";
 import ResearchWorkspaceNav from "@/shared/ui/ResearchWorkspaceNav";
@@ -17,7 +28,7 @@ type AssetFilter = "ALL" | "ETF" | "FUND" | "FUTURE" | "INDEX" | "MULTI_ASSET";
 type TaskFilter = "ALL" | AgentRunTaskType;
 type StatusFilter = "ALL" | AgentRunStatus;
 type TimeFilter = "ALL" | "TODAY" | "LAST_7_DAYS" | "LAST_30_DAYS";
-type SubmitRunnerKind = "stub" | "qwen";
+type SubmitRunnerKind = "stub" | "qwen" | "alphatrace_native" | "tradingagents";
 
 const STATUS_LABEL: Record<StatusFilter, string> = {
   ALL: "全部",
@@ -75,6 +86,16 @@ const TASK_FILTERS: TaskFilter[] = [
 ];
 const TIME_FILTERS: TimeFilter[] = ["ALL", "TODAY", "LAST_7_DAYS", "LAST_30_DAYS"];
 
+const getErrorMessage = (error: unknown, fallback: string): string => {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message.trim()) return message;
+  }
+  if (typeof error === "string" && error.trim()) return error;
+  return fallback;
+};
+
 const countDaysDiff = (startedAt: string): number => {
   const now = new Date();
   const start = new Date(startedAt);
@@ -127,7 +148,92 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
   const [submittingRunner, setSubmittingRunner] = useState<SubmitRunnerKind | null>(null);
   const [demoRunMessage, setDemoRunMessage] = useState<string | null>(null);
   const [demoRunError, setDemoRunError] = useState<string | null>(null);
+  const [runnerStatuses, setRunnerStatuses] = useState<AgentRunnerStatusItem[]>([]);
+  const [isLoadingRunnerStatus, setIsLoadingRunnerStatus] = useState(true);
+  const [runnerStatusError, setRunnerStatusError] = useState<string | null>(null);
+  const [runnerCapabilities, setRunnerCapabilities] = useState<AgentRunnerCapabilitiesResponse | null>(null);
+  const [runnerCapabilitiesError, setRunnerCapabilitiesError] = useState<string | null>(null);
+  const [runtimeWorkers, setRuntimeWorkers] = useState<AgentRuntimeWorkersResponse | null>(null);
+  const [runtimeWorkersError, setRuntimeWorkersError] = useState<string | null>(null);
+  const [runtimeCredentials, setRuntimeCredentials] = useState<RuntimeCredentialStatus | null>(null);
+  const [runtimeCredentialsError, setRuntimeCredentialsError] = useState<string | null>(null);
+  const [draftRunner, setDraftRunner] = useState<SubmitRunnerKind>("qwen");
+  const [draftTaskType, setDraftTaskType] = useState<AgentRunTaskType>("SINGLE_ASSET_ANALYSIS");
+  const [draftAssetId, setDraftAssetId] = useState("asset_etf_510300");
+  const [draftQuestion, setDraftQuestion] = useState("请分析该 ETF 是否适合中期配置");
   const assetsById = useMemo(() => new Map(assets.map((asset) => [asset.id, asset])), [assets]);
+  const runnerStatusByType = useMemo(
+    () => new Map(runnerStatuses.map((runner) => [runner.runnerType, runner])),
+    [runnerStatuses],
+  );
+  const qwenStatus = runnerStatusByType.get("qwen");
+  const nativeStatus = runnerStatusByType.get("alphatrace_native");
+  const tradingAgentsStatus = runnerStatusByType.get("tradingagents");
+  const bochaToolStatus = runtimeCredentials?.tools.find((tool) => tool.name === "bocha");
+  const qwenCredentialSource = runtimeCredentials?.profile.llm_config_source ?? qwenStatus?.qwenConfigSource ?? "unknown";
+  const qwenCredentialAvailable = runtimeCredentials?.profile.llm_api_key_available ?? qwenStatus?.qwenKeyConfigured ?? false;
+  const bochaCredentialSource = bochaToolStatus?.config_source ?? "unknown";
+  const bochaCredentialAvailable = Boolean(bochaToolStatus?.api_key_available ?? bochaToolStatus?.configured);
+  const getSupportedTaskTypes = (runner: AgentRunnerStatusItem): string[] =>
+    runner.capabilities?.supportedTaskTypes ?? runner.capabilities?.supported_task_types ?? [];
+  const getCapabilityBoolean = (
+    runner: AgentRunnerStatusItem,
+    camelKey: "supportsStreaming" | "supportsEvidence" | "supportsPortfolioContext" | "supportsExternalTools" | "productionReady",
+    snakeKey: "supports_streaming" | "supports_evidence" | "supports_portfolio_context" | "supports_external_tools" | "production_ready",
+  ): boolean | undefined => {
+    const camelValue = runner.capabilities?.[camelKey];
+    if (typeof camelValue === "boolean") return camelValue;
+    const snakeValue = runner.capabilities?.[snakeKey];
+    return typeof snakeValue === "boolean" ? snakeValue : undefined;
+  };
+  const tradingAgentsSubmitBlockedReason = useMemo(() => {
+    if (apiMode !== "real") return null;
+    if (!tradingAgentsStatus) {
+      if (isLoadingRunnerStatus && !runnerStatusError) return "TradingAgents runtime status is checking backend status.";
+      return runnerStatusError
+        ? `TradingAgents runtime status unavailable: ${runnerStatusError}`
+        : "TradingAgents runtime status unavailable. Use Runtime Diagnostics > Refresh.";
+    }
+    if (!tradingAgentsStatus.enabled || !tradingAgentsStatus.available || tradingAgentsStatus.status !== "ready") {
+      return tradingAgentsStatus.message || "TradingAgents runner is not ready.";
+    }
+    if (tradingAgentsStatus.qwenKeyConfigured === false) {
+      return "TradingAgents requires a backend Qwen API key. Save Qwen API Key again in Settings or set DASHSCOPE_API_KEY before starting backend.";
+    }
+    return null;
+  }, [apiMode, isLoadingRunnerStatus, runnerStatusError, tradingAgentsStatus]);
+  const qwenSubmitBlockedReason = useMemo(() => {
+    if (apiMode !== "real") return null;
+    if (!qwenStatus) {
+      if (isLoadingRunnerStatus && !runnerStatusError) return "Qwen runtime status is checking backend status.";
+      return runnerStatusError
+        ? `Qwen runtime status unavailable: ${runnerStatusError}`
+        : "Qwen runtime status unavailable. Use Runtime Diagnostics > Refresh.";
+    }
+    if (!qwenStatus.available || qwenStatus.status !== "ready") {
+      return qwenStatus.message || "Qwen runner requires a backend Qwen API key.";
+    }
+    if (qwenStatus.qwenKeyConfigured === false) {
+      return "Qwen runner requires a backend Qwen API key. Save Qwen API Key again in Settings or set DASHSCOPE_API_KEY on the backend.";
+    }
+    return null;
+  }, [apiMode, isLoadingRunnerStatus, qwenStatus, runnerStatusError]);
+  const nativeSubmitBlockedReason = useMemo(() => {
+    if (apiMode !== "real") return null;
+    if (!nativeStatus) {
+      if (isLoadingRunnerStatus && !runnerStatusError) return "AlphaTrace Native runtime status is checking backend status.";
+      return runnerStatusError
+        ? `AlphaTrace Native runtime status unavailable: ${runnerStatusError}`
+        : "AlphaTrace Native runtime status unavailable. Use Runtime Diagnostics > Refresh.";
+    }
+    if (!nativeStatus.available || nativeStatus.status !== "ready") {
+      return nativeStatus.message || "AlphaTrace Native runner requires the backend Qwen API key.";
+    }
+    if (nativeStatus.qwenKeyConfigured === false) {
+      return "AlphaTrace Native runner requires a backend Qwen API key. Save Qwen API Key again in Settings or set DASHSCOPE_API_KEY on the backend.";
+    }
+    return null;
+  }, [apiMode, isLoadingRunnerStatus, nativeStatus, runnerStatusError]);
 
   const initialRouteParams = useMemo(() => getCurrentHashQueryParams(), []);
   const linkedAssetId = initialRouteParams.get("assetId") ?? undefined;
@@ -140,6 +246,49 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
   });
   const [taskFilter, setTaskFilter] = useState<TaskFilter>("ALL");
   const [timeFilter, setTimeFilter] = useState<TimeFilter>("ALL");
+
+  const refreshRunnerStatuses = async () => {
+    setIsLoadingRunnerStatus(true);
+    try {
+      const items = await getAgentRunnerStatusAsync();
+      setRunnerStatuses(items);
+      setRunnerStatusError(null);
+    } catch (error) {
+      setRunnerStatuses([]);
+      setRunnerStatusError(getErrorMessage(error, "Runner status unavailable"));
+    } finally {
+      setIsLoadingRunnerStatus(false);
+    }
+
+    try {
+      setRunnerCapabilities(
+        await getAgentRunnerCapabilitiesAsync({
+          taskType: draftTaskType,
+          requestedRunnerType: draftRunner,
+        }),
+      );
+      setRunnerCapabilitiesError(null);
+    } catch (error) {
+      setRunnerCapabilities(null);
+      setRunnerCapabilitiesError(getErrorMessage(error, "Runner capabilities unavailable"));
+    }
+
+    try {
+      setRuntimeWorkers(await getAgentRuntimeWorkersAsync());
+      setRuntimeWorkersError(null);
+    } catch (error) {
+      setRuntimeWorkers(null);
+      setRuntimeWorkersError(getErrorMessage(error, "Runtime workers unavailable"));
+    }
+
+    try {
+      setRuntimeCredentials(await getRuntimeCredentialStatus());
+      setRuntimeCredentialsError(null);
+    } catch (error) {
+      setRuntimeCredentials(null);
+      setRuntimeCredentialsError(getErrorMessage(error, "Runtime credentials unavailable"));
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -155,7 +304,7 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
       .catch((error) => {
         if (!cancelled) {
           setAgentRuns([]);
-          setAgentRunError(error instanceof Error ? error.message : "Agent Run 数据加载失败");
+          setAgentRunError(getErrorMessage(error, "Agent Run 数据加载失败"));
         }
       })
       .finally(() => {
@@ -167,7 +316,76 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [draftRunner, draftTaskType]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoadingRunnerStatus(true);
+    getAgentRunnerStatusAsync()
+      .then((items) => {
+        if (!cancelled) {
+          setRunnerStatuses(items);
+          setRunnerStatusError(null);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setRunnerStatuses([]);
+          setRunnerStatusError(getErrorMessage(error, "Runner status unavailable"));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingRunnerStatus(false);
+        }
+      });
+
+    getAgentRuntimeWorkersAsync()
+      .then((workers) => {
+        if (!cancelled) {
+          setRuntimeWorkers(workers);
+          setRuntimeWorkersError(null);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setRuntimeWorkers(null);
+          setRuntimeWorkersError(getErrorMessage(error, "Runtime workers unavailable"));
+        }
+      });
+
+    getAgentRunnerCapabilitiesAsync({ taskType: draftTaskType, requestedRunnerType: draftRunner })
+      .then((capabilities) => {
+        if (!cancelled) {
+          setRunnerCapabilities(capabilities);
+          setRunnerCapabilitiesError(null);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setRunnerCapabilities(null);
+          setRunnerCapabilitiesError(getErrorMessage(error, "Runner capabilities unavailable"));
+        }
+      });
+
+    getRuntimeCredentialStatus()
+      .then((status) => {
+        if (!cancelled) {
+          setRuntimeCredentials(status);
+          setRuntimeCredentialsError(null);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setRuntimeCredentials(null);
+          setRuntimeCredentialsError(getErrorMessage(error, "Runtime credentials unavailable"));
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [draftRunner, draftTaskType]);
 
   const handleOpenRun = (runId: string) => {
     if (onOpenRun) {
@@ -190,7 +408,7 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
       });
       navigateTo(`/agent-lab/runs/${encodeURIComponent(demoRun.runId)}`);
     } catch (error) {
-      setDemoRunError(error instanceof Error ? error.message : "Failed to create demo run");
+      setDemoRunError(getErrorMessage(error, "Failed to create demo run"));
       setDemoRunMessage(null);
     } finally {
       setIsCreatingDemoRun(false);
@@ -198,15 +416,37 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
   };
 
   const handleSubmitAgentTask = async (runner: SubmitRunnerKind) => {
+    const runnerBlockedReason =
+      runner === "qwen"
+        ? qwenSubmitBlockedReason
+        : runner === "alphatrace_native"
+          ? nativeSubmitBlockedReason
+          : runner === "tradingagents"
+            ? tradingAgentsSubmitBlockedReason
+            : null;
+
+    if (runnerBlockedReason) {
+      setDemoRunError(runnerBlockedReason);
+      setDemoRunMessage(null);
+      return;
+    }
+
     setSubmittingRunner(runner);
     setDemoRunError(null);
     setDemoRunMessage(
       apiMode === "real"
         ? runner === "qwen"
           ? "Submitting Qwen agent task... waiting for model response, usually 30-120 seconds."
-          : "Submitting stub agent task..."
+          : runner === "alphatrace_native"
+            ? "Submitting AlphaTrace Native multi-agent task... using Qwen, Bocha/static evidence, Bull/Bear parallel review, and SSE."
+          : runner === "tradingagents"
+            ? "Submitting TradingAgents PoC task... requires local backend with ALPHATRACE_TRADINGAGENTS_ENABLED=true."
+            : "Submitting stub agent task..."
         : "当前为 Mock Mode，Submit Agent Task 将使用本地样例数据。",
     );
+
+    const isTradingAgents = runner === "tradingagents";
+    const isQwenBacked = runner === "qwen" || runner === "alphatrace_native" || isTradingAgents;
 
     try {
       const submittedRun = await submitAgentRunAsync({
@@ -214,7 +454,7 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
         portfolioId: "portfolio_etf_core_001",
         strategyId: "strategy_etf_rotation_001",
         taskType: "single_asset_analysis",
-        question: "请分析该 ETF 是否适合中期配置",
+        question: isTradingAgents ? "Use TradingAgents PoC to analyze SPY." : "请分析该 ETF 是否适合中期配置",
         horizon: "medium_term",
         riskPreference: "balanced",
         evidenceScope: {
@@ -225,14 +465,97 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
         },
         runnerConfig: {
           runnerType: runner,
-          modelProvider: runner === "qwen" ? "qwen" : "none",
-          modelName: runner === "qwen" ? "qwen-plus" : "none",
+          modelProvider: isQwenBacked ? "qwen" : "none",
+          modelName: isQwenBacked ? "qwen-plus" : "none",
           enableStreaming: true,
+          extraParams: isTradingAgents
+            ? {
+                ticker: "SPY",
+                tradeDate: "2025-06-05",
+                offlineData: true,
+                selectedAnalysts: ["market"],
+                maxDebateRounds: 1,
+                maxRiskDiscussRounds: 1,
+              }
+            : {},
         },
       });
+      setSubmittingRunner(null);
+      setDemoRunMessage(null);
       navigateTo(`/agent-lab/runs/${encodeURIComponent(submittedRun.runId)}`);
     } catch (error) {
-      setDemoRunError(error instanceof Error ? error.message : "Failed to submit agent task");
+      setDemoRunError(getErrorMessage(error, "Failed to submit agent task"));
+      setDemoRunMessage(null);
+    } finally {
+      setSubmittingRunner(null);
+    }
+  };
+
+  const handleSubmitDraftAgentTask = async () => {
+    const draftBlockedReason =
+      draftRunner === "qwen"
+        ? qwenSubmitBlockedReason
+        : draftRunner === "alphatrace_native"
+          ? nativeSubmitBlockedReason
+          : draftRunner === "tradingagents"
+            ? tradingAgentsSubmitBlockedReason
+            : null;
+
+    if (draftBlockedReason) {
+      setDemoRunError(draftBlockedReason);
+      setDemoRunMessage(null);
+      return;
+    }
+
+    setSubmittingRunner(draftRunner);
+    setDemoRunError(null);
+    setDemoRunMessage(
+      apiMode === "real"
+        ? `Submitting draft ${draftRunner} task...`
+        : "当前为 Mock Mode，Draft Agent Task 将使用本地样例数据。",
+    );
+
+    const isTradingAgents = draftRunner === "tradingagents";
+    const isQwenBacked = draftRunner === "qwen" || draftRunner === "alphatrace_native" || isTradingAgents;
+    const isPortfolioTask = draftTaskType === "PORTFOLIO_DIAGNOSTIC";
+
+    try {
+      const submittedRun = await submitAgentRunAsync({
+        assetId: draftAssetId,
+        portfolioId: isPortfolioTask ? "portfolio_etf_core_001" : undefined,
+        strategyId: "strategy_etf_rotation_001",
+        taskType: isPortfolioTask ? "portfolio_diagnosis" : "single_asset_analysis",
+        question: draftQuestion,
+        horizon: "medium_term",
+        riskPreference: "balanced",
+        evidenceScope: {
+          includeNews: true,
+          includeReports: true,
+          includeMacro: true,
+          includeMarketSnapshot: true,
+        },
+        runnerConfig: {
+          runnerType: draftRunner,
+          modelProvider: isQwenBacked ? "qwen" : "none",
+          modelName: isQwenBacked ? "qwen-plus" : "none",
+          enableStreaming: true,
+          extraParams: isTradingAgents
+            ? {
+                ticker: "SPY",
+                tradeDate: "2025-06-05",
+                offlineData: true,
+                selectedAnalysts: ["market"],
+                maxDebateRounds: 1,
+                maxRiskDiscussRounds: 1,
+              }
+            : {},
+        },
+      });
+      setSubmittingRunner(null);
+      setDemoRunMessage(null);
+      navigateTo(`/agent-lab/runs/${encodeURIComponent(submittedRun.runId)}`);
+    } catch (error) {
+      setDemoRunError(getErrorMessage(error, "Failed to submit draft agent task"));
       setDemoRunMessage(null);
     } finally {
       setSubmittingRunner(null);
@@ -306,13 +629,219 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
               <Button size="sm" variant="outline" onClick={() => handleSubmitAgentTask("stub")} disabled={Boolean(submittingRunner)}>
                 {submittingRunner === "stub" ? "Submitting stub task..." : "Submit Stub Agent Task"}
               </Button>
-              <Button size="sm" onClick={() => handleSubmitAgentTask("qwen")} disabled={Boolean(submittingRunner)}>
+              <Button
+                size="sm"
+                onClick={() => handleSubmitAgentTask("qwen")}
+                disabled={Boolean(submittingRunner) || Boolean(qwenSubmitBlockedReason)}
+                title={qwenSubmitBlockedReason ?? undefined}
+              >
                 {submittingRunner === "qwen" ? "Submitting Qwen task..." : "Submit Qwen Agent Task"}
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => handleSubmitAgentTask("alphatrace_native")}
+                disabled={Boolean(submittingRunner) || Boolean(nativeSubmitBlockedReason)}
+                title={nativeSubmitBlockedReason ?? undefined}
+              >
+                {submittingRunner === "alphatrace_native" ? "Submitting Native..." : "Submit Native Multi-Agent Task"}
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => handleSubmitAgentTask("tradingagents")}
+                disabled={Boolean(submittingRunner) || Boolean(tradingAgentsSubmitBlockedReason)}
+                title={tradingAgentsSubmitBlockedReason ?? undefined}
+              >
+                {submittingRunner === "tradingagents" ? "Submitting TradingAgents..." : "Submit TradingAgents PoC Task"}
               </Button>
             </div>
           </div>
           {demoRunMessage ? <p className="text-xs text-muted-foreground">{demoRunMessage}</p> : null}
           {demoRunError ? <p className="text-xs text-destructive">Agent task failed: {demoRunError}</p> : null}
+          {qwenSubmitBlockedReason ? (
+            <p className="text-xs text-amber-700">Qwen unavailable: {qwenSubmitBlockedReason}</p>
+          ) : null}
+          {nativeSubmitBlockedReason ? (
+            <p className="text-xs text-amber-700">AlphaTrace Native unavailable: {nativeSubmitBlockedReason}</p>
+          ) : null}
+          {tradingAgentsSubmitBlockedReason ? (
+            <p className="text-xs text-amber-700">
+              TradingAgents PoC unavailable: {tradingAgentsSubmitBlockedReason}
+            </p>
+          ) : null}
+          <div className="grid gap-2 text-xs md:grid-cols-4">
+            <div className="rounded-md border bg-muted/20 p-2">
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <span className="font-medium">Qwen Runtime</span>
+                <Badge variant={qwenCredentialAvailable && qwenStatus?.available ? "default" : "outline"}>
+                  {qwenStatus?.status ?? (isLoadingRunnerStatus ? "checking" : "unknown")}
+                </Badge>
+              </div>
+              <p className="text-muted-foreground">Source: {qwenCredentialSource}</p>
+              <p className="text-muted-foreground">Backend key: {qwenCredentialAvailable ? "available" : "missing"}</p>
+              {qwenSubmitBlockedReason ? <p className="mt-1 text-amber-700">{qwenSubmitBlockedReason}</p> : null}
+            </div>
+            <div className="rounded-md border bg-muted/20 p-2">
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <span className="font-medium">AlphaTrace Native</span>
+                <Badge variant={nativeStatus?.available ? "default" : "outline"}>
+                  {nativeStatus?.status ?? (isLoadingRunnerStatus ? "checking" : "unknown")}
+                </Badge>
+              </div>
+              <p className="text-muted-foreground">Source: {nativeStatus?.qwenConfigSource ?? qwenCredentialSource}</p>
+              <p className="text-muted-foreground">Owns product DAG: yes</p>
+              {nativeSubmitBlockedReason ? <p className="mt-1 text-amber-700">{nativeSubmitBlockedReason}</p> : null}
+            </div>
+            <div className="rounded-md border bg-muted/20 p-2">
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <span className="font-medium">Bocha Evidence</span>
+                <Badge variant={bochaCredentialAvailable ? "default" : "outline"}>
+                  {bochaCredentialAvailable ? "configured" : "missing"}
+                </Badge>
+              </div>
+              <p className="text-muted-foreground">Source: {bochaCredentialSource}</p>
+              <p className="text-muted-foreground">Fallback: static evidence seed remains available</p>
+            </div>
+            <div className="rounded-md border bg-muted/20 p-2">
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <span className="font-medium">TradingAgents PoC</span>
+                <Badge variant={tradingAgentsStatus?.available ? "default" : tradingAgentsStatus?.enabled ? "secondary" : "outline"}>
+                  {tradingAgentsStatus?.status ?? (isLoadingRunnerStatus ? "checking" : "unknown")}
+                </Badge>
+              </div>
+              <p className="text-muted-foreground">Enabled: {tradingAgentsStatus?.enabled ? "yes" : "no"}</p>
+              <p className="text-muted-foreground">Qwen source: {tradingAgentsStatus?.qwenConfigSource ?? qwenCredentialSource}</p>
+              {tradingAgentsSubmitBlockedReason ? <p className="mt-1 text-amber-700">{tradingAgentsSubmitBlockedReason}</p> : null}
+            </div>
+          </div>
+          {runtimeCredentialsError ? <p className="text-xs text-amber-700">Runtime credential status unavailable: {runtimeCredentialsError}</p> : null}
+          <details className="rounded-md border bg-muted/20 p-2 text-xs">
+            <summary className="cursor-pointer select-none font-medium">
+              Runtime Diagnostics · runners / capabilities / workers
+            </summary>
+            <div className="mt-2 mb-2 flex flex-wrap items-center justify-between gap-2">
+              <p className="font-medium">Runner Runtime Status</p>
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground">
+                  API: {apiMode === "real" ? "Real API" : "Mock Mode"}
+                </span>
+                <Button size="sm" variant="outline" onClick={() => void refreshRunnerStatuses()}>
+                  Refresh
+                </Button>
+              </div>
+            </div>
+            {runnerStatusError ? (
+              <p className="text-destructive">Runner status unavailable: {runnerStatusError}</p>
+            ) : (
+              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                {runnerStatuses.map((runner) => (
+                  <div key={runner.runnerType} className="rounded border bg-background p-2">
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <span className="font-medium">{runner.runnerType}</span>
+                      <Badge variant={runner.available ? "default" : runner.enabled ? "secondary" : "outline"}>
+                        {runner.status}
+                      </Badge>
+                    </div>
+                    <div className="mb-1 flex flex-wrap items-center gap-1">
+                      <Badge variant="outline">{runner.executionMode ?? "unknown_mode"}</Badge>
+                    </div>
+                    <p className="text-muted-foreground">{runner.message}</p>
+                    {runner.executionPolicyReason ? (
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        Policy: {runner.executionPolicyReason}
+                      </p>
+                    ) : null}
+                    {runner.capabilities ? (
+                      <div className="mt-2 space-y-1 text-[11px] text-muted-foreground">
+                        <p>
+                          Tasks: {getSupportedTaskTypes(runner).length ? getSupportedTaskTypes(runner).join(", ") : "none"}
+                        </p>
+                        <p>
+                          Streaming: {getCapabilityBoolean(runner, "supportsStreaming", "supports_streaming") ? "yes" : "no"} · Evidence:{" "}
+                          {getCapabilityBoolean(runner, "supportsEvidence", "supports_evidence") ? "yes" : "no"} · Portfolio:{" "}
+                          {getCapabilityBoolean(runner, "supportsPortfolioContext", "supports_portfolio_context") ? "yes" : "no"}
+                        </p>
+                        {runner.capabilities.notes ? <p>{runner.capabilities.notes}</p> : null}
+                      </div>
+                    ) : null}
+                    {runner.runnerType === "tradingagents" ? (
+                      <div className="mt-2 space-y-1 text-[11px] text-muted-foreground">
+                        <p>Repo: {runner.repoPathConfigured ? (runner.repoPathExists === false ? "configured but missing" : "configured") : "not configured"}</p>
+                        <p>Import: {runner.importable ? "ok" : runner.importError ? "failed" : "not checked"}</p>
+                        <p>Qwen key: {runner.qwenKeyConfigured ? `configured (${runner.qwenConfigSource ?? "unknown"})` : "missing"}</p>
+                        {runner.importError ? <p className="line-clamp-2 text-destructive">Import error: {runner.importError}</p> : null}
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+                {!runnerStatuses.length ? (
+                  <p className="text-muted-foreground">
+                    {isLoadingRunnerStatus ? "Loading runner status..." : "Runner status is empty. Use Refresh or check backend /runners/status."}
+                  </p>
+                ) : null}
+              </div>
+            )}
+            <div className="mt-3 rounded border bg-background p-2">
+              <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                <p className="font-medium">Orchestrator Intent Preview</p>
+                <Badge variant="outline">advisory</Badge>
+              </div>
+              {runnerCapabilitiesError ? (
+                <p className="text-muted-foreground">
+                  Capability preview unavailable: {runnerCapabilitiesError}. Submit buttons still use explicit runnerConfig.runnerType.
+                </p>
+              ) : runnerCapabilities ? (
+                <div className="space-y-1 text-[11px] text-muted-foreground">
+                  <p>
+                    Task: {runnerCapabilities.recommendation.taskType} · Recommended runner:{" "}
+                    <span className="font-medium text-foreground">{runnerCapabilities.recommendation.recommendedRunnerType}</span> · Supported:{" "}
+                    {runnerCapabilities.recommendation.supported ? "yes" : "no"}
+                  </p>
+                  <p>{runnerCapabilities.recommendation.reason}</p>
+                  <p>{runnerCapabilities.message}</p>
+                </div>
+              ) : (
+                <p className="text-muted-foreground">Loading capability preview...</p>
+              )}
+            </div>
+            <div className="mt-3 rounded border bg-background p-2">
+              <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                <p className="font-medium">Orchestrator Worker Registry</p>
+                <Badge variant={runtimeWorkers?.activeCount ? "secondary" : "outline"}>
+                  active {runtimeWorkers?.activeCount ?? 0}
+                </Badge>
+              </div>
+              {runtimeWorkersError ? (
+                <p className="text-muted-foreground">
+                  Worker registry unavailable: {runtimeWorkersError}. This is expected when the active backend has not been rebuilt with M20.
+                </p>
+              ) : runtimeWorkers ? (
+                <div className="space-y-1 text-[11px] text-muted-foreground">
+                  <p>
+                    Type: {runtimeWorkers.workerType} · Registered: {runtimeWorkers.registeredCount} · Active: {runtimeWorkers.activeCount}
+                  </p>
+                  {runtimeWorkers.workers.length ? (
+                    <div className="flex flex-wrap gap-1">
+                      {runtimeWorkers.workers.map((worker) => (
+                        <Button
+                          key={`${worker.runId}-${worker.pid}`}
+                          size="sm"
+                          variant="outline"
+                          onClick={() => navigateTo(`/agent-lab/runs/${encodeURIComponent(worker.runId)}`)}
+                        >
+                          {worker.runId} · pid {worker.pid} · {worker.running ? "running" : `exit ${worker.returnCode ?? "-"}`}
+                        </Button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p>No subprocess workers are currently registered in this backend process.</p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-muted-foreground">Loading worker registry...</p>
+              )}
+            </div>
+          </details>
         </CardHeader>
       </Card>
 
@@ -331,18 +860,129 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
               </CardDescription>
               <p className="text-xs text-muted-foreground">
                 真实 Qwen 调用需要前端以 Real API mode 启动，并且旧 Hyper AI 已保存 Provider=qwen / Model=qwen-plus / Base URL / API Key。
+                TradingAgents PoC 需要前端指向当前本地后端 8813，并启用 ALPHATRACE_TRADINGAGENTS_ENABLED=true、TRADINGAGENTS_REPO_PATH 和后端 Qwen API Key。
               </p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <Button variant="outline" onClick={() => handleSubmitAgentTask("stub")} disabled={Boolean(submittingRunner)}>
                 {submittingRunner === "stub" ? "Submitting Stub..." : "Submit Stub Agent Task"}
               </Button>
-              <Button onClick={() => handleSubmitAgentTask("qwen")} disabled={Boolean(submittingRunner)}>
+              <Button
+                onClick={() => handleSubmitAgentTask("qwen")}
+                disabled={Boolean(submittingRunner) || Boolean(qwenSubmitBlockedReason)}
+                title={qwenSubmitBlockedReason ?? undefined}
+              >
                 {submittingRunner === "qwen" ? "Submitting Qwen..." : "Submit Qwen Agent Task"}
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => handleSubmitAgentTask("tradingagents")}
+                disabled={Boolean(submittingRunner) || Boolean(tradingAgentsSubmitBlockedReason)}
+                title={tradingAgentsSubmitBlockedReason ?? undefined}
+              >
+                {submittingRunner === "tradingagents" ? "Submitting TradingAgents..." : "Submit TradingAgents PoC Task"}
               </Button>
             </div>
           </div>
         </CardHeader>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Draft Agent Task</CardTitle>
+          <CardDescription>
+            显式选择 runner / task / asset 后提交。这里不会自动 fallback；选择 TradingAgents 就会按 TradingAgents PoC 路径执行或返回明确错误。
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3 text-xs">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <label className="space-y-1">
+              <span className="font-medium">Runner</span>
+              <select
+                className="h-9 w-full rounded-md border bg-background px-2"
+                value={draftRunner}
+                onChange={(event) => setDraftRunner(event.target.value as SubmitRunnerKind)}
+              >
+                <option value="qwen">qwen</option>
+                <option value="alphatrace_native">alphatrace_native</option>
+                <option value="tradingagents">tradingagents</option>
+                <option value="stub">stub</option>
+              </select>
+            </label>
+            <label className="space-y-1">
+              <span className="font-medium">Task</span>
+              <select
+                className="h-9 w-full rounded-md border bg-background px-2"
+                value={draftTaskType}
+                onChange={(event) => {
+                  const nextTask = event.target.value as AgentRunTaskType;
+                  setDraftTaskType(nextTask);
+                  setDraftQuestion(
+                    nextTask === "PORTFOLIO_DIAGNOSTIC"
+                      ? "请诊断当前组合的资产配置、风险暴露、调仓建议和后续观察指标"
+                      : "请分析该 ETF 是否适合中期配置",
+                  );
+                }}
+              >
+                <option value="SINGLE_ASSET_ANALYSIS">single_asset_analysis</option>
+                <option value="PORTFOLIO_DIAGNOSTIC">portfolio_diagnosis</option>
+              </select>
+            </label>
+            <label className="space-y-1">
+              <span className="font-medium">Asset</span>
+              <select
+                className="h-9 w-full rounded-md border bg-background px-2"
+                value={draftAssetId}
+                onChange={(event) => setDraftAssetId(event.target.value)}
+              >
+                <option value="asset_etf_510300">asset_etf_510300 · 510300.SH</option>
+                <option value="asset_etf_159915">asset_etf_159915 · 159915.SZ</option>
+                <option value="asset_index_000300">asset_index_000300 · 000300.SH</option>
+              </select>
+            </label>
+            <div className="flex items-end">
+              <Button
+                className="w-full"
+                onClick={() => void handleSubmitDraftAgentTask()}
+                disabled={
+                  Boolean(submittingRunner) ||
+                  (draftRunner === "qwen" && Boolean(qwenSubmitBlockedReason)) ||
+                  (draftRunner === "alphatrace_native" && Boolean(nativeSubmitBlockedReason)) ||
+                  (draftRunner === "tradingagents" && Boolean(tradingAgentsSubmitBlockedReason))
+                }
+                title={
+                  draftRunner === "qwen"
+                    ? qwenSubmitBlockedReason ?? undefined
+                    : draftRunner === "alphatrace_native"
+                      ? nativeSubmitBlockedReason ?? undefined
+                    : draftRunner === "tradingagents"
+                      ? tradingAgentsSubmitBlockedReason ?? undefined
+                      : undefined
+                }
+              >
+                {submittingRunner === draftRunner ? "Submitting..." : "Submit Draft Task"}
+              </Button>
+            </div>
+          </div>
+          <label className="space-y-1 block">
+            <span className="font-medium">Question</span>
+            <textarea
+              className="min-h-[72px] w-full rounded-md border bg-background px-2 py-2"
+              value={draftQuestion}
+              onChange={(event) => setDraftQuestion(event.target.value)}
+            />
+          </label>
+          {runnerCapabilities ? (
+            <div className="rounded-md border bg-muted/30 p-2 text-muted-foreground">
+              <p>
+                Preview: task={runnerCapabilities.recommendation.taskType}, runner=
+                {runnerCapabilities.recommendation.recommendedRunnerType}, supported=
+                {runnerCapabilities.recommendation.supported ? "yes" : "no"}
+              </p>
+              <p>{runnerCapabilities.recommendation.reason}</p>
+            </div>
+          ) : null}
+        </CardContent>
       </Card>
 
       {isLoadingRuns ? (

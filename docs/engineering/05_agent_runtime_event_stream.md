@@ -502,3 +502,10 @@ Chunk payload shape:
 ```
 
 Chunks are lightly coalesced before persistence to avoid excessive event volume. Final structured reports, evidence references and decisions are still generated after the relevant Qwen step output is complete.
+
+## Task 39 Update: Stability and Error Fallbacks
+
+- The SSE endpoint now sends no-cache and keep-alive headers.
+- `done` with `status=running` means the stream ended before the run reached a terminal state; the frontend treats this as an interrupted stream and falls back to HTTP refresh.
+- `complete` and `failed` remain terminal stream markers.
+- Unsupported runners, configuration failures, execution failures, and unexpected submit failures return explicit API messages so the UI can show actionable errors instead of generic HTTP codes.

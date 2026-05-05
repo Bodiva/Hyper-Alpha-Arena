@@ -742,3 +742,73 @@ The runner continues to use the existing async Agent Runtime flow:
 ### Limitations
 
 This is not a real trading or risk engine. It does not place orders, connect to brokerage systems, use external market data, or execute TradingAgents. Portfolio context comes from static seed data and should be treated as a development-stage analysis context.
+
+## Task 42 - Qwen Structured JSON Output Enhancement
+
+Date: 2026-05-01
+
+Scope:
+- Qwen runner keeps human-readable Markdown for SSE Live Output.
+- Each Qwen agent step now asks for an additional fenced JSON block at the end of the response.
+- Backend merges multiple step-level JSON blocks and uses structured fields before falling back to Markdown section parsing.
+
+Structured fields consumed:
+- marketView.summary / keyPoints / evidenceIds
+- bullView.summary / arguments / evidenceIds
+- bearView.summary / risks / evidenceIds
+- riskReview.summary / riskItems / evidenceIds
+- finalDecision.action / confidence / horizon / thesis / risks / watchIndicators / evidenceIds
+
+Fallback behavior:
+- Existing Markdown section parser remains active.
+- If JSON is missing or malformed, reports and decision are generated from Markdown sections.
+- Invalid structured evidenceIds are captured for Task 43 validation handling.
+
+Constraints:
+- No TradingAgents integration.
+- No real DB write.
+- No Docker or package changes.
+
+## Task 43 - Evidence Reference Validation
+
+Date: 2026-05-01
+
+Runtime evidence citation validation is now part of Qwen output mapping.
+
+Validation behavior:
+- Extracts `ev_static_*`, `ev_bocha_*`, and `ev_qwen_*` references from Markdown and structured JSON output.
+- Compares references against evidence attached to the run.
+- Emits validation payloads in `evidence.linked` and `decision.updated` runtime events.
+- Filters invalid ids from `decision.evidenceIds`.
+- Adds a `risk.warning` event when invalid evidence references are filtered.
+
+Validation payload fields:
+- `validationStatus`
+- `availableEvidenceIds`
+- `referencedEvidenceIds`
+- `validReferencedEvidenceIds`
+- `invalidEvidenceIds`
+- `unreferencedAvailableEvidenceIds`
+
+This remains id-level validation only. Semantic claim support validation is deferred to a later Evidence Governance phase.
+
+## Task 44 - TradingAgents Adapter Design and Stub
+
+Date: 2026-05-01
+
+Task 44 added/confirmed a design-only TradingAgents runner boundary.
+
+Code behavior:
+- `backend/services/agent_runners/tradingagents_adapter.py` defines `TradingAgentsRunnerAdapter`.
+- `runner_type = "tradingagents"`.
+- The adapter does not import, copy, or execute TradingAgents.
+- Submit raises a clear not-implemented error: `TradingAgents runner is designed but not implemented in this MVP.`
+- Existing `TradingAgentsAdapter` alias is retained for compatibility.
+- Registry registration keeps `runnerType=tradingagents` explicit instead of unknown.
+
+Documentation:
+- `docs/engineering/16_tradingagents_adapter_design.md` defines input/output/event/report/decision/checkpoint boundaries.
+
+No real TradingAgents integration was performed.
+No real DB write was added.
+No frontend page was changed.

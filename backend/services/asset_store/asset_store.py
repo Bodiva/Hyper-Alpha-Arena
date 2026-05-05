@@ -5,6 +5,7 @@ from typing import List, Optional
 from schemas.alpha_trace_asset import AlphaTraceAssetItem
 from schemas.alpha_trace_evidence import AlphaTraceEvidenceItem
 from services.asset_store.static_asset_seed import get_static_asset_seed
+from services.domain_store import get_domain_store_type, get_mysql_domain_store
 from services.evidence_retrieval.evidence_store import get_static_evidence_store
 
 
@@ -81,5 +82,36 @@ class StaticAssetStore:
 
 
 def get_static_asset_store() -> StaticAssetStore:
+    if get_domain_store_type() == "mysql":
+        return MysqlAssetStore()
     return StaticAssetStore()
 
+
+class MysqlAssetStore(StaticAssetStore):
+    """Asset Store backed by MySQL seed payloads."""
+
+    def __init__(self) -> None:
+        domain_store = get_mysql_domain_store()
+        seed = [
+            AlphaTraceAssetItem.model_validate(item).model_dump(mode="json")
+            for item in get_static_asset_seed()
+        ]
+        domain_store.seed_if_empty(
+            domain_store.assets,
+            "asset_id",
+            seed,
+            lambda item: {
+                "asset_id": item["assetId"],
+                "symbol": item.get("symbol"),
+                "name": item.get("name"),
+                "asset_type": item.get("assetType"),
+                "market": item.get("market"),
+                "updated_at": item.get("updatedAt"),
+            },
+        )
+        self._items = [AlphaTraceAssetItem.model_validate(item) for item in domain_store.fetch_all(domain_store.assets)]
+        self._by_id = {item.assetId: item for item in self._items}
+        for item in self._items:
+            self._by_id[item.id] = item
+            for alias in item.aliases:
+                self._by_id[alias] = item

@@ -6,6 +6,7 @@ from pathlib import Path
 from services.agent_runtime_store.base import AgentRunStore
 from services.agent_runtime_store.json_store import JsonAgentRunStore
 from services.agent_runtime_store.memory_store import MemoryAgentRunStore
+from services.agent_runtime_store.mysql_store import MysqlAgentRunStore
 
 
 def _default_json_path() -> Path:
@@ -23,7 +24,6 @@ def get_agent_run_store() -> AgentRunStore:
         if not path.is_absolute():
             path = Path.cwd() / path
         return JsonAgentRunStore(path)
-    if store_type == "db":
-        raise NotImplementedError("AlphaTrace DB AgentRunStore is not implemented yet. Use json or memory.")
+    if store_type in {"mysql", "db"}:
+        return MysqlAgentRunStore()
     raise ValueError(f"Unsupported ALPHA_TRACE_AGENT_RUN_STORE: {store_type}")
-

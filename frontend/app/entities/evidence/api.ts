@@ -63,6 +63,7 @@ interface BackendEvidenceItem {
   extractedFields?: BackendExtractedField[] | Record<string, unknown>;
   usedByAgentRunIds?: string[];
   usedByDecisionIds?: string[];
+  metadata?: Record<string, unknown>;
 }
 
 interface BackendEvidenceListResponse {
@@ -92,6 +93,8 @@ const mapEvidenceType = (evidenceType: string): EvidenceType => {
     "market_snapshot",
     "industry_data",
     "user_upload",
+    "external_search",
+    "runtime_context",
   ];
   return supported.includes(normalized as EvidenceType) ? (normalized as EvidenceType) : "market_snapshot";
 };
@@ -117,6 +120,7 @@ const mapBackendEvidenceItem = (item: BackendEvidenceItem): Evidence => ({
   title: item.title,
   evidenceType: mapEvidenceType(item.evidenceType),
   sourceName: item.sourceName,
+  sourceType: item.sourceType,
   url: item.url ?? "#",
   publishedAt: item.publishedAt ?? "",
   collectedAt: item.collectedAt ?? item.publishedAt ?? "",
@@ -126,6 +130,8 @@ const mapBackendEvidenceItem = (item: BackendEvidenceItem): Evidence => ({
   reliabilityScore: item.reliabilityScore ?? item.qualityScore,
   extractedFields: mapExtractedFields(item.extractedFields),
   usedByAgentRunIds: item.usedByAgentRunIds ?? [],
+  usedByDecisionIds: item.usedByDecisionIds ?? [],
+  metadata: item.metadata,
 });
 
 export const listEvidence = (params: ListEvidenceParams = {}): Evidence[] => {

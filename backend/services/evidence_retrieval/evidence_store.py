@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Iterable, List, Optional
 
 from schemas.alpha_trace_evidence import AlphaTraceEvidenceItem, AlphaTraceExtractedField
+from services.domain_store import get_domain_store_type, get_mysql_domain_store
 from services.evidence_retrieval.retriever import EvidenceRetriever
 from services.evidence_retrieval.static_evidence_seed import EvidenceItem, get_static_evidence_seed
 
@@ -86,10 +87,88 @@ class StaticEvidenceStore:
             extractedFields=extracted_fields,
             usedByAgentRunIds=[],
             usedByDecisionIds=[],
-            metadata={"staticSeed": True},
+            metadata={
+                "staticSeed": True,
+                "sourceLabel": "Static Evidence Seed",
+                "provenanceStatus": "seeded",
+                "governanceNote": "Static seed evidence for AlphaTrace MVP demos; not an external real-time feed.",
+            },
         )
 
 
 def get_static_evidence_store() -> StaticEvidenceStore:
+    if get_domain_store_type() == "mysql":
+        return MysqlEvidenceStore()
     return StaticEvidenceStore()
 
+
+class MysqlEvidenceStore(StaticEvidenceStore):
+    """Evidence Store backed by MySQL seed payloads."""
+
+    def __init__(self) -> None:
+        domain_store = get_mysql_domain_store()
+        seed = [
+            StaticEvidenceStore._to_api_item(item).model_dump(mode="json")
+            for item in get_static_evidence_seed()
+        ]
+        domain_store.seed_if_empty(
+            domain_store.evidence_items,
+            "evidence_id",
+            seed,
+            lambda item: {
+                "evidence_id": item["evidenceId"],
+                "source_type": item.get("sourceType"),
+                "evidence_type": item.get("evidenceType"),
+                "quality_score": item.get("qualityScore"),
+                "published_at": item.get("publishedAt"),
+            },
+        )
+        self._items = [
+            AlphaTraceEvidenceItem.model_validate(item)
+            for item in domain_store.fetch_all(domain_store.evidence_items)
+        ]
+        self._by_id = {item.evidenceId: item for item in self._items}
+
+    def list_evidence(
+        self,
+        asset_id: Optional[str] = None,
+        evidence_type: Optional[str] = None,
+        source_type: Optional[str] = None,
+        keyword: Optional[str] = None,
+        min_quality_score: Optional[int] = None,
+        limit: int = 100,
+    ) -> List[AlphaTraceEvidenceItem]:
+        keyword_normalized = (keyword or "").strip().lower()
+        asset_id_normalized = (asset_id or "").strip().lower()
+        items: List[AlphaTraceEvidenceItem] = []
+        for item in self._items:
+            if asset_id_normalized and asset_id_normalized not in [asset.lower() for asset in item.relatedAssetIds]:
+                continue
+            if evidence_type and item.evidenceType != evidence_type:
+                continue
+            if source_type and item.sourceType != source_type:
+                continue
+            if min_quality_score is not None and item.qualityScore < min_quality_score:
+                continue
+            if keyword_normalized:
+                searchable = f"{item.title} {item.summary} {item.sourceName} {' '.join(item.relatedAssetIds)}".lower()
+                if keyword_normalized not in searchable:
+                    continue
+            items.append(item)
+        items.sort(key=lambda evidence: (evidence.qualityScore, evidence.reliabilityScore or 0, evidence.publishedAt or ""), reverse=True)
+        return items[: max(1, limit)]
+
+    def get_evidence(self, evidence_id: str) -> Optional[AlphaTraceEvidenceItem]:
+        return self._by_id.get(evidence_id)
+
+    def search(
+        self,
+        asset_id: Optional[str],
+        query: str,
+        task_type: str,
+        limit: int = 5,
+    ) -> List[AlphaTraceEvidenceItem]:
+        items = self.list_evidence(asset_id=asset_id, keyword=query, limit=limit)
+        if items:
+            return items
+        return self.list_evidence(asset_id=asset_id, limit=limit)

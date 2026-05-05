@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,9 +10,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { listAssets } from "@/entities/asset/api";
-import { listLeaderboard } from "@/entities/strategy/api";
+import { listAssetsAsync } from "@/entities/asset/api";
+import { listLeaderboardAsync } from "@/entities/strategy/api";
 import type { LeaderboardItem } from "@/entities/strategy/model";
+import { getApiMode } from "@/shared/api/api-mode";
 import { getCurrentHashQueryParams, navigateTo } from "@/shared/lib/navigation";
 import ResearchWorkspaceNav from "@/shared/ui/ResearchWorkspaceNav";
 
@@ -97,14 +98,26 @@ function formatPercent(value: number): string {
   return `${value.toFixed(1)}%`;
 }
 
+function formatRuntimePercent(value?: number): string {
+  return `${((value ?? 0) * 100).toFixed(0)}%`;
+}
+
+function formatRuntimeNumber(value?: number): string {
+  return `${value ?? 0}`;
+}
+
 function scoreToIndex(score: number): number {
   const raw = ((score + 1) / 5) * 100;
   return Math.max(0, Math.min(100, raw));
 }
 
 export default function LeaderboardPage() {
-  const leaderboardItems = useMemo(() => listLeaderboard(), []);
-  const assets = useMemo(() => listAssets(), []);
+  const apiMode = getApiMode();
+  const isRealMode = apiMode === "real";
+  const [leaderboardItems, setLeaderboardItems] = useState<LeaderboardItem[]>([]);
+  const [assets, setAssets] = useState<Awaited<ReturnType<typeof listAssetsAsync>>>([]);
+  const [isLoadingLeaderboard, setIsLoadingLeaderboard] = useState(true);
+  const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
 
   const initialRouteParams = useMemo(() => getCurrentHashQueryParams(), []);
   const linkedAssetId = initialRouteParams.get("assetId") ?? undefined;
@@ -126,6 +139,37 @@ export default function LeaderboardPage() {
   const [runModeFilter, setRunModeFilter] = useState<RunModeFilter>("ALL");
   const [timeRangeFilter, setTimeRangeFilter] = useState<TimeRangeFilter>("ALL");
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadLeaderboard = async () => {
+      setIsLoadingLeaderboard(true);
+      setLeaderboardError(null);
+      try {
+        const [nextLeaderboard, nextAssets] = await Promise.all([
+          listLeaderboardAsync({ strategyId: linkedStrategyId }),
+          listAssetsAsync({ limit: 200 }),
+        ]);
+        if (cancelled) return;
+        setLeaderboardItems(nextLeaderboard);
+        setAssets(nextAssets);
+      } catch (error) {
+        if (cancelled) return;
+        setLeaderboardItems([]);
+        setAssets([]);
+        setLeaderboardError(error instanceof Error ? error.message : String(error));
+      } finally {
+        if (!cancelled) setIsLoadingLeaderboard(false);
+      }
+    };
+
+    loadLeaderboard();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [linkedStrategyId]);
+
   const rankedData = useMemo<RankedLeaderboardItem[]>(() => {
     const enriched = leaderboardItems.map((item) => ({
       ...item,
@@ -143,6 +187,23 @@ export default function LeaderboardPage() {
 
     if (filtered.length === 0) {
       return [];
+    }
+
+    if (isRealMode) {
+      return filtered
+        .map((item) => {
+          const scoreIndex = Math.max(0, Math.min(100, item.runtimeQualityScore ?? item.evidenceScore ?? 0));
+          return {
+            ...item,
+            compositeScore: scoreIndex,
+            scoreIndex,
+          };
+        })
+        .sort((a, b) => b.scoreIndex - a.scoreIndex)
+        .map((item, index) => ({
+          ...item,
+          ranking: index + 1,
+        }));
     }
 
     const totalReturnMin = Math.min(...filtered.map((item) => item.totalReturn));
@@ -177,11 +238,20 @@ export default function LeaderboardPage() {
         ...item,
         ranking: index + 1,
       }));
-  }, [assetFilter, leaderboardItems, linkedStrategyId, styleFilter, runModeFilter, timeRangeFilter]);
+  }, [assetFilter, isRealMode, leaderboardItems, linkedStrategyId, styleFilter, runModeFilter, timeRangeFilter]);
 
   const leaders = useMemo(() => {
     if (rankedData.length === 0) {
       return null;
+    }
+    if (isRealMode) {
+      return {
+        topQuality: rankedData.reduce((best, current) => ((current.runtimeQualityScore ?? 0) > (best.runtimeQualityScore ?? 0) ? current : best), rankedData[0]),
+        topCompletedRuns: rankedData.reduce((best, current) => ((current.completedRuns ?? 0) > (best.completedRuns ?? 0) ? current : best), rankedData[0]),
+        topConfidence: rankedData.reduce((best, current) => ((current.averageConfidence ?? 0) > (best.averageConfidence ?? 0) ? current : best), rankedData[0]),
+        topEvidence: rankedData.reduce((best, current) => (current.evidenceScore > best.evidenceScore ? current : best), rankedData[0]),
+        topRisk: rankedData.reduce((best, current) => (current.riskScore > best.riskScore ? current : best), rankedData[0]),
+      };
     }
     return {
       topReturn: rankedData.reduce((best, current) => (current.totalReturn > best.totalReturn ? current : best), rankedData[0]),
@@ -190,7 +260,7 @@ export default function LeaderboardPage() {
       topEvidence: rankedData.reduce((best, current) => (current.evidenceScore > best.evidenceScore ? current : best), rankedData[0]),
       topRisk: rankedData.reduce((best, current) => (current.riskScore > best.riskScore ? current : best), rankedData[0]),
     };
-  }, [rankedData]);
+  }, [isRealMode, rankedData]);
 
   const topStrategy = rankedData[0] ?? null;
 
@@ -204,6 +274,8 @@ export default function LeaderboardPage() {
 
   const returnRank = [...rankedData].sort((a, b) => b.totalReturn - a.totalReturn);
   const drawdownRank = [...rankedData].sort((a, b) => a.maxDrawdown - b.maxDrawdown);
+  const runtimeQualityRank = [...rankedData].sort((a, b) => (b.runtimeQualityScore ?? 0) - (a.runtimeQualityScore ?? 0));
+  const evidenceCoverageRank = [...rankedData].sort((a, b) => (b.evidenceCount ?? 0) - (a.evidenceCount ?? 0));
 
   const returnMin = rankedData.length ? Math.min(...rankedData.map((item) => item.totalReturn)) : 0;
   const returnMax = rankedData.length ? Math.max(...rankedData.map((item) => item.totalReturn)) : 1;
@@ -220,11 +292,16 @@ export default function LeaderboardPage() {
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 items-stretch">
             <div className="xl:col-span-2 space-y-2">
               <h2 className="text-2xl font-semibold">Leaderboard 策略排行榜</h2>
+              <Badge variant={apiMode === "real" ? "default" : "secondary"}>
+                Data Mode: {apiMode === "real" ? "Real API / Runtime Quality Leaderboard" : "Mock"}
+              </Badge>
               <p className="text-sm text-muted-foreground">
-                多 AI 交易员 / 多策略 / 多观点的量化结果对比中心
+                多 AI 交易员 / 多策略 / 多观点的运行质量对比中心
               </p>
               <p className="text-xs text-muted-foreground">
-                支持 ETF、基金、期货及多资产组合策略的收益、风险、证据质量和风控表现评估。
+                {isRealMode
+                  ? "当前为 Agent Runtime 质量排行，不是真实收益回测排行；指标来自 Agent Run、Decision、Evidence 与 Report。"
+                  : "支持 ETF、基金、期货及多资产组合策略的收益、风险、证据质量和风控表现评估。"}
               </p>
               {linkedDecisionId ? (
                 <p className="text-xs text-muted-foreground">当前从决策链路进入：decisionId={linkedDecisionId}</p>
@@ -261,6 +338,20 @@ export default function LeaderboardPage() {
           </div>
         </CardContent>
       </Card>
+
+      {isLoadingLeaderboard ? (
+        <Card>
+          <CardContent className="py-4 text-sm text-muted-foreground">正在加载排行榜数据...</CardContent>
+        </Card>
+      ) : null}
+
+      {leaderboardError ? (
+        <Card className="border-destructive/40">
+          <CardContent className="py-4 text-sm text-destructive">
+            Leaderboard API 加载失败：{leaderboardError}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader className="pb-3">
@@ -346,32 +437,38 @@ export default function LeaderboardPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
             <Card>
               <CardHeader className="pb-2">
-                <CardDescription>最高累计收益</CardDescription>
-                <CardTitle className="text-lg">{formatPercent(leaders!.topReturn.totalReturn)}</CardTitle>
+                <CardDescription>{isRealMode ? "最高运行质量" : "最高累计收益"}</CardDescription>
+                <CardTitle className="text-lg">
+                  {isRealMode ? (leaders!.topQuality.runtimeQualityScore ?? leaders!.topQuality.scoreIndex).toFixed(1) : formatPercent(leaders!.topReturn.totalReturn)}
+                </CardTitle>
               </CardHeader>
               <CardContent className="text-xs text-muted-foreground">
-                <p>{leaders!.topReturn.traderName}</p>
-                <p>{leaders!.topReturn.strategyName}</p>
+                <p>{isRealMode ? leaders!.topQuality.traderName : leaders!.topReturn.traderName}</p>
+                <p>{isRealMode ? leaders!.topQuality.strategyName : leaders!.topReturn.strategyName}</p>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="pb-2">
-                <CardDescription>最低最大回撤</CardDescription>
-                <CardTitle className="text-lg">{formatPercent(leaders!.minDrawdown.maxDrawdown)}</CardTitle>
+                <CardDescription>{isRealMode ? "最多完成 Run" : "最低最大回撤"}</CardDescription>
+                <CardTitle className="text-lg">
+                  {isRealMode ? formatRuntimeNumber(leaders!.topCompletedRuns.completedRuns) : formatPercent(leaders!.minDrawdown.maxDrawdown)}
+                </CardTitle>
               </CardHeader>
               <CardContent className="text-xs text-muted-foreground">
-                <p>{leaders!.minDrawdown.traderName}</p>
-                <p>风格稳定性较好</p>
+                <p>{isRealMode ? leaders!.topCompletedRuns.traderName : leaders!.minDrawdown.traderName}</p>
+                <p>{isRealMode ? "完成运行样本最多" : "风格稳定性较好"}</p>
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="pb-2">
-                <CardDescription>最高 Sharpe</CardDescription>
-                <CardTitle className="text-lg">{leaders!.topSharpe.sharpe.toFixed(2)}</CardTitle>
+                <CardDescription>{isRealMode ? "最高平均置信度" : "最高 Sharpe"}</CardDescription>
+                <CardTitle className="text-lg">
+                  {isRealMode ? formatRuntimePercent(leaders!.topConfidence.averageConfidence) : leaders!.topSharpe.sharpe.toFixed(2)}
+                </CardTitle>
               </CardHeader>
               <CardContent className="text-xs text-muted-foreground">
-                <p>{leaders!.topSharpe.traderName}</p>
-                <p>收益风险性价比最佳</p>
+                <p>{isRealMode ? leaders!.topConfidence.traderName : leaders!.topSharpe.traderName}</p>
+                <p>{isRealMode ? "来自 Agent Decision 置信度" : "收益风险性价比最佳"}</p>
               </CardContent>
             </Card>
             <Card>
@@ -398,8 +495,14 @@ export default function LeaderboardPage() {
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">策略排行榜（综合评分排序）</CardTitle>
-              <CardDescription>综合评分 = 收益 + Sharpe + 证据 + 风控 - 回撤（标准化后）</CardDescription>
+              <CardTitle className="text-base">
+                {isRealMode ? "Agent Runtime 质量排行榜" : "策略排行榜（综合评分排序）"}
+              </CardTitle>
+              <CardDescription>
+                {isRealMode
+                  ? "运行质量评分 = 完成度 + 置信度 + 证据 + 报告 - 失败和风险警告；当前不代表真实收益回测。"
+                  : "综合评分 = 收益 + Sharpe + 证据 + 风控 - 回撤（标准化后）"}
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <Table>
@@ -411,16 +514,30 @@ export default function LeaderboardPage() {
                     <TableHead>策略风格</TableHead>
                     <TableHead>资产类型</TableHead>
                     <TableHead>运行模式</TableHead>
-                    <TableHead>累计收益</TableHead>
-                    <TableHead>年化收益</TableHead>
-                    <TableHead>最大回撤</TableHead>
-                    <TableHead>波动率</TableHead>
-                    <TableHead>Sharpe</TableHead>
-                    <TableHead>胜率</TableHead>
-                    <TableHead>换手率</TableHead>
+                    {isRealMode ? (
+                      <>
+                        <TableHead>完成 Run</TableHead>
+                        <TableHead>失败 Run</TableHead>
+                        <TableHead>平均置信度</TableHead>
+                        <TableHead>Evidence</TableHead>
+                        <TableHead>Reports</TableHead>
+                        <TableHead>Risk Warnings</TableHead>
+                        <TableHead>Decisions</TableHead>
+                      </>
+                    ) : (
+                      <>
+                        <TableHead>累计收益</TableHead>
+                        <TableHead>年化收益</TableHead>
+                        <TableHead>最大回撤</TableHead>
+                        <TableHead>波动率</TableHead>
+                        <TableHead>Sharpe</TableHead>
+                        <TableHead>胜率</TableHead>
+                        <TableHead>换手率</TableHead>
+                      </>
+                    )}
                     <TableHead>证据评分</TableHead>
                     <TableHead>风控评分</TableHead>
-                    <TableHead>综合评分</TableHead>
+                    <TableHead>{isRealMode ? "运行质量" : "综合评分"}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -440,17 +557,31 @@ export default function LeaderboardPage() {
                         </Button>
                       </TableCell>
                       <TableCell>{RUN_MODE_LABEL[item.runMode]}</TableCell>
-                      <TableCell className={item.totalReturn >= 0 ? "text-emerald-600 font-medium" : "text-red-500 font-medium"}>
-                        {formatPercent(item.totalReturn)}
-                      </TableCell>
-                      <TableCell>{formatPercent(item.annualizedReturn)}</TableCell>
-                      <TableCell className={item.maxDrawdown >= 15 ? "text-red-500" : item.maxDrawdown >= 10 ? "text-amber-500" : "text-emerald-600"}>
-                        {formatPercent(item.maxDrawdown)}
-                      </TableCell>
-                      <TableCell>{formatPercent(item.volatility)}</TableCell>
-                      <TableCell>{item.sharpe.toFixed(2)}</TableCell>
-                      <TableCell>{formatPercent(item.winRate)}</TableCell>
-                      <TableCell>{formatPercent(item.turnover)}</TableCell>
+                      {isRealMode ? (
+                        <>
+                          <TableCell>{formatRuntimeNumber(item.completedRuns)}</TableCell>
+                          <TableCell>{formatRuntimeNumber(item.failedRuns)}</TableCell>
+                          <TableCell>{formatRuntimePercent(item.averageConfidence)}</TableCell>
+                          <TableCell>{formatRuntimeNumber(item.evidenceCount)}</TableCell>
+                          <TableCell>{formatRuntimeNumber(item.reportCount)}</TableCell>
+                          <TableCell>{formatRuntimeNumber(item.riskWarnings)}</TableCell>
+                          <TableCell>{formatRuntimeNumber(item.decisionCount)}</TableCell>
+                        </>
+                      ) : (
+                        <>
+                          <TableCell className={item.totalReturn >= 0 ? "text-emerald-600 font-medium" : "text-red-500 font-medium"}>
+                            {formatPercent(item.totalReturn)}
+                          </TableCell>
+                          <TableCell>{formatPercent(item.annualizedReturn)}</TableCell>
+                          <TableCell className={item.maxDrawdown >= 15 ? "text-red-500" : item.maxDrawdown >= 10 ? "text-amber-500" : "text-emerald-600"}>
+                            {formatPercent(item.maxDrawdown)}
+                          </TableCell>
+                          <TableCell>{formatPercent(item.volatility)}</TableCell>
+                          <TableCell>{item.sharpe.toFixed(2)}</TableCell>
+                          <TableCell>{formatPercent(item.winRate)}</TableCell>
+                          <TableCell>{formatPercent(item.turnover)}</TableCell>
+                        </>
+                      )}
                       <TableCell>
                         <Button size="sm" variant="outline" onClick={() => navigateTo("/decision-attribution", { strategyId: item.strategyId })}>
                           {item.evidenceScore.toFixed(0)}
@@ -473,86 +604,159 @@ export default function LeaderboardPage() {
             </CardContent>
           </Card>
 
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">收益对比</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {returnRank.map((item) => {
-                  const width = normalize(item.totalReturn, returnMin, returnMax) * 100;
-                  return (
-                    <div key={item.strategyId} className="space-y-1">
-                      <div className="flex justify-between text-xs">
-                        <span className="truncate max-w-[180px]">{item.strategyName}</span>
-                        <span className="text-emerald-600">{formatPercent(item.totalReturn)}</span>
-                      </div>
-                      <div className="h-2 rounded bg-muted overflow-hidden">
-                        <div className="h-full bg-emerald-500 rounded" style={{ width: `${Math.max(width, 8)}%` }} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">回撤对比</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {drawdownRank.map((item) => {
-                  const width = drawdownMax === 0 ? 0 : (item.maxDrawdown / drawdownMax) * 100;
-                  return (
-                    <div key={item.strategyId} className="space-y-1">
-                      <div className="flex justify-between text-xs">
-                        <span className="truncate max-w-[180px]">{item.strategyName}</span>
-                        <span className={item.maxDrawdown >= 15 ? "text-red-500" : item.maxDrawdown >= 10 ? "text-amber-500" : "text-emerald-600"}>
-                          {formatPercent(item.maxDrawdown)}
-                        </span>
-                      </div>
-                      <div className="h-2 rounded bg-muted overflow-hidden">
-                        <div
-                          className={`h-full rounded ${item.maxDrawdown >= 15 ? "bg-red-500" : item.maxDrawdown >= 10 ? "bg-amber-500" : "bg-emerald-500"}`}
-                          style={{ width: `${Math.max(width, 8)}%` }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">风险收益散点（波动率 vs 累计收益）</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <svg viewBox="0 0 360 220" className="w-full h-[220px] rounded border bg-muted/20">
-                  <line x1="30" y1="190" x2="330" y2="190" stroke="currentColor" opacity="0.2" />
-                  <line x1="30" y1="20" x2="30" y2="190" stroke="currentColor" opacity="0.2" />
-                  {rankedData.map((item) => {
-                    const x = 30 + normalize(item.volatility, volatilityMin, volatilityMax) * 300;
-                    const y = 190 - normalize(item.totalReturn, returnMin, returnMax) * 170;
+          {isRealMode ? (
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">运行质量对比</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {runtimeQualityRank.map((item) => {
+                    const width = Math.max(8, Math.min(100, item.runtimeQualityScore ?? item.scoreIndex));
                     return (
-                      <g key={item.strategyId}>
-                        <circle cx={x} cy={y} r={5} fill={item.sharpe >= 1.2 ? "#059669" : item.sharpe >= 1 ? "#2563eb" : "#b45309"} />
-                        <text x={x + 6} y={y - 6} fontSize="9" fill="currentColor">
-                          {item.strategyName.slice(0, 10)}
-                        </text>
-                      </g>
+                      <div key={item.strategyId} className="space-y-1">
+                        <div className="flex justify-between text-xs">
+                          <span className="truncate max-w-[180px]">{item.strategyName}</span>
+                          <span className="text-emerald-600">{(item.runtimeQualityScore ?? item.scoreIndex).toFixed(1)}</span>
+                        </div>
+                        <div className="h-2 rounded bg-muted overflow-hidden">
+                          <div className="h-full bg-emerald-500 rounded" style={{ width: `${width}%` }} />
+                        </div>
+                      </div>
                     );
                   })}
-                  <text x="285" y="206" fontSize="10" fill="currentColor">
-                    波动率
-                  </text>
-                  <text x="2" y="18" fontSize="10" fill="currentColor">
-                    收益
-                  </text>
-                </svg>
-              </CardContent>
-            </Card>
-          </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">证据覆盖对比</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {evidenceCoverageRank.map((item) => {
+                    const maxEvidence = Math.max(...evidenceCoverageRank.map((rankItem) => rankItem.evidenceCount ?? 0), 1);
+                    const width = ((item.evidenceCount ?? 0) / maxEvidence) * 100;
+                    return (
+                      <div key={item.strategyId} className="space-y-1">
+                        <div className="flex justify-between text-xs">
+                          <span className="truncate max-w-[180px]">{item.strategyName}</span>
+                          <span>{item.evidenceCount ?? 0} evidence</span>
+                        </div>
+                        <div className="h-2 rounded bg-muted overflow-hidden">
+                          <div className="h-full bg-blue-500 rounded" style={{ width: `${Math.max(width, 8)}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">运行产物分布</CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-2 gap-3 text-xs">
+                  <div className="rounded border p-3">
+                    <p className="text-muted-foreground">Completed Runs</p>
+                    <p className="text-lg font-semibold">{rankedData.reduce((sum, item) => sum + (item.completedRuns ?? 0), 0)}</p>
+                  </div>
+                  <div className="rounded border p-3">
+                    <p className="text-muted-foreground">Failed Runs</p>
+                    <p className="text-lg font-semibold">{rankedData.reduce((sum, item) => sum + (item.failedRuns ?? 0), 0)}</p>
+                  </div>
+                  <div className="rounded border p-3">
+                    <p className="text-muted-foreground">Reports</p>
+                    <p className="text-lg font-semibold">{rankedData.reduce((sum, item) => sum + (item.reportCount ?? 0), 0)}</p>
+                  </div>
+                  <div className="rounded border p-3">
+                    <p className="text-muted-foreground">Decisions</p>
+                    <p className="text-lg font-semibold">{rankedData.reduce((sum, item) => sum + (item.decisionCount ?? 0), 0)}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">收益对比</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {returnRank.map((item) => {
+                    const width = normalize(item.totalReturn, returnMin, returnMax) * 100;
+                    return (
+                      <div key={item.strategyId} className="space-y-1">
+                        <div className="flex justify-between text-xs">
+                          <span className="truncate max-w-[180px]">{item.strategyName}</span>
+                          <span className="text-emerald-600">{formatPercent(item.totalReturn)}</span>
+                        </div>
+                        <div className="h-2 rounded bg-muted overflow-hidden">
+                          <div className="h-full bg-emerald-500 rounded" style={{ width: `${Math.max(width, 8)}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">回撤对比</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {drawdownRank.map((item) => {
+                    const width = drawdownMax === 0 ? 0 : (item.maxDrawdown / drawdownMax) * 100;
+                    return (
+                      <div key={item.strategyId} className="space-y-1">
+                        <div className="flex justify-between text-xs">
+                          <span className="truncate max-w-[180px]">{item.strategyName}</span>
+                          <span className={item.maxDrawdown >= 15 ? "text-red-500" : item.maxDrawdown >= 10 ? "text-amber-500" : "text-emerald-600"}>
+                            {formatPercent(item.maxDrawdown)}
+                          </span>
+                        </div>
+                        <div className="h-2 rounded bg-muted overflow-hidden">
+                          <div
+                            className={`h-full rounded ${item.maxDrawdown >= 15 ? "bg-red-500" : item.maxDrawdown >= 10 ? "bg-amber-500" : "bg-emerald-500"}`}
+                            style={{ width: `${Math.max(width, 8)}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">风险收益散点（波动率 vs 累计收益）</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <svg viewBox="0 0 360 220" className="w-full h-[220px] rounded border bg-muted/20">
+                    <line x1="30" y1="190" x2="330" y2="190" stroke="currentColor" opacity="0.2" />
+                    <line x1="30" y1="20" x2="30" y2="190" stroke="currentColor" opacity="0.2" />
+                    {rankedData.map((item) => {
+                      const x = 30 + normalize(item.volatility, volatilityMin, volatilityMax) * 300;
+                      const y = 190 - normalize(item.totalReturn, returnMin, returnMax) * 170;
+                      return (
+                        <g key={item.strategyId}>
+                          <circle cx={x} cy={y} r={5} fill={item.sharpe >= 1.2 ? "#059669" : item.sharpe >= 1 ? "#2563eb" : "#b45309"} />
+                          <text x={x + 6} y={y - 6} fontSize="9" fill="currentColor">
+                            {item.strategyName.slice(0, 10)}
+                          </text>
+                        </g>
+                      );
+                    })}
+                    <text x="285" y="206" fontSize="10" fill="currentColor">
+                      波动率
+                    </text>
+                    <text x="2" y="18" fontSize="10" fill="currentColor">
+                      收益
+                    </text>
+                  </svg>
+                </CardContent>
+              </Card>
+            </div>
+          )}
 
           <Card>
             <CardHeader>

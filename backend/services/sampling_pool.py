@@ -92,17 +92,23 @@ class SamplingPool:
                 price_change = self.get_price_change_percent(symbol)
                 status[symbol] = {
                     'sample_count': len(pool),
+                    'max_samples': self.get_max_samples(symbol),
+                    'target_reached': len(pool) >= self.get_max_samples(symbol),
                     'latest_price': pool[-1]['price'],
                     'latest_time': pool[-1]['datetime'].isoformat(),
                     'oldest_time': pool[0]['datetime'].isoformat(),
+                    'coverage_seconds': max(0, int(pool[-1]['timestamp'] - pool[0]['timestamp'])),
                     'price_change_percent': round(price_change, 2) if price_change else None
                 }
             else:
                 status[symbol] = {
                     'sample_count': 0,
+                    'max_samples': self.get_max_samples(symbol),
+                    'target_reached': False,
                     'latest_price': None,
                     'latest_time': None,
                     'oldest_time': None,
+                    'coverage_seconds': 0,
                     'price_change_percent': None
                 }
         return status

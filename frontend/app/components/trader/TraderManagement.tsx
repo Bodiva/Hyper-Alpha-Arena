@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { SettingsDialog } from '@/components/layout/SettingsDialog'
 import StrategyPanel from '@/components/portfolio/StrategyPanel'
 import { getAccounts, TradingAccount } from '@/lib/api'
+import SamplingSettingsCard from './SamplingSettingsCard'
 
 export default function TraderManagement() {
   const { t } = useTranslation()
@@ -123,6 +124,10 @@ export default function TraderManagement() {
       <div className="flex-shrink-0">
         <h1 className="text-2xl font-bold">{t('trader.title', 'AI Trader Management')}</h1>
         <p className="text-muted-foreground">{t('trader.subtitle', 'Manage your AI traders and configure trading strategies')}</p>
+      </div>
+
+      <div className="flex-shrink-0">
+        <SamplingSettingsCard />
       </div>
 
       <div className="flex-1 grid grid-cols-2 gap-6 overflow-hidden">

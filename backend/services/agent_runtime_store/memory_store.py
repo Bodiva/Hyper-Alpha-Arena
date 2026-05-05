@@ -11,6 +11,7 @@ from schemas.alpha_trace_agent_runtime import (
     AgentRuntimeEvent,
     EvidenceReference,
 )
+from services.agent_runtime_status_machine import normalize_agent_status_for_run_status
 
 
 class MemoryAgentRunStore:
@@ -37,7 +38,7 @@ class MemoryAgentRunStore:
             if not run:
                 return
             current_time = timestamp or datetime.now().astimezone().isoformat(timespec="seconds")
-            agent_status = "completed" if status == "completed" else "failed" if status == "failed" else "running"
+            agent_status = normalize_agent_status_for_run_status(status)
             updated_agents = [agent.model_copy(update={"status": agent_status}) for agent in run.agents]
             self._runs[run_id] = run.model_copy(
                 update={
@@ -116,4 +117,3 @@ class MemoryAgentRunStore:
     def get_decision(self, run_id: str) -> Optional[AgentDecision]:
         run = self.get_run(run_id)
         return run.finalDecision if run else None
-

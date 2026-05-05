@@ -17,13 +17,18 @@ import type {
 import type { Evidence, EvidenceType } from "@/entities/evidence/model";
 import { listAssets } from "@/entities/asset/api";
 import {
+  cancelAgentRunAsync,
   createAgentRuntimeEventStream,
   getAgentRunByIdAsync,
   getAgentRunDecisionAsync,
   getAgentRunEvidenceAsync,
   getAgentRunReportsAsync,
   getAgentRunRuntimeEventsAsync,
+  getAgentRuntimeLogsAsync,
+  getAgentWorkerArtifactsAsync,
   listAgentRunsAsync,
+  type AgentRuntimeLogResponse,
+  type AgentWorkerArtifactsResponse,
 } from "@/entities/agent/api";
 import { applyRuntimeEvents, createInitialRuntimeSnapshot } from "@/entities/agent/runtime-adapter";
 import type { AgentRuntimeEvent } from "@/entities/agent/runtime-events";
@@ -31,11 +36,12 @@ import { listEvidence } from "@/entities/evidence/api";
 import { getApiMode } from "@/shared/api/api-mode";
 import { buildAgentExecutionProgress } from "@/shared/lib/agent-progress";
 import { buildAgentRunProgress } from "@/shared/lib/runtime-step-mapper";
-import { navigateTo } from "@/shared/lib/navigation";
+import { goBackOrDashboard, navigateTo } from "@/shared/lib/navigation";
 import { useTypewriterStream } from "@/shared/lib/use-typewriter-stream";
 import AgentProgressCard from "@/shared/ui/AgentProgressCard";
 import AgentRunProgressCard from "@/shared/ui/AgentRunProgressCard";
 import FinalDecisionView from "@/shared/ui/FinalDecisionView";
+import ResearchWorkspaceNav from "@/shared/ui/ResearchWorkspaceNav";
 import StructuredReportView from "@/shared/ui/StructuredReportView";
 
 interface AgentRunDetailPageProps {
@@ -44,15 +50,27 @@ interface AgentRunDetailPageProps {
 
 type RealDataStatus = "idle" | "loading" | "loaded" | "error";
 
-type ReportSectionId = "market_view" | "bull_view" | "bear_view" | "risk_review" | "final_decision";
+type ReportSectionId = "market_view" | "bull_view" | "bear_view" | "research_manager" | "risk_review" | "final_decision";
+type BackendLogFilter = "alphatrace" | "current_run" | "all";
 
 const REPORT_SECTIONS: Array<{ id: ReportSectionId; label: string }> = [
   { id: "market_view", label: "Market View" },
   { id: "bull_view", label: "Bull View" },
   { id: "bear_view", label: "Bear View" },
+  { id: "research_manager", label: "Research Manager" },
   { id: "risk_review", label: "Risk Review" },
   { id: "final_decision", label: "Final Decision" },
 ];
+
+const TRADINGAGENTS_FLOW_STEPS = [
+  { stepId: "market_analyst", label: "Market Analyst", dependsOn: "Start" },
+  { stepId: "research_manager", label: "Research Manager", dependsOn: "Market Analyst" },
+  { stepId: "trader", label: "Trader", dependsOn: "Research Manager" },
+  { stepId: "risk_manager", label: "Risk Manager", dependsOn: "Trader" },
+  { stepId: "portfolio_manager", label: "Portfolio Manager", dependsOn: "Risk Manager" },
+] as const;
+
+type TradingAgentsFlowStatus = "pending" | "running" | "completed" | "failed";
 
 interface RealDataLoadState {
   reports: RealDataStatus;
@@ -123,6 +141,8 @@ const EVIDENCE_TYPE_LABEL: Record<EvidenceType, string> = {
   market_snapshot: "行情快照",
   industry_data: "产业数据",
   user_upload: "用户上传",
+  external_search: "外部搜索",
+  runtime_context: "运行上下文",
 };
 
 const EVENT_LABEL: Record<AgentEvent["type"], string> = {
@@ -144,6 +164,11 @@ const RISK_LEVEL_BADGE: Record<AgentRun["riskLevel"], "default" | "secondary" | 
   HIGH: "destructive",
 };
 
+const MAX_RUNTIME_EVENTS_IN_MEMORY = 800;
+const MAX_LIVE_OUTPUT_CHARS = 12_000;
+const MAX_RENDERED_TOOL_ACTIVITIES = 120;
+const MAX_RENDERED_DEBATE_MESSAGES = 80;
+
 const formatDateTime = (timestamp?: string): string => {
   if (!timestamp) return "-";
   const date = new Date(timestamp);
@@ -153,6 +178,49 @@ const formatDateTime = (timestamp?: string): string => {
 
 const formatPercent = (value: number, digits = 1): string => `${(value * 100).toFixed(digits)}%`;
 
+const formatInteger = (value?: number): string =>
+  typeof value === "number" && Number.isFinite(value) ? Math.round(value).toLocaleString("en-US") : "0";
+
+const hasSourceUrl = (url?: string): url is string => Boolean(url && /^https?:\/\//i.test(url));
+
+const limitRuntimeEvents = (events: AgentRuntimeEvent[]): AgentRuntimeEvent[] =>
+  [...events].sort((a, b) => a.sequence - b.sequence).slice(-MAX_RUNTIME_EVENTS_IN_MEMORY);
+
+const mergeRuntimeEvent = (current: AgentRuntimeEvent[], event: AgentRuntimeEvent): AgentRuntimeEvent[] => {
+  const byId = new Map(current.map((item) => [item.eventId, item]));
+  if (byId.has(event.eventId)) return current;
+  byId.set(event.eventId, event);
+  return limitRuntimeEvents(Array.from(byId.values()));
+};
+
+const trimLiveOutput = (text: string): string =>
+  text.length > MAX_LIVE_OUTPUT_CHARS ? text.slice(-MAX_LIVE_OUTPUT_CHARS) : text;
+
+const LEGACY_BACKEND_LOG_PATTERNS = [
+  /Fetching price for BTC/i,
+  /Got price for BTC/i,
+  /\[HyperliquidStrategy DEBUG\]/i,
+  /market data stream/i,
+  /Hyperliquid snapshot service/i,
+  /Binance .*collector/i,
+];
+
+const ALPHATRACE_BACKEND_LOG_PATTERNS = [
+  /alpha-trace/i,
+  /TradingAgents/i,
+  /LangGraph/i,
+  /LangAlpha/i,
+  /agent-runs/i,
+  /Qwen/i,
+  /Bocha/i,
+];
+
+const shouldHideLegacyBackendLogLine = (line: string): boolean =>
+  LEGACY_BACKEND_LOG_PATTERNS.some((pattern) => pattern.test(line));
+
+const isAlphaTraceBackendLogLine = (line: string): boolean =>
+  ALPHATRACE_BACKEND_LOG_PATTERNS.some((pattern) => pattern.test(line));
+
 const formatLoadStatus = (status: RealDataStatus): string => {
   if (status === "loading") return "loading";
   if (status === "loaded") return "loaded";
@@ -161,16 +229,28 @@ const formatLoadStatus = (status: RealDataStatus): string => {
 };
 
 const getStreamingChunkContent = (event: AgentRuntimeEvent): string => {
-  if (event.type !== "reasoning.chunk") return "";
+  if (event.type !== "reasoning.chunk" && event.type !== "debate.message") return "";
   const payload = event.payload as Record<string, unknown>;
   if (payload.streaming !== true || typeof payload.content !== "string") return "";
   return payload.content;
 };
 
 const getStreamingChunkForStep = (event: AgentRuntimeEvent, stepId: ReportSectionId): string => {
-  if (event.type !== "reasoning.chunk") return "";
+  if (event.type !== "reasoning.chunk" && event.type !== "debate.message") return "";
   const payload = event.payload as Record<string, unknown>;
-  if (payload.streaming !== true || payload.stepId !== stepId || typeof payload.content !== "string") return "";
+  if (payload.streaming !== true || typeof payload.content !== "string") return "";
+  const payloadStepId = typeof payload.stepId === "string" ? payload.stepId : "";
+  const sectionHint = typeof payload.sectionHint === "string" ? payload.sectionHint : "";
+  const stance = typeof payload.stance === "string" ? payload.stance.toUpperCase() : "";
+  const matches =
+    payloadStepId === stepId ||
+    sectionHint === stepId ||
+    (stepId === "bull_view" && (payloadStepId === "bull_researcher" || stance === "BULL")) ||
+    (stepId === "bear_view" && (payloadStepId === "bear_researcher" || stance === "BEAR")) ||
+    (stepId === "research_manager" && payloadStepId === "research_manager") ||
+    (stepId === "risk_review" && payloadStepId === "risk_manager") ||
+    (stepId === "final_decision" && (payloadStepId === "portfolio_manager" || payloadStepId === "trader"));
+  if (!matches) return "";
   return payload.content;
 };
 
@@ -194,6 +274,12 @@ const formatDuration = (run: AgentRun): string => {
   return `${minutes}分 ${sec % 60}秒`;
 };
 
+const formatFileSize = (bytes: number): string => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+};
+
 const formatArgsSummary = (args: Record<string, unknown>): string => {
   const entries = Object.entries(args);
   if (entries.length === 0) return "无参数";
@@ -211,6 +297,9 @@ interface RuntimeToolActivity {
   activityId: string;
   toolName: string;
   agentName: string;
+  stepId: string;
+  source?: string;
+  query?: string;
   status: ToolCallStatus;
   args: Record<string, unknown>;
   summary?: string;
@@ -219,11 +308,195 @@ interface RuntimeToolActivity {
   completedAt?: string;
 }
 
+interface DecisionTimelineItem {
+  itemId: string;
+  type: string;
+  agentName: string;
+  timestamp: string;
+  summary: string;
+  stepId?: string;
+  stepLabel?: string;
+  count?: number;
+  aggregated?: boolean;
+}
+
 const runtimePayload = (event: AgentRuntimeEvent): Record<string, unknown> => {
   if (typeof event.payload === "object" && event.payload !== null) {
     return event.payload as Record<string, unknown>;
   }
   return {};
+};
+
+const STEP_LABEL: Record<string, string> = {
+  evidence_retrieval: "Evidence Retrieval",
+  market_view: "Market View",
+  bull_view: "Bull View",
+  bear_view: "Bear View",
+  research_manager: "Research Manager",
+  risk_review: "Risk Review",
+  final_decision: "Final Decision",
+};
+
+const summarizeRuntimeEvent = (event: AgentRuntimeEvent): string => {
+  const payload = runtimePayload(event);
+  const agentName = event.agentName ?? "System";
+  const toolName = typeof payload.toolName === "string" ? payload.toolName : "runtime.tool";
+  const content =
+    typeof payload.summary === "string"
+      ? payload.summary
+      : typeof payload.content === "string"
+        ? payload.content
+        : typeof payload.error === "string"
+          ? payload.error
+          : "";
+
+  switch (event.type) {
+    case "agent.run.started":
+      return "Agent run started.";
+    case "agent.run.completed":
+      return "Agent run completed.";
+    case "agent.run.failed":
+      return content || "Agent run failed.";
+    case "agent.started":
+      return `${agentName} started.`;
+    case "agent.completed":
+      return `${agentName} completed.`;
+    case "agent.failed":
+      return `${agentName} failed: ${content || "Runtime step failed."}`;
+    case "tool.called":
+      return `${agentName} called ${toolName}.`;
+    case "tool.result":
+      return content || `${agentName} received ${toolName} result.`;
+    case "reasoning.chunk":
+      return content || `${agentName} emitted reasoning output.`;
+    case "debate.message":
+      return content || `${agentName} emitted debate message.`;
+    case "risk.warning":
+      return content || `${agentName} emitted risk warning.`;
+    case "report.generated":
+      return typeof payload.title === "string" ? `${agentName} generated report "${payload.title}".` : `${agentName} generated report.`;
+    case "decision.updated":
+      return typeof payload.action === "string" ? `Decision updated to ${payload.action}.` : "Decision updated.";
+    case "evidence.linked":
+      return content || "Evidence linked to run.";
+    default:
+      return content || event.type;
+  }
+};
+
+const buildDecisionTimelineItems = (events: AgentRuntimeEvent[], legacyEvents: AgentEvent[]): DecisionTimelineItem[] => {
+  if (!events.length) {
+    return legacyEvents
+      .slice()
+      .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+      .map((event, index) => ({
+        itemId: `${event.timestamp}-${index}`,
+        type: event.type,
+        agentName: "agentId" in event ? event.agentId : "System",
+        timestamp: event.timestamp,
+        summary: summarizeEvent(event, "agentId" in event ? event.agentId : "System"),
+      }));
+  }
+
+  const items: DecisionTimelineItem[] = [];
+  const streamingGroups = new Map<
+    string,
+    {
+      event: AgentRuntimeEvent;
+      content: string;
+      count: number;
+    }
+  >();
+
+  events
+    .slice()
+    .sort((a, b) => a.sequence - b.sequence)
+    .forEach((event) => {
+      const payload = runtimePayload(event);
+      const stepId = typeof payload.stepId === "string" ? payload.stepId : "";
+      const isStreamingChunk =
+        (event.type === "reasoning.chunk" || event.type === "debate.message") &&
+        payload.streaming === true &&
+        typeof payload.content === "string";
+
+      if (isStreamingChunk) {
+        const key = `${stepId || "general"}:${event.agentName ?? "System"}:${event.type}`;
+        const current = streamingGroups.get(key);
+        if (current) {
+          current.event = event;
+          current.content += payload.content as string;
+          current.count += 1;
+        } else {
+          streamingGroups.set(key, { event, content: payload.content as string, count: 1 });
+        }
+        return;
+      }
+
+      items.push({
+        itemId: event.eventId,
+        type: event.type,
+        agentName: event.agentName ?? "System",
+        timestamp: event.timestamp,
+        summary: summarizeRuntimeEvent(event),
+        stepId,
+        stepLabel: STEP_LABEL[stepId],
+      });
+    });
+
+  streamingGroups.forEach((group, key) => {
+    const payload = runtimePayload(group.event);
+    const stepId = typeof payload.stepId === "string" ? payload.stepId : "";
+    const compactText = group.content.replace(/\s+/g, " ").trim();
+    items.push({
+      itemId: `stream-${key}`,
+      type: `${group.event.type}.stream`,
+      agentName: group.event.agentName ?? "System",
+      timestamp: group.event.timestamp,
+      summary: `Live output streamed ${group.count} chunks / ${group.content.length} chars. ${compactText.slice(0, 240)}${compactText.length > 240 ? "..." : ""}`,
+      stepId,
+      stepLabel: STEP_LABEL[stepId],
+      count: group.count,
+      aggregated: true,
+    });
+  });
+
+  return items.sort((a, b) => a.timestamp.localeCompare(b.timestamp)).slice(-120);
+};
+
+const getTradingAgentsFlow = (events: AgentRuntimeEvent[]) => {
+  const byStep = new Map<string, { status: TradingAgentsFlowStatus; progress: number; latest?: string; timestamp?: string }>();
+  TRADINGAGENTS_FLOW_STEPS.forEach((step) => byStep.set(step.stepId, { status: "pending", progress: 0 }));
+
+  events
+    .slice()
+    .sort((a, b) => a.sequence - b.sequence)
+    .forEach((event) => {
+      const payload = runtimePayload(event);
+      const stepId = typeof payload.stepId === "string" ? payload.stepId : "";
+      if (!byStep.has(stepId)) return;
+      const current = byStep.get(stepId)!;
+      const progress = typeof payload.progress === "number" ? payload.progress : current.progress;
+      const content =
+        typeof payload.content === "string"
+          ? payload.content
+          : typeof payload.summary === "string"
+            ? payload.summary
+            : event.type;
+      const status: TradingAgentsFlowStatus =
+        event.type === "agent.failed" || event.type === "agent.run.failed"
+          ? "failed"
+          : event.type === "agent.completed" || progress >= 100
+            ? "completed"
+            : "running";
+      byStep.set(stepId, {
+        status,
+        progress: Math.max(current.progress, status === "completed" ? 100 : progress || 35),
+        latest: content,
+        timestamp: event.timestamp,
+      });
+    });
+
+  return TRADINGAGENTS_FLOW_STEPS.map((step) => ({ ...step, ...(byStep.get(step.stepId) ?? { status: "pending", progress: 0 }) }));
 };
 
 const toStringList = (value: unknown): string[] => {
@@ -258,6 +531,8 @@ const getRuntimeToolActivities = (events: AgentRuntimeEvent[]): RuntimeToolActiv
           activityId: event.eventId,
           toolName,
           agentName,
+          stepId,
+          source: typeof payload.source === "string" ? payload.source : typeof args.source === "string" ? args.source : undefined,
           status: "RUNNING",
           args,
           evidenceIds: toStringList(payload.evidenceIds),
@@ -274,6 +549,7 @@ const getRuntimeToolActivities = (events: AgentRuntimeEvent[]): RuntimeToolActiv
           activityId: event.eventId,
           toolName,
           agentName,
+          stepId,
           status: "RUNNING",
           args: {},
           evidenceIds: [],
@@ -283,6 +559,8 @@ const getRuntimeToolActivities = (events: AgentRuntimeEvent[]): RuntimeToolActiv
       const failed = payload.status === "failed" || typeof payload.error === "string";
       activity.status = failed ? "FAILED" : "COMPLETED";
       activity.completedAt = event.timestamp;
+      activity.source = typeof payload.source === "string" ? payload.source : activity.source;
+      activity.query = typeof payload.query === "string" ? payload.query : activity.query;
       activity.summary =
         typeof payload.summary === "string"
           ? payload.summary
@@ -307,7 +585,7 @@ const summarizeEvent = (event: AgentEvent, agentName: string): string => {
     case "agent.completed":
       return `${agentName} completed`;
     case "agent.failed":
-      return `${agentName} failed: ${event.error}`;
+      return `${agentName} failed: ${event.error || "Runtime step failed"}`;
     case "tool.called":
       return `${agentName} called ${event.toolName}`;
     case "tool.result":
@@ -336,6 +614,7 @@ const reportSectionFromReport = (report: AgentReport): ReportSectionId | undefin
   if (text.includes("market view")) return "market_view";
   if (text.includes("bull view")) return "bull_view";
   if (text.includes("bear view")) return "bear_view";
+  if (text.includes("research manager") || text.includes("research synthesis")) return "research_manager";
   if (text.includes("risk review")) return "risk_review";
   return undefined;
 };
@@ -364,8 +643,19 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
   const [runLoadError, setRunLoadError] = useState<string | null>(null);
   const runtimeClientRef = useRef<ReturnType<typeof createAgentRuntimeEventStream> | null>(null);
   const [runtimeEvents, setRuntimeEvents] = useState<AgentRuntimeEvent[]>([]);
+  const [runtimeEventsLoadedCount, setRuntimeEventsLoadedCount] = useState(0);
   const [runtimeReplayStatus, setRuntimeReplayStatus] = useState<"IDLE" | "RUNNING" | "COMPLETED" | "STOPPED" | "ERROR">("IDLE");
   const [runtimeReplayError, setRuntimeReplayError] = useState<string | null>(null);
+  const [backendLogs, setBackendLogs] = useState<AgentRuntimeLogResponse | null>(null);
+  const [isLoadingBackendLogs, setIsLoadingBackendLogs] = useState(false);
+  const [backendLogError, setBackendLogError] = useState<string | null>(null);
+  const [backendLogFilter, setBackendLogFilter] = useState<BackendLogFilter>("alphatrace");
+  const [workerArtifacts, setWorkerArtifacts] = useState<AgentWorkerArtifactsResponse | null>(null);
+  const [isLoadingWorkerArtifacts, setIsLoadingWorkerArtifacts] = useState(false);
+  const [workerArtifactError, setWorkerArtifactError] = useState<string | null>(null);
+  const [isCancellingRun, setIsCancellingRun] = useState(false);
+  const [cancelRunError, setCancelRunError] = useState<string | null>(null);
+  const liveOutputRef = useRef<HTMLDivElement | null>(null);
   const [realRunEvidence, setRealRunEvidence] = useState<Evidence[] | null>(null);
   const [realDataLoadState, setRealDataLoadState] = useState<RealDataLoadState>({
     reports: "idle",
@@ -381,8 +671,12 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
     setIsLoadingRun(true);
     setRunLoadError(null);
     setRuntimeEvents([]);
+    setRuntimeEventsLoadedCount(0);
     setRuntimeReplayStatus("IDLE");
     setRuntimeReplayError(null);
+    setWorkerArtifacts(null);
+    setWorkerArtifactError(null);
+    setCancelRunError(null);
     setRealRunEvidence(null);
     setRealDataLoadState({ reports: "idle", evidence: "idle", decision: "idle" });
     setRealDataLoadErrors({});
@@ -422,7 +716,8 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
     getAgentRunRuntimeEventsAsync(run.runId)
       .then((events) => {
         if (!cancelled) {
-          setRuntimeEvents(events);
+          setRuntimeEventsLoadedCount(events.length);
+          setRuntimeEvents(limitRuntimeEvents(events));
           setRuntimeReplayStatus(run.status === "RUNNING" ? "IDLE" : "COMPLETED");
         }
       })
@@ -512,6 +807,11 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
     return applyRuntimeEvents(createInitialRuntimeSnapshot(run.runId), runtimeEvents);
   }, [run, runtimeEvents]);
 
+  const liveMetrics = useMemo(() => {
+    if (!run) return null;
+    return { ...run.metrics, ...(runtimeSnapshot?.metrics ?? {}) };
+  }, [run, runtimeSnapshot?.metrics]);
+
   const runProgress = useMemo(() => {
     if (!run) return null;
     return buildAgentRunProgress({
@@ -523,12 +823,20 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
     });
   }, [run, runtimeEvents, runtimeSnapshot?.timeline]);
 
-  const liveReportText = useMemo(
+  const isTradingAgentsRun = useMemo(
     () =>
-      [...runtimeEvents]
-        .sort((a, b) => a.sequence - b.sequence)
-        .map(getStreamingChunkContent)
-        .join(""),
+      Boolean(
+        run &&
+          (run.triggeredBy?.toLowerCase().includes("tradingagents") ||
+            runtimeEvents.some((event) => String(runtimePayload(event).source ?? "").includes("tradingagents"))),
+      ),
+    [run, runtimeEvents],
+  );
+
+  const tradingAgentsFlow = useMemo(() => getTradingAgentsFlow(runtimeEvents), [runtimeEvents]);
+
+  const liveReportText = useMemo(
+    () => trimLiveOutput(runtimeEvents.map(getStreamingChunkContent).join("")),
     [runtimeEvents],
   );
   const smoothLiveReportText = useTypewriterStream(liveReportText, {
@@ -537,16 +845,15 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
     intervalMs: 18,
   });
 
+  useEffect(() => {
+    if (!liveOutputRef.current || run?.status !== "RUNNING") return;
+    liveOutputRef.current.scrollTop = liveOutputRef.current.scrollHeight;
+  }, [run?.status, smoothLiveReportText]);
+
   const debateLiveOutputs = useMemo(
     () => ({
-      bull: [...runtimeEvents]
-        .sort((a, b) => a.sequence - b.sequence)
-        .map((event) => getStreamingChunkForStep(event, "bull_view"))
-        .join(""),
-      bear: [...runtimeEvents]
-        .sort((a, b) => a.sequence - b.sequence)
-        .map((event) => getStreamingChunkForStep(event, "bear_view"))
-        .join(""),
+      bull: trimLiveOutput(runtimeEvents.map((event) => getStreamingChunkForStep(event, "bull_view")).join("")),
+      bear: trimLiveOutput(runtimeEvents.map((event) => getStreamingChunkForStep(event, "bear_view")).join("")),
     }),
     [runtimeEvents],
   );
@@ -578,6 +885,109 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
     () => new Map(agentProgressItems.map((item) => [item.agent.agentId, item])),
     [agentProgressItems],
   );
+
+  const failureMessage = useMemo(() => {
+    if (!run || run.status !== "FAILED") return null;
+    const failedEvent = [...run.events, ...runtimeEvents]
+      .filter((event) => event.type === "agent.run.failed" || event.type === "agent.failed")
+      .sort((a, b) => b.sequence - a.sequence)[0];
+    if (!failedEvent) return "Agent Run failed. No structured failure message was returned.";
+    const payload = runtimePayload(failedEvent);
+    return (
+      (typeof payload.error === "string" && payload.error) ||
+      (typeof payload.summary === "string" && payload.summary) ||
+      "Agent Run failed. Check Runtime Event Stream for details."
+    );
+  }, [run, runtimeEvents]);
+
+  const filteredBackendLogLines = useMemo(() => {
+    const lines = backendLogs?.lines ?? [];
+    if (backendLogFilter === "all") return lines;
+    if (backendLogFilter === "current_run") {
+      if (!run?.runId) return [];
+      return lines.filter((line) => line.includes(run.runId));
+    }
+    return lines.filter((line) => !shouldHideLegacyBackendLogLine(line) && isAlphaTraceBackendLogLine(line));
+  }, [backendLogFilter, backendLogs?.lines, run?.runId]);
+
+  const hiddenBackendLogLineCount = Math.max((backendLogs?.lines.length ?? 0) - filteredBackendLogLines.length, 0);
+
+  const refreshBackendLogs = async () => {
+    if (apiMode !== "real") {
+      setBackendLogs({
+        path: "mock",
+        exists: false,
+        limit: 400,
+        truncated: false,
+        lines: [],
+        message: "Mock Mode 不读取后端日志。",
+      });
+      return;
+    }
+    setIsLoadingBackendLogs(true);
+    setBackendLogError(null);
+    try {
+      setBackendLogs(await getAgentRuntimeLogsAsync(400));
+    } catch (error) {
+      setBackendLogError(error instanceof Error ? error.message : "后端日志加载失败");
+    } finally {
+      setIsLoadingBackendLogs(false);
+    }
+  };
+
+  const refreshWorkerArtifacts = async () => {
+    if (!run?.runId) return;
+    if (apiMode !== "real") {
+      setWorkerArtifacts({
+        runId: run.runId,
+        workerRoot: "mock",
+        workDir: "mock",
+        exists: false,
+        files: {},
+        stdoutLines: [],
+        stderrLines: [],
+        events: [],
+        result: null,
+        message: "Mock Mode does not expose worker artifacts.",
+      });
+      return;
+    }
+    setIsLoadingWorkerArtifacts(true);
+    setWorkerArtifactError(null);
+    try {
+      setWorkerArtifacts(await getAgentWorkerArtifactsAsync(run.runId, 200, 200));
+    } catch (error) {
+      setWorkerArtifactError(error instanceof Error ? error.message : "Worker artifacts 加载失败");
+    } finally {
+      setIsLoadingWorkerArtifacts(false);
+    }
+  };
+
+  const handleCancelRun = async () => {
+    if (!run?.runId) return;
+    setIsCancellingRun(true);
+    setCancelRunError(null);
+    try {
+      const cancelledRun = await cancelAgentRunAsync(run.runId);
+      setRun(cancelledRun);
+      const events = await getAgentRunRuntimeEventsAsync(run.runId);
+      setRuntimeEventsLoadedCount(events.length);
+      setRuntimeEvents(limitRuntimeEvents(events));
+      await refreshWorkerArtifacts();
+    } catch (error) {
+      setCancelRunError(error instanceof Error ? error.message : "Agent Run 取消失败");
+    } finally {
+      setIsCancellingRun(false);
+    }
+  };
+
+  useEffect(() => {
+    if (apiMode !== "real" || !run?.runId) return;
+    refreshBackendLogs();
+    refreshWorkerArtifacts();
+    // Load log tail once per run. Manual refresh is available for live inspection.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiMode, run?.runId]);
 
   const refreshRealRunDetail = async (activeRunId: string) => {
     const [nextRun, reports, evidence, decision] = await Promise.all([
@@ -613,6 +1023,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
     const activeRunId = run.runId;
     runtimeClientRef.current?.close();
     setRuntimeEvents([]);
+    setRuntimeEventsLoadedCount(0);
     setRuntimeReplayError(null);
     setRuntimeReplayStatus("RUNNING");
 
@@ -620,21 +1031,31 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
       transport: apiMode === "real" ? "sse" : "mock",
       intervalMs: 360,
       onEvent: (event) => {
-        setRuntimeEvents((current) => {
-          if (current.some((item) => item.eventId === event.eventId)) return current;
-          return [...current, event].sort((a, b) => a.sequence - b.sequence);
-        });
+        setRuntimeEvents((current) => mergeRuntimeEvent(current, event));
+        setRuntimeEventsLoadedCount((count) => Math.max(count, event.sequence || count + 1));
       },
       onComplete: () => {
         setRuntimeReplayStatus("COMPLETED");
         if (apiMode === "real") {
+          void getAgentRunRuntimeEventsAsync(activeRunId)
+            .then((events) => {
+              setRuntimeEventsLoadedCount(events.length);
+              setRuntimeEvents(limitRuntimeEvents(events));
+            })
+            .catch(() => undefined);
           void refreshRealRunDetail(activeRunId);
         }
       },
       onError: (error) => {
-        setRuntimeReplayError(error.message);
+        setRuntimeReplayError(`${error.message} HTTP events fallback will be used when available.`);
         setRuntimeReplayStatus("ERROR");
         if (apiMode === "real") {
+          void getAgentRunRuntimeEventsAsync(activeRunId)
+            .then((events) => {
+              setRuntimeEventsLoadedCount(events.length);
+              setRuntimeEvents(limitRuntimeEvents(events));
+            })
+            .catch(() => undefined);
           void refreshRealRunDetail(activeRunId);
         }
       },
@@ -682,7 +1103,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
 
     const sortedToolCalls = [...run.toolCalls].sort((a, b) => a.startedAt.localeCompare(b.startedAt));
     const runtimeToolActivities = getRuntimeToolActivities(runtimeEvents);
-    const timelineEvents = [...run.events].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+    const timelineItems = buildDecisionTimelineItems(runtimeEvents, run.events);
 
     const teamGroups = TEAM_ORDER.map((team) => ({
       team,
@@ -718,7 +1139,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
       usedEvidence,
       sortedToolCalls,
       runtimeToolActivities,
-      timelineEvents,
+      timelineItems,
       teamGroups,
       completedAgents,
       riskWarningCount,
@@ -731,6 +1152,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
   if (isLoadingRun) {
     return (
       <div className="flex flex-col gap-4 h-full overflow-auto">
+        <ResearchWorkspaceNav />
         <Card>
           <CardContent className="py-12 text-center space-y-2">
             <p className="text-base font-medium">正在加载 Agent Run 数据</p>
@@ -744,6 +1166,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
   if (runLoadError) {
     return (
       <div className="flex flex-col gap-4 h-full overflow-auto">
+        <ResearchWorkspaceNav />
         <Card>
           <CardHeader>
             <CardTitle className="text-xl">Agent Run 数据加载失败</CardTitle>
@@ -763,6 +1186,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
   if (runNotFound) {
     return (
       <div className="flex flex-col gap-4 h-full overflow-auto">
+        <ResearchWorkspaceNav />
         <Card>
           <CardHeader>
             <CardTitle className="text-xl">未找到对应 Agent Run</CardTitle>
@@ -782,6 +1206,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
   if (!run) {
     return (
       <div className="flex flex-col gap-4 h-full overflow-auto">
+        <ResearchWorkspaceNav />
         <Card>
           <CardContent className="py-12 text-center space-y-2">
             <p className="text-base font-medium">暂无 Agent Run 数据</p>
@@ -801,6 +1226,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
 
   return (
     <div className="flex flex-col gap-4 h-full overflow-auto">
+      <ResearchWorkspaceNav />
       <Card>
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -818,7 +1244,12 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
                       Stream: {runtimeReplayStatus === "RUNNING" ? "Connected" : runtimeReplayStatus === "ERROR" ? "Error" : runtimeReplayStatus === "COMPLETED" ? "Closed" : "Ready"}
                     </Badge>
                     <Badge variant={runtimeReplayStatus === "ERROR" ? "destructive" : "outline"}>
-                      Events: {runtimeReplayStatus === "ERROR" ? "error" : runtimeEvents.length > 0 ? "loaded" : "loading"}
+                      Events:{" "}
+                      {runtimeReplayStatus === "ERROR"
+                        ? "error"
+                        : runtimeEvents.length > 0
+                          ? `${runtimeEvents.length}/${runtimeEventsLoadedCount || runtimeEvents.length} kept`
+                          : "loading"}
                     </Badge>
                     <Badge variant={realDataLoadState.reports === "error" ? "destructive" : "outline"}>
                       Reports: {formatLoadStatus(realDataLoadState.reports)}
@@ -837,6 +1268,12 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
                   {realDataLoadErrors.reports ? <p>Reports: {realDataLoadErrors.reports}</p> : null}
                   {realDataLoadErrors.evidence ? <p>Evidence: {realDataLoadErrors.evidence}</p> : null}
                   {realDataLoadErrors.decision ? <p>Decision: {realDataLoadErrors.decision}</p> : null}
+                </div>
+              ) : null}
+              {failureMessage ? (
+                <div className="rounded border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive">
+                  <p className="font-medium">Agent task failed</p>
+                  <p className="mt-1 whitespace-pre-wrap">{failureMessage}</p>
                 </div>
               ) : null}
             </div>
@@ -858,6 +1295,17 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
           <p>最终建议：{run.finalDecision.summary ?? run.finalDecision.thesis}</p>
         </CardContent>
         <CardContent className="pt-0 flex flex-wrap gap-2">
+          <Button size="sm" variant="outline" onClick={goBackOrDashboard}>
+            返回上一页
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => navigateTo("/dashboard")}>
+            返回 Dashboard
+          </Button>
+          {["RUNNING", "QUEUED", "PARTIALLY_COMPLETED"].includes(run.status) ? (
+            <Button size="sm" variant="destructive" onClick={handleCancelRun} disabled={isCancellingRun}>
+              {isCancellingRun ? "Cancelling..." : "Cancel Run"}
+            </Button>
+          ) : null}
           {run.assetIds.map((assetId) => (
             <Button
               key={`jump-asset-${assetId}`}
@@ -874,6 +1322,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
           <Button size="sm" variant="outline" onClick={() => navigateTo("/portfolio", { runId: run.runId, portfolioId: run.portfolioId })}>
             查看组合影响
           </Button>
+          {cancelRunError ? <p className="basis-full text-xs text-destructive">Cancel failed: {cancelRunError}</p> : null}
         </CardContent>
       </Card>
 
@@ -881,8 +1330,59 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
         <AgentRunProgressCard progress={runProgress} runStatus={run.status} runtimeStatus={runtimeReplayStatus} />
       ) : null}
 
+      {isTradingAgentsRun ? (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">TradingAgents Agent Flow</CardTitle>
+            <CardDescription>
+              LangGraph chunk → AlphaTrace RuntimeEvent。当前展示的是可观测流程，不直接暴露 TradingAgents internal state。
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="overflow-x-auto text-xs">
+            <div className="flex min-w-max items-stretch gap-2 pr-1">
+            {tradingAgentsFlow.map((step, index) => {
+              const variant =
+                step.status === "failed"
+                  ? "destructive"
+                  : step.status === "completed"
+                    ? "default"
+                    : step.status === "running"
+                      ? "secondary"
+                      : "outline";
+              return (
+                <div key={step.stepId} className="flex items-center gap-2">
+                  <div className="w-56 rounded border p-2 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[10px] font-semibold">
+                          {index + 1}
+                        </span>
+                        <p className="font-medium">{step.label}</p>
+                      </div>
+                      <Badge variant={variant}>{step.status}</Badge>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">depends on: {step.dependsOn}</p>
+                    <div className="h-1.5 overflow-hidden rounded bg-muted">
+                      <div
+                        className={step.status === "failed" ? "h-full rounded bg-red-500" : "h-full rounded bg-blue-500"}
+                        style={{ width: `${Math.max(step.progress, step.status === "pending" ? 0 : 8)}%` }}
+                      />
+                    </div>
+                    <p className="line-clamp-3 text-[11px] text-muted-foreground">
+                      {step.latest ?? (step.status === "pending" ? "等待前置节点完成。" : "节点运行中。")}
+                    </p>
+                  </div>
+                  {index < tradingAgentsFlow.length - 1 ? <span className="text-muted-foreground">→</span> : null}
+                </div>
+              );
+            })}
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-3">
-        <Card className="xl:col-span-3">
+        <Card className="xl:col-span-12">
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Agent Progress Board</CardTitle>
             <CardDescription>
@@ -898,26 +1398,28 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
             <div className="h-2 rounded bg-muted overflow-hidden">
               <div className="h-full rounded bg-blue-500" style={{ width: `${Math.max(derived?.progressPercent ?? 0, 4)}%` }} />
             </div>
-            {derived?.teamGroups.map((group) => (
-              <div key={group.team} className="border rounded-md p-2 space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-medium">{TEAM_LABEL[group.team]}</p>
-                  {group.team === "RESEARCH_TEAM" ? <Badge variant="secondary">Parallel Review Track</Badge> : null}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-2">
+              {derived?.teamGroups.map((group) => (
+                <div key={group.team} className="border rounded-md p-2 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-medium">{TEAM_LABEL[group.team]}</p>
+                    {group.team === "RESEARCH_TEAM" ? <Badge variant="secondary">Parallel Review Track</Badge> : null}
+                  </div>
+                  {group.agents.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">暂无该团队 Agent</p>
+                  ) : (
+                    group.agents.map((agent) => {
+                      const progressItem = agentProgressById.get(agent.agentId);
+                      return progressItem ? <AgentProgressCard key={agent.agentId} item={progressItem} /> : null;
+                    })
+                  )}
                 </div>
-                {group.agents.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">暂无该团队 Agent</p>
-                ) : (
-                  group.agents.map((agent) => {
-                    const progressItem = agentProgressById.get(agent.agentId);
-                    return progressItem ? <AgentProgressCard key={agent.agentId} item={progressItem} /> : null;
-                  })
-                )}
-              </div>
-            ))}
+              ))}
+            </div>
           </CardContent>
         </Card>
 
-        <div className="xl:col-span-6 flex flex-col gap-3">
+        <div className="xl:col-span-9 flex flex-col gap-3">
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Current Report / Research Report</CardTitle>
@@ -930,7 +1432,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
                     <p className="font-medium">General Live Output</p>
                     <Badge variant="secondary">{smoothLiveReportText.length}/{liveReportText.length} chars</Badge>
                   </div>
-                  <div className="mt-2 max-h-64 overflow-auto">
+                  <div ref={liveOutputRef} className="mt-2 max-h-64 overflow-auto scroll-smooth">
                     <StructuredReportView text={smoothLiveReportText} />
                   </div>
                 </div>
@@ -1040,9 +1542,11 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
 
               {derived?.debateMessages.length ? (
                 <details className="rounded border bg-background p-2">
-                  <summary className="cursor-pointer font-medium">Raw Debate Messages ({derived.debateMessages.length})</summary>
+                  <summary className="cursor-pointer font-medium">
+                    Raw Debate Messages ({Math.min(derived.debateMessages.length, MAX_RENDERED_DEBATE_MESSAGES)}/{derived.debateMessages.length})
+                  </summary>
                   <div className="mt-2 space-y-2">
-                    {derived.debateMessages.map((message, index) => {
+                    {derived.debateMessages.slice(-MAX_RENDERED_DEBATE_MESSAGES).map((message, index) => {
                       const agent = derived.agentById.get(message.agentId);
                       const stanceVariant =
                         message.stance === "BULL"
@@ -1085,40 +1589,83 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
         </div>
 
         <div className="xl:col-span-3 flex flex-col gap-3">
-          <Card>
+          <Card className="order-2">
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Tool Calls Timeline</CardTitle>
               <CardDescription>工具调用、参数、结果和状态</CardDescription>
             </CardHeader>
-            <CardContent className="max-h-[34rem] overflow-auto space-y-2 pr-1 text-[11px]">
-              {derived?.sortedToolCalls.length ? (
-                derived.sortedToolCalls.map((call: ToolCall) => {
-                  const agent = derived.agentById.get(call.agentId);
-                  return (
-                    <div key={call.callId} className="rounded border p-2 space-y-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="truncate font-medium">{call.toolName}</p>
-                        <Badge variant={TOOL_STATUS_BADGE[call.status]}>{call.status}</Badge>
-                      </div>
-                      <p className="truncate text-muted-foreground">Agent: {agent?.name ?? call.agentId}</p>
-                      <details>
-                        <summary className="cursor-pointer text-muted-foreground">details</summary>
+            <CardContent className="max-h-[24rem] overflow-auto space-y-2 pr-1 text-[11px]">
+              {derived?.sortedToolCalls.length || derived?.runtimeToolActivities.length ? (
+                <>
+                  {(derived.sortedToolCalls.length + derived.runtimeToolActivities.length > MAX_RENDERED_TOOL_ACTIVITIES) ? (
+                    <p className="rounded border bg-muted/30 p-2 text-muted-foreground">
+                      Showing latest {MAX_RENDERED_TOOL_ACTIVITIES} runtime tool activities. Historical events remain available through the API.
+                    </p>
+                  ) : null}
+                  {derived.sortedToolCalls.slice(-MAX_RENDERED_TOOL_ACTIVITIES).map((call: ToolCall) => {
+                    const agent = derived.agentById.get(call.agentId);
+                    return (
+                      <div key={call.callId} className="rounded border p-2 space-y-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="truncate font-medium">{call.toolName}</p>
+                          <Badge variant={TOOL_STATUS_BADGE[call.status]}>{call.status}</Badge>
+                        </div>
+                        <p className="truncate text-muted-foreground">Agent: {agent?.name ?? call.agentId}</p>
+                        <details>
+                          <summary className="cursor-pointer text-muted-foreground">details</summary>
                         <div className="mt-1 space-y-1">
                           <p className="text-muted-foreground">Args: {formatArgsSummary(call.args)}</p>
                           <p className="text-muted-foreground">Result: {call.summary ?? "执行中或无结果摘要"}</p>
+                            <p className="text-muted-foreground">
+                              {formatDateTime(call.startedAt)} {call.completedAt ? `→ ${formatDateTime(call.completedAt)}` : ""}
+                            </p>
+                          </div>
+                        </details>
+                        {call.evidenceIds?.length ? (
+                          <div className="flex flex-wrap gap-1">
+                            {call.evidenceIds.map((id) => (
+                              <Button
+                                key={`${call.callId}-${id}`}
+                                size="sm"
+                                variant="outline"
+                                onClick={() => navigateTo("/evidence", { evidenceId: id, runId: run.runId })}
+                              >
+                                {id}
+                              </Button>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                  {derived.runtimeToolActivities.slice(-MAX_RENDERED_TOOL_ACTIVITIES).map((activity) => (
+                    <div key={activity.activityId} className="rounded border p-2 space-y-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="truncate font-medium">{activity.toolName}</p>
+                        <Badge variant={runtimeToolStatusBadge(activity.status)}>{activity.status}</Badge>
+                      </div>
+                      <p className="truncate text-muted-foreground">Agent: {activity.agentName}</p>
+                      <details>
+                        <summary className="cursor-pointer text-muted-foreground">details</summary>
+                        <div className="mt-1 space-y-1">
+                          <p className="text-muted-foreground">Step: {activity.stepId}</p>
+                          {activity.source ? <p className="text-muted-foreground">Source: {activity.source}</p> : null}
+                          {activity.query ? <p className="break-words text-muted-foreground">Query: {activity.query}</p> : null}
+                          <p className="text-muted-foreground">Args: {formatArgsSummary(activity.args)}</p>
+                          <p className="text-muted-foreground">Result: {activity.summary ?? "执行中，等待 runtime tool result。"}</p>
                           <p className="text-muted-foreground">
-                            {formatDateTime(call.startedAt)} {call.completedAt ? `→ ${formatDateTime(call.completedAt)}` : ""}
+                            {formatDateTime(activity.startedAt)} {activity.completedAt ? `→ ${formatDateTime(activity.completedAt)}` : ""}
                           </p>
                         </div>
                       </details>
-                      {call.evidenceIds?.length ? (
+                      {activity.evidenceIds.length ? (
                         <div className="flex flex-wrap gap-1">
-                          {call.evidenceIds.map((id) => (
+                          {activity.evidenceIds.map((id) => (
                             <Button
-                              key={`${call.callId}-${id}`}
+                              key={`${activity.activityId}-${id}`}
                               size="sm"
                               variant="outline"
-                              onClick={() => navigateTo("/evidence", { evidenceId: id })}
+                              onClick={() => navigateTo("/evidence", { evidenceId: id, runId: run.runId })}
                             >
                               {id}
                             </Button>
@@ -1126,49 +1673,15 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
                         </div>
                       ) : null}
                     </div>
-                  );
-                })
-              ) : derived?.runtimeToolActivities.length ? (
-                derived.runtimeToolActivities.map((activity) => (
-                  <div key={activity.activityId} className="rounded border p-2 space-y-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="truncate font-medium">{activity.toolName}</p>
-                      <Badge variant={runtimeToolStatusBadge(activity.status)}>{activity.status}</Badge>
-                    </div>
-                    <p className="truncate text-muted-foreground">Agent: {activity.agentName}</p>
-                    <details>
-                      <summary className="cursor-pointer text-muted-foreground">details</summary>
-                      <div className="mt-1 space-y-1">
-                        <p className="text-muted-foreground">Args: {formatArgsSummary(activity.args)}</p>
-                        <p className="text-muted-foreground">Result: {activity.summary ?? "执行中，等待 runtime tool result。"}</p>
-                        <p className="text-muted-foreground">
-                          {formatDateTime(activity.startedAt)} {activity.completedAt ? `→ ${formatDateTime(activity.completedAt)}` : ""}
-                        </p>
-                      </div>
-                    </details>
-                    {activity.evidenceIds.length ? (
-                      <div className="flex flex-wrap gap-1">
-                        {activity.evidenceIds.map((id) => (
-                          <Button
-                            key={`${activity.activityId}-${id}`}
-                            size="sm"
-                            variant="outline"
-                            onClick={() => navigateTo("/evidence", { evidenceId: id })}
-                          >
-                            {id}
-                          </Button>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                ))
+                  ))}
+                </>
               ) : (
                 <p className="text-muted-foreground">暂无独立工具调用记录。Qwen 分析过程会优先展示在 Agent DAG 和 Runtime Event Stream 中。</p>
               )}
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="order-1">
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Evidence Used</CardTitle>
               <CardDescription>证据引用链路（可追溯、可引用）</CardDescription>
@@ -1185,10 +1698,28 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
                       质量 {item.qualityScore} · 发布时间 {formatDateTime(item.publishedAt)}
                     </p>
                     <p className="text-muted-foreground">{item.summary}</p>
-                    <div className="pt-1">
-                      <Button size="sm" variant="outline" onClick={() => navigateTo("/evidence", { evidenceId: item.id })}>
+                    {hasSourceUrl(item.url) ? (
+                      <a
+                        href={item.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block truncate text-blue-600 hover:underline"
+                        title={item.url}
+                      >
+                        来源 URL: {item.url}
+                      </a>
+                    ) : null}
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      <Button size="sm" variant="outline" onClick={() => navigateTo("/evidence", { evidenceId: item.id, runId: run.runId })}>
                         查看证据详情
                       </Button>
+                      {hasSourceUrl(item.url) ? (
+                        <Button size="sm" variant="outline" asChild>
+                          <a href={item.url} target="_blank" rel="noreferrer">
+                            打开来源网页
+                          </a>
+                        </Button>
+                      ) : null}
                     </div>
                   </div>
                 ))
@@ -1198,7 +1729,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="order-3">
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Data Context</CardTitle>
               <CardDescription>本次运行使用的数据类别</CardDescription>
@@ -1219,18 +1750,30 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
           <CardTitle className="text-base">Runtime Metrics</CardTitle>
           <CardDescription>运行指标与风险提示</CardDescription>
         </CardHeader>
-        <CardContent className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-2 text-xs">
+        <CardContent className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-10 gap-2 text-xs">
           <div className="rounded border p-2">
             <p className="text-muted-foreground">Tool Calls</p>
-            <p className="font-medium">{run.metrics.toolCalls}</p>
+            <p className="font-medium">{liveMetrics?.toolCalls ?? run.metrics.toolCalls}</p>
           </div>
           <div className="rounded border p-2">
             <p className="text-muted-foreground">LLM Calls</p>
-            <p className="font-medium">{run.metrics.llmCalls}</p>
+            <p className="font-medium">{liveMetrics?.llmCalls ?? run.metrics.llmCalls}</p>
           </div>
           <div className="rounded border p-2">
             <p className="text-muted-foreground">Generated Reports</p>
-            <p className="font-medium">{run.metrics.generatedReports}</p>
+            <p className="font-medium">{liveMetrics?.generatedReports ?? run.metrics.generatedReports}</p>
+          </div>
+          <div className="rounded border p-2">
+            <p className="text-muted-foreground">Prompt Tokens</p>
+            <p className="font-medium">{formatInteger(liveMetrics?.promptTokens)}</p>
+          </div>
+          <div className="rounded border p-2">
+            <p className="text-muted-foreground">Completion Tokens</p>
+            <p className="font-medium">{formatInteger(liveMetrics?.completionTokens)}</p>
+          </div>
+          <div className="rounded border p-2">
+            <p className="text-muted-foreground">Total Tokens</p>
+            <p className="font-medium">{formatInteger(liveMetrics?.totalTokens)}</p>
           </div>
           <div className="rounded border p-2">
             <p className="text-muted-foreground">Evidence Items</p>
@@ -1252,6 +1795,9 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
             <p className="text-muted-foreground">Risk Warnings</p>
             <p className="font-medium">{derived?.riskWarningCount}</p>
           </div>
+          <div className="rounded border p-2 md:col-span-2 xl:col-span-10 text-muted-foreground">
+            Token 统计为运行期估算值，随 SSE `metric.updated` 实时刷新，并在 run 完成后写入持久化 metrics。
+          </div>
         </CardContent>
       </Card>
 
@@ -1262,7 +1808,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
               <CardTitle className="text-base">Runtime Event Stream</CardTitle>
               <CardDescription>
                 {apiMode === "real"
-                  ? "Real mode：可通过 EventSource 连接后端 stub SSE，不连接真实 TradingAgents。"
+                  ? "Real mode：通过 EventSource 连接后端 runtime SSE，Qwen / TradingAgents PoC events 都会进入这里。"
                   : "Streaming mode 占位：当前使用前端 mock replay，不连接真实 SSE / WebSocket。"}
               </CardDescription>
             </div>
@@ -1284,7 +1830,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
               {apiMode === "real" ? "Stop SSE Stream" : "Stop Replay"}
             </Button>
             <span className="text-muted-foreground">
-              Events: {runtimeEvents.length} · Sequence: {runtimeSnapshot?.sequence ?? 0} · Snapshot: {runtimeSnapshot?.status ?? "QUEUED"}
+              Events kept: {runtimeEvents.length}/{runtimeEventsLoadedCount || runtimeEvents.length} · Sequence: {runtimeSnapshot?.sequence ?? 0} · Snapshot: {runtimeSnapshot?.status ?? "QUEUED"}
             </span>
           </div>
           {runtimeReplayError ? <p className="text-destructive">{runtimeReplayError}</p> : null}
@@ -1321,7 +1867,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
             ) : (
               <p className="text-muted-foreground">
                 {apiMode === "real"
-                  ? "点击 Start SSE Stream 后，将逐条展示后端 stub SSE runtime events。"
+                  ? "点击 Start SSE Stream 后，将逐条展示后端 runtime events。"
                   : "点击 Replay Runtime Events 后，将按顺序展示 mock runtime event stream。"}
               </p>
             )}
@@ -1331,22 +1877,186 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Agent Timeline</CardTitle>
-          <CardDescription>可追踪决策链事件流</CardDescription>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-base">Worker Runtime Artifacts</CardTitle>
+              <CardDescription>
+                当前 run 的 AlphaTrace Orchestrator / subprocess worker 产物。Qwen 和 Stub run 通常没有 worker 目录。
+              </CardDescription>
+            </div>
+            <Button size="sm" variant="outline" onClick={refreshWorkerArtifacts} disabled={isLoadingWorkerArtifacts}>
+              {isLoadingWorkerArtifacts ? "Loading..." : "Refresh Worker"}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3 text-xs">
+          {workerArtifactError ? <p className="text-destructive">{workerArtifactError}</p> : null}
+          {workerArtifacts ? (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={workerArtifacts.exists ? "default" : "outline"}>
+                  {workerArtifacts.exists ? "worker artifacts available" : "no worker artifacts"}
+                </Badge>
+                <span className="truncate text-muted-foreground">WorkDir: {workerArtifacts.workDir}</span>
+              </div>
+              {workerArtifacts.message ? <p className="text-muted-foreground">{workerArtifacts.message}</p> : null}
+              {Object.keys(workerArtifacts.files).length ? (
+                <div className="grid gap-2 md:grid-cols-5">
+                  {Object.entries(workerArtifacts.files).map(([name, file]) => (
+                    <div key={name} className="rounded border p-2">
+                      <p className="font-medium">{name}</p>
+                      <p className="text-muted-foreground">{file.exists ? "available" : "missing"}</p>
+                      <p className="text-muted-foreground">{formatFileSize(file.sizeBytes)}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              <div className="grid gap-3 xl:grid-cols-2">
+                <details className="rounded border p-2" open={Boolean(workerArtifacts.stdoutLines.length)}>
+                  <summary className="cursor-pointer font-medium">stdout.log tail ({workerArtifacts.stdoutLines.length})</summary>
+                  {workerArtifacts.stdoutLines.length ? (
+                    <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded bg-slate-950 p-3 text-[11px] leading-relaxed text-slate-100">
+                      {workerArtifacts.stdoutLines.join("\n")}
+                    </pre>
+                  ) : (
+                    <p className="mt-2 text-muted-foreground">暂无 stdout 内容。</p>
+                  )}
+                </details>
+                <details className="rounded border p-2" open={Boolean(workerArtifacts.stderrLines.length)}>
+                  <summary className="cursor-pointer font-medium">stderr.log tail ({workerArtifacts.stderrLines.length})</summary>
+                  {workerArtifacts.stderrLines.length ? (
+                    <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded bg-slate-950 p-3 text-[11px] leading-relaxed text-rose-100">
+                      {workerArtifacts.stderrLines.join("\n")}
+                    </pre>
+                  ) : (
+                    <p className="mt-2 text-muted-foreground">暂无 stderr 内容。</p>
+                  )}
+                </details>
+              </div>
+              <details className="rounded border p-2">
+                <summary className="cursor-pointer font-medium">
+                  Worker JSONL events ({workerArtifacts.events.length}) / result.json
+                </summary>
+                <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded bg-muted/40 p-3 text-[11px] leading-relaxed">
+                  {JSON.stringify(
+                    {
+                      events: workerArtifacts.events.slice(-20),
+                      resultStatus:
+                        workerArtifacts.result && typeof workerArtifacts.result.status === "string"
+                          ? workerArtifacts.result.status
+                          : undefined,
+                      resultError:
+                        workerArtifacts.result && typeof workerArtifacts.result.error === "string"
+                          ? workerArtifacts.result.error
+                          : undefined,
+                    },
+                    null,
+                    2,
+                  )}
+                </pre>
+              </details>
+            </div>
+          ) : (
+            <p className="text-muted-foreground">点击 Refresh Worker 读取当前 run 的 worker 产物。</p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-base">Backend Runtime Log</CardTitle>
+              <CardDescription>
+                全局本地后端日志 tail，可能包含 legacy BTC / Hyperliquid 后台服务；默认只显示 AlphaTrace 相关日志。
+              </CardDescription>
+            </div>
+            <Button size="sm" variant="outline" onClick={refreshBackendLogs} disabled={isLoadingBackendLogs}>
+              {isLoadingBackendLogs ? "Loading..." : "Refresh Logs"}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-2 text-xs">
-          {derived?.timelineEvents.length ? (
-            derived.timelineEvents.map((event, index) => {
-              const agentName = "agentId" in event ? (derived.agentById.get(event.agentId)?.name ?? event.agentId) : "System";
-              const summary = summarizeEvent(event, agentName);
+          {backendLogError ? <p className="text-destructive">{backendLogError}</p> : null}
+          {backendLogs ? (
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant={backendLogs.exists ? "default" : "outline"}>{backendLogs.exists ? "available" : "missing"}</Badge>
+                <span className="truncate text-muted-foreground">Path: {backendLogs.path}</span>
+                <span className="text-muted-foreground">Raw Lines: {backendLogs.lines.length}</span>
+                <span className="text-muted-foreground">Visible: {filteredBackendLogLines.length}</span>
+                {hiddenBackendLogLineCount > 0 ? (
+                  <span className="text-muted-foreground">Hidden legacy/global: {hiddenBackendLogLineCount}</span>
+                ) : null}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {[
+                  { id: "alphatrace" as const, label: "AlphaTrace" },
+                  { id: "current_run" as const, label: "Current Run" },
+                  { id: "all" as const, label: "All Global Logs" },
+                ].map((item) => (
+                  <Button
+                    key={item.id}
+                    size="sm"
+                    variant={backendLogFilter === item.id ? "default" : "outline"}
+                    onClick={() => setBackendLogFilter(item.id)}
+                  >
+                    {item.label}
+                  </Button>
+                ))}
+              </div>
+              {backendLogs.message ? <p className="text-muted-foreground">{backendLogs.message}</p> : null}
+              {backendLogFilter === "all" ? (
+                <p className="text-muted-foreground">
+                  当前显示全局原始日志，可能包含 legacy BTC fetch、Hyperliquid strategy refresh、Binance collector 等非当前 Agent Run 信息。
+                </p>
+              ) : backendLogFilter === "current_run" ? (
+                <p className="text-muted-foreground">
+                  当前只显示包含 runId 的全局日志行；完整执行过程仍以 Runtime Event Stream 为准。
+                </p>
+              ) : (
+                <p className="text-muted-foreground">
+                  当前隐藏 legacy market stream / Hyperliquid 噪音；如需排查旧交易后端，请切换到 All Global Logs。
+                </p>
+              )}
+              {filteredBackendLogLines.length ? (
+                <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded bg-slate-950 p-3 text-[11px] leading-relaxed text-slate-100">
+                  {filteredBackendLogLines.join("\n")}
+                </pre>
+              ) : (
+                <p className="text-muted-foreground">
+                  当前过滤条件下暂无日志内容。可以切换 All Global Logs，或以 Runtime Event Stream 查看当前 run 的结构化过程。
+                </p>
+              )}
+            </div>
+          ) : (
+            <p className="text-muted-foreground">点击 Refresh Logs 读取后端日志。</p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Agent Timeline</CardTitle>
+          <CardDescription>聚合后的关键决策链事件流；原始 chunk 保留在 Runtime Event Stream 中</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2 text-xs">
+          {derived?.timelineItems.length ? (
+            derived.timelineItems.map((item) => {
               return (
-                <div key={`${event.timestamp}-${index}`} className="rounded border-l-4 border-blue-500 bg-muted/20 p-2">
+                <div key={item.itemId} className="rounded border-l-4 border-blue-500 bg-muted/20 p-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <Badge variant="outline">{EVENT_LABEL[event.type]}</Badge>
-                    <span className="text-muted-foreground">{formatDateTime(event.timestamp)}</span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant={item.aggregated ? "secondary" : "outline"}>
+                        {item.type in EVENT_LABEL ? EVENT_LABEL[item.type as AgentEvent["type"]] : item.type}
+                      </Badge>
+                      {item.stepLabel ? <Badge variant="outline">{item.stepLabel}</Badge> : null}
+                      {item.count ? <Badge variant="outline">{item.count} chunks</Badge> : null}
+                    </div>
+                    <span className="text-muted-foreground">{formatDateTime(item.timestamp)}</span>
                   </div>
-                  <p className="mt-1 font-medium">{agentName}</p>
-                  <p className="text-muted-foreground mt-1">{summary}</p>
+                  <p className="mt-1 font-medium">{item.agentName}</p>
+                  <p className="text-muted-foreground mt-1 line-clamp-3">{item.summary}</p>
                 </div>
               );
             })

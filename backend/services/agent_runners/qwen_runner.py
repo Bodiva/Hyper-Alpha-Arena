@@ -23,8 +23,11 @@ from schemas.alpha_trace_agent_runtime import (
 )
 from services.agent_runners.base import AgentRunnerContext
 from services.agent_runners.registry import AgentRunnerConfigurationError, AgentRunnerExecutionError
+from services.agent_tool_registry import get_agent_tool_contract
 from services.evidence_retrieval.retriever import EvidenceRetriever, to_evidence_reference
 from services.evidence_retrieval.static_evidence_seed import EvidenceItem
+from services.evidence_retrieval.support_scoring import score_evidence_support
+from services.market_data_store.market_data_store import get_static_market_data_store
 from services.portfolio_store.portfolio_store import get_static_portfolio_store
 
 
@@ -34,22 +37,34 @@ QWEN_DEFAULT_TIMEOUT_SECONDS = 120
 QWEN_DEFAULT_MAX_TOKENS = 1600
 QWEN_AGENT_MAX_PARALLEL_CALLS = 2
 QWEN_AGENT_STEP_TIMEOUT_SECONDS = 90
+ALPHATRACE_RUNTIME_CONTRACT_VERSION = "alphatrace_agent_runtime_v1"
 
 STEP_DEPENDENCIES: Dict[str, List[str]] = {
     "evidence_retrieval": [],
     "market_view": ["evidence_retrieval"],
     "bull_view": ["market_view"],
     "bear_view": ["market_view"],
-    "risk_review": ["bull_view", "bear_view"],
+    "research_manager": ["bull_view", "bear_view"],
+    "risk_review": ["research_manager"],
     "final_decision": ["risk_review"],
 }
 
 
 class QwenRunnerAdapter:
     runner_type = "qwen"
+    run_id_prefix = "run_qwen"
+    triggered_by = "qwen_runner"
+    adapter_display_name = "QwenRunnerAdapter"
+    run_name = "AlphaTrace Qwen Runner Agent Task"
+    portfolio_run_name = "AlphaTrace Qwen Portfolio Diagnosis"
+    initial_agent_name = "Qwen Research Agent"
+    initial_reasoning_content = "Preparing multi-step Qwen research orchestration."
+    response_message = "Agent run submitted. QwenRunnerAdapter is executing in a background thread."
+    worker_name_prefix = "alpha-trace-qwen"
 
     def __init__(self) -> None:
-        self._event_lock = threading.Lock()
+        self._event_lock = threading.RLock()
+        self._token_metric_state: Dict[str, Dict[str, Any]] = {}
 
     def submit(self, request: SubmitAgentRunRequest, context: AgentRunnerContext) -> SubmitAgentRunResponse:
         config = self._resolve_qwen_config(request, context)
@@ -59,7 +74,7 @@ class QwenRunnerAdapter:
         worker = threading.Thread(
             target=self._execute_qwen_run,
             args=(request, context, run.runId, config),
-            name=f"alpha-trace-qwen-{run.runId}",
+            name=f"{self.worker_name_prefix}-{run.runId}",
             daemon=True,
         )
         worker.start()
@@ -67,8 +82,8 @@ class QwenRunnerAdapter:
         return SubmitAgentRunResponse(
             runId=run.runId,
             status=run.status,
-            mode="qwen",
-            message="Agent run submitted. QwenRunnerAdapter is executing in a background thread.",
+            mode=self.runner_type,
+            message=self.response_message,
             run=run,
         )
 
@@ -81,6 +96,7 @@ class QwenRunnerAdapter:
     ) -> None:
         try:
             portfolio_context = self._load_portfolio_context(request, context, run_id)
+            market_context = self._load_market_context(request, context, run_id)
             retrieved_evidence = self._retrieve_evidence(request, context, run_id, portfolio_context)
             is_portfolio_task = self._is_portfolio_diagnosis(request)
 
@@ -106,6 +122,7 @@ class QwenRunnerAdapter:
                 prior_results={},
                 required=True,
                 portfolio_context=portfolio_context,
+                market_context=market_context,
             )
 
             parallel_workers = self._int_env(
@@ -135,6 +152,7 @@ class QwenRunnerAdapter:
                     {"Market View": market_view},
                     False,
                     portfolio_context,
+                    market_context,
                 )
                 bear_future = executor.submit(
                     self._run_qwen_agent_step,
@@ -156,9 +174,32 @@ class QwenRunnerAdapter:
                     {"Market View": market_view},
                     False,
                     portfolio_context,
+                    market_context,
                 )
                 bull_view = bull_future.result()
                 bear_view = bear_future.result()
+
+            research_manager = self._run_qwen_agent_step(
+                request=request,
+                context=context,
+                run_id=run_id,
+                config=config,
+                evidence_items=retrieved_evidence,
+                step_id="research_manager",
+                agent_name="Research Manager",
+                team="research_team",
+                tool_name="qwen.research_manager",
+                title="Research Manager Summary",
+                instructions=(
+                    "输入 Portfolio Overview / Market View / Bull / Bear，汇总正反方共识、关键分歧、仍需验证的问题，以及组合诊断优先级。必须引用 evidenceId。"
+                    if is_portfolio_task
+                    else "输入 Market / Bull / Bear，汇总正反方共识、关键分歧、仍需验证的问题，以及后续 Risk Review 应重点检查的风险。必须引用 evidenceId。"
+                ),
+                prior_results={"Market View": market_view, "Bull View": bull_view, "Bear View": bear_view},
+                required=False,
+                portfolio_context=portfolio_context,
+                market_context=market_context,
+            )
 
             risk_review = self._run_qwen_agent_step(
                 request=request,
@@ -172,13 +213,19 @@ class QwenRunnerAdapter:
                 tool_name="qwen.risk_review",
                 title="Risk Review / Rebalance Suggestions" if is_portfolio_task else "Risk Review",
                 instructions=(
-                    "输入 Market / Bull / Bear 和组合上下文，诊断资产配置、风险暴露、调仓建议、最大回撤、波动、集中度、流动性和情景风险。必须引用 evidenceId。"
+                    "输入 Market / Bull / Bear / Research Manager 和组合上下文，诊断资产配置、风险暴露、调仓建议、最大回撤、波动、集中度、流动性和情景风险。必须引用 evidenceId。"
                     if is_portfolio_task
-                    else "输入 Market / Bull / Bear，评估最大回撤、波动、集中度、流动性、情景风险和需要观察的风险指标。必须引用 evidenceId。"
+                    else "输入 Market / Bull / Bear / Research Manager，评估最大回撤、波动、集中度、流动性、情景风险和需要观察的风险指标。必须引用 evidenceId。"
                 ),
-                prior_results={"Market View": market_view, "Bull View": bull_view, "Bear View": bear_view},
+                prior_results={
+                    "Market View": market_view,
+                    "Bull View": bull_view,
+                    "Bear View": bear_view,
+                    "Research Manager Summary": research_manager,
+                },
                 required=True,
                 portfolio_context=portfolio_context,
+                market_context=market_context,
             )
 
             final_decision = self._run_qwen_agent_step(
@@ -201,16 +248,19 @@ class QwenRunnerAdapter:
                     "Market View": market_view,
                     "Bull View": bull_view,
                     "Bear View": bear_view,
+                    "Research Manager Summary": research_manager,
                     "Risk Review": risk_review,
                 },
                 required=True,
                 portfolio_context=portfolio_context,
+                market_context=market_context,
             )
 
             content = (
                 f"## Market View\n{market_view}\n\n"
                 f"## Bull View\n{bull_view}\n\n"
                 f"## Bear View\n{bear_view}\n\n"
+                f"## Research Manager Summary\n{research_manager}\n\n"
                 f"## Risk Review\n{risk_review}\n\n"
                 f"## Final Decision\n{final_decision}\n\n"
                 f"## Watch Indicators\n{final_decision}"
@@ -353,6 +403,80 @@ class QwenRunnerAdapter:
             )
             return {"portfolioId": request.portfolioId, "available": False, "error": str(exc)}
 
+    def _load_market_context(
+        self,
+        request: SubmitAgentRunRequest,
+        context: AgentRunnerContext,
+        run_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        if not request.assetId:
+            return None
+
+        self._append_event(
+            context,
+            run_id,
+            "tool.called",
+            self._step_payload(
+                "evidence_retrieval",
+                progress=18,
+                toolName="market.context.load",
+                args={"assetId": request.assetId, "source": "alphatrace_static_market_seed"},
+            ),
+            agent_name="Market Context Loader",
+            team="analyst_team",
+        )
+        try:
+            market_context = get_static_market_data_store().get_prompt_context(request.assetId)
+            if not market_context:
+                self._append_event(
+                    context,
+                    run_id,
+                    "tool.result",
+                    self._step_payload(
+                        "evidence_retrieval",
+                        progress=20,
+                        toolName="market.context.load",
+                        status="not_found",
+                        summary=f"Market context not found for asset {request.assetId}.",
+                    ),
+                    agent_name="Market Context Loader",
+                    team="analyst_team",
+                )
+                return None
+            self._append_event(
+                context,
+                run_id,
+                "tool.result",
+                self._step_payload(
+                    "evidence_retrieval",
+                    progress=22,
+                    toolName="market.context.load",
+                    status="completed",
+                    summary=f"Loaded AlphaTrace static market context for {request.assetId}.",
+                    assetId=request.assetId,
+                    source=market_context.get("source"),
+                ),
+                agent_name="Market Context Loader",
+                team="analyst_team",
+            )
+            return market_context
+        except Exception as exc:
+            self._append_event(
+                context,
+                run_id,
+                "tool.result",
+                self._step_payload(
+                    "evidence_retrieval",
+                    progress=20,
+                    toolName="market.context.load",
+                    status="failed",
+                    summary=f"Market context load failed; Qwen will continue without market seed context. Error: {exc}",
+                ),
+                agent_name="Market Context Loader",
+                team="analyst_team",
+            )
+            return None
+
     def _retrieve_evidence(
         self,
         request: SubmitAgentRunRequest,
@@ -364,15 +488,38 @@ class QwenRunnerAdapter:
             context,
             run_id,
             "tool.called",
-            {
-                "toolName": "evidence.retrieve",
-                "args": {
+            self._step_payload(
+                "evidence_retrieval",
+                progress=30,
+                toolName="evidence.retrieve",
+                source="static_evidence_seed",
+                args={
                     "assetId": request.assetId,
                     "taskType": request.taskType,
                     "limit": 5,
                     "source": "static_evidence_seed",
                 },
-            },
+            ),
+            agent_name="Evidence Retriever",
+            team="analyst_team",
+        )
+        self._append_event(
+            context,
+            run_id,
+            "tool.called",
+            self._step_payload(
+                "evidence_retrieval",
+                progress=35,
+                toolName="bocha.search",
+                source="bocha_web_search",
+                query=request.question,
+                args={
+                    "assetId": request.assetId,
+                    "taskType": request.taskType,
+                    "limit": 5,
+                    "source": "bocha_web_search",
+                },
+            ),
             agent_name="Evidence Retriever",
             team="analyst_team",
         )
@@ -395,6 +542,7 @@ class QwenRunnerAdapter:
                         question=request.question,
                         task_type=request.taskType,
                         limit=3,
+                        include_external=True,
                     ):
                         if item.evidenceId not in seen_evidence:
                             items.append(item)
@@ -409,33 +557,59 @@ class QwenRunnerAdapter:
                     question=request.question,
                     task_type=request.taskType,
                     limit=5,
+                    include_external=True,
                 )
+            external_status = retriever.last_external_search
         except Exception as exc:
             self._append_event(
                 context,
                 run_id,
                 "tool.result",
-                {
-                    "toolName": "evidence.retrieve",
-                    "status": "failed",
-                    "summary": f"Evidence retrieval failed; Qwen will continue with assumption fallback. Error: {exc}",
-                },
+                self._step_payload(
+                    "evidence_retrieval",
+                    progress=100,
+                    toolName="evidence.retrieve",
+                    status="failed",
+                    summary=f"Evidence retrieval failed; Qwen will continue with assumption fallback. Error: {exc}",
+                ),
                 agent_name="Evidence Retriever",
                 team="analyst_team",
             )
             return []
+
+        if external_status:
+            self._append_event(
+                context,
+                run_id,
+                "tool.result",
+                self._step_payload(
+                    "evidence_retrieval",
+                    progress=55,
+                    toolName="bocha.search",
+                    status=external_status.status,
+                    source="bocha_web_search",
+                    summary=external_status.message or f"Bocha search {external_status.status}.",
+                    query=external_status.query,
+                    evidenceIds=[item.evidenceId for item in external_status.items],
+                ),
+                agent_name="Evidence Retriever",
+                team="analyst_team",
+            )
 
         evidence_ids = [item.evidenceId for item in items]
         self._append_event(
             context,
             run_id,
             "tool.result",
-            {
-                "toolName": "evidence.retrieve",
-                "status": "completed",
-                "summary": f"Retrieved {len(items)} static evidence item(s).",
-                "evidenceIds": evidence_ids,
-            },
+            self._step_payload(
+                "evidence_retrieval",
+                progress=85,
+                toolName="evidence.retrieve",
+                status="completed",
+                source="static_evidence_seed+bocha_web_search",
+                summary=f"Retrieved {len(items)} evidence item(s) from static seed and optional Bocha search.",
+                evidenceIds=evidence_ids,
+            ),
             agent_name="Evidence Retriever",
             team="analyst_team",
         )
@@ -444,10 +618,12 @@ class QwenRunnerAdapter:
                 context,
                 run_id,
                 "evidence.linked",
-                {
-                    "evidenceIds": evidence_ids,
-                    "summary": "Retrieved static evidence items linked before Qwen prompt construction.",
-                },
+                self._step_payload(
+                    "evidence_retrieval",
+                    progress=100,
+                    evidenceIds=evidence_ids,
+                    summary="Retrieved static/Bocha evidence items linked before prompt construction.",
+                ),
                 agent_name="Evidence Retriever",
                 team="analyst_team",
             )
@@ -512,7 +688,7 @@ class QwenRunnerAdapter:
             "base_url": base_url or QWEN_DEFAULT_BASE_URL,
             "model": model,
             "api_format": str(config.get("api_format") or "openai"),
-            "source": "hyper_ai_profile",
+            "source": str(config.get("source") or "hyper_ai_profile"),
         }
 
     def _run_qwen_agent_step(
@@ -531,6 +707,7 @@ class QwenRunnerAdapter:
         prior_results: Dict[str, str],
         required: bool,
         portfolio_context: Optional[Dict[str, Any]] = None,
+        market_context: Optional[Dict[str, Any]] = None,
     ) -> str:
         try:
             self._append_event(
@@ -585,6 +762,7 @@ class QwenRunnerAdapter:
                 team=team,
                 tool_name=tool_name,
                 portfolio_context=portfolio_context,
+                market_context=market_context,
             )
             if step_id in {"bull_view", "bear_view"}:
                 self._append_event(
@@ -688,6 +866,7 @@ class QwenRunnerAdapter:
         team: str,
         tool_name: str,
         portfolio_context: Optional[Dict[str, Any]] = None,
+        market_context: Optional[Dict[str, Any]] = None,
     ) -> str:
         from services.ai_decision_service import (
             _extract_text_from_message,
@@ -708,9 +887,21 @@ class QwenRunnerAdapter:
                     instructions=instructions,
                     prior_results=prior_results,
                     portfolio_context=portfolio_context,
+                    market_context=market_context,
                 ),
             },
         ]
+        prompt_tokens = self._estimate_message_tokens(messages)
+        self._update_token_metrics(
+            context=context,
+            run_id=run_id,
+            prompt_delta=prompt_tokens,
+            completion_delta=0,
+            step_id=step_id,
+            agent_name=agent_name,
+            team=team,
+            progress=35,
+        )
         timeout_seconds = self._int_env(
             "QWEN_AGENT_STEP_TIMEOUT_SECONDS",
             QWEN_AGENT_STEP_TIMEOUT_SECONDS,
@@ -742,6 +933,7 @@ class QwenRunnerAdapter:
                     accumulated_text = ""
                     buffer = ""
                     last_emit_at = time.monotonic()
+                    last_completion_tokens = 0
 
                     for raw_line in response.iter_lines(decode_unicode=True):
                         if not raw_line:
@@ -773,6 +965,8 @@ class QwenRunnerAdapter:
                         buffer += delta_text
                         now = time.monotonic()
                         if len(buffer) >= 120 or now - last_emit_at >= 0.35:
+                            completion_tokens = self._estimate_tokens(accumulated_text)
+                            completion_delta = max(0, completion_tokens - last_completion_tokens)
                             self._append_streaming_chunk(
                                 context=context,
                                 run_id=run_id,
@@ -781,11 +975,26 @@ class QwenRunnerAdapter:
                                 step_id=step_id,
                                 agent_name=agent_name,
                                 team=team,
+                                prompt_tokens=prompt_tokens,
+                                completion_tokens=completion_tokens,
                             )
+                            self._update_token_metrics(
+                                context=context,
+                                run_id=run_id,
+                                prompt_delta=0,
+                                completion_delta=completion_delta,
+                                step_id=step_id,
+                                agent_name=agent_name,
+                                team=team,
+                                progress=55,
+                            )
+                            last_completion_tokens = completion_tokens
                             buffer = ""
                             last_emit_at = now
 
                     if buffer:
+                        completion_tokens = self._estimate_tokens(accumulated_text)
+                        completion_delta = max(0, completion_tokens - last_completion_tokens)
                         self._append_streaming_chunk(
                             context=context,
                             run_id=run_id,
@@ -794,7 +1003,32 @@ class QwenRunnerAdapter:
                             step_id=step_id,
                             agent_name=agent_name,
                             team=team,
+                            prompt_tokens=prompt_tokens,
+                            completion_tokens=completion_tokens,
                         )
+                        self._update_token_metrics(
+                            context=context,
+                            run_id=run_id,
+                            prompt_delta=0,
+                            completion_delta=completion_delta,
+                            step_id=step_id,
+                            agent_name=agent_name,
+                            team=team,
+                            progress=60,
+                            force=True,
+                        )
+
+                    self._update_token_metrics(
+                        context=context,
+                        run_id=run_id,
+                        prompt_delta=0,
+                        completion_delta=0,
+                        step_id=step_id,
+                        agent_name=agent_name,
+                        team=team,
+                        progress=60,
+                        force=True,
+                    )
 
                     if not accumulated_text:
                         raise AgentRunnerExecutionError(f"Qwen API returned an empty streaming response for {title}.")
@@ -820,7 +1054,10 @@ class QwenRunnerAdapter:
             "请面向 ETF、基金、期货等资产生成可追溯、可复盘、可量化评估的分析。\n"
             "不要承诺收益，不要给出确定性投资结论。\n"
             "优先引用提供的 evidenceId，不要编造不存在的证据。\n"
-            "请输出结构化 Markdown，要点清晰，控制在 350-700 字。"
+            "请先输出结构化 Markdown，保证人工可读，要点清晰，控制在 350-700 字。\n"
+            "然后在回答末尾追加一个独立 ```json fenced code block```，用于机器解析。\n"
+            "JSON 只能引用 availableEvidence 中存在的 evidenceId；证据不足时使用空数组并在 summary 中说明。\n"
+            "不要把 JSON 放在正文中间；不要输出多个相互冲突的 JSON block。"
         )
 
     @staticmethod
@@ -832,6 +1069,7 @@ class QwenRunnerAdapter:
         instructions: str,
         prior_results: Dict[str, str],
         portfolio_context: Optional[Dict[str, Any]] = None,
+        market_context: Optional[Dict[str, Any]] = None,
     ) -> str:
         return json.dumps(
             {
@@ -846,15 +1084,18 @@ class QwenRunnerAdapter:
                 "horizon": request.horizon,
                 "riskPreference": request.riskPreference,
                 "portfolioContext": portfolio_context,
+                "marketContext": market_context,
                 "availableEvidence": [
                     {
                         "evidenceId": item.evidenceId,
                         "title": item.title,
                         "sourceName": item.sourceName,
+                        "sourceType": item.sourceType,
                         "publishedAt": item.publishedAt,
                         "evidenceType": item.evidenceType,
                         "qualityScore": item.qualityScore,
                         "reliabilityScore": item.reliabilityScore,
+                        "url": item.url,
                         "summary": item.summary,
                     }
                     for item in evidence_items
@@ -862,10 +1103,44 @@ class QwenRunnerAdapter:
                 "priorResults": prior_results,
                 "outputRules": [
                     "必须引用相关 evidenceId；如果证据不足请明确说明。",
-                    "不要输出 JSON，直接输出 Markdown 分析文本。",
+                    "先输出结构化 Markdown，便于 Live Output 阅读。",
+                    "回答末尾必须追加一个 ```json fenced code block```。",
+                    (
+                        "JSON schema: 根据 stepId 输出对应顶层字段 marketView / bullView / bearView / riskReview / finalDecision；"
+                        "research_manager 使用 researchManager；字段可包含 summary、consensus、disagreements、openQuestions、arguments、risks、riskItems、watchIndicators、action、confidence、horizon、thesis、evidenceIds。"
+                    ),
+                    "action 只能是 overweight / underweight / hold / watch / avoid 之一；confidence 必须是 0-1 数字。",
+                    "evidenceIds 只能来自 availableEvidence；不要编造 evidenceId。",
                     "不要声称这是 TradingAgents 真实并行运行结果。",
                     "如果 portfolioContext 可用，必须基于组合持仓、风险指标和调仓建议分析，不要编造不存在的持仓。",
+                    "如果 marketContext 可用，必须优先使用其中的 quote、valuation、liquidity、volatility、trend、fundFlow 和 indicators。",
                 ],
+                "jsonOutputExamples": {
+                    "market_view": {"marketView": {"summary": "...", "keyPoints": ["..."], "evidenceIds": ["ev_static_..."]}},
+                    "bull_view": {"bullView": {"summary": "...", "arguments": ["..."], "evidenceIds": ["ev_static_..."]}},
+                    "bear_view": {"bearView": {"summary": "...", "risks": ["..."], "evidenceIds": ["ev_static_..."]}},
+                    "research_manager": {
+                        "researchManager": {
+                            "summary": "...",
+                            "consensus": ["..."],
+                            "disagreements": ["..."],
+                            "openQuestions": ["..."],
+                            "evidenceIds": ["ev_static_..."],
+                        }
+                    },
+                    "risk_review": {"riskReview": {"summary": "...", "riskItems": ["..."], "evidenceIds": ["ev_static_..."]}},
+                    "final_decision": {
+                        "finalDecision": {
+                            "action": "hold",
+                            "confidence": 0.65,
+                            "horizon": request.horizon,
+                            "thesis": "...",
+                            "risks": ["..."],
+                            "watchIndicators": ["..."],
+                            "evidenceIds": ["ev_static_..."],
+                        }
+                    },
+                },
             },
             ensure_ascii=False,
             indent=2,
@@ -873,12 +1148,28 @@ class QwenRunnerAdapter:
 
     @staticmethod
     def _step_payload(step_id: str, progress: int, **payload: Any) -> Dict[str, Any]:
+        tool_contract = get_agent_tool_contract(str(payload.get("toolName") or "")) if payload.get("toolName") else None
+        if tool_contract and "toolContract" not in payload:
+            payload["toolContract"] = tool_contract.to_payload()
         return {
             **payload,
             "stepId": step_id,
             "dependsOn": STEP_DEPENDENCIES.get(step_id, []),
             "progress": progress,
+            "contractVersion": ALPHATRACE_RUNTIME_CONTRACT_VERSION,
         }
+
+    @staticmethod
+    def _dag_contract() -> List[Dict[str, Any]]:
+        return [
+            {"stepId": "evidence_retrieval", "title": "Evidence Retrieval", "dependsOn": [], "team": "analyst_team"},
+            {"stepId": "market_view", "title": "Market View", "dependsOn": ["evidence_retrieval"], "team": "analyst_team"},
+            {"stepId": "bull_view", "title": "Bull View", "dependsOn": ["market_view"], "team": "research_team"},
+            {"stepId": "bear_view", "title": "Bear View", "dependsOn": ["market_view"], "team": "research_team"},
+            {"stepId": "research_manager", "title": "Research Manager Summary", "dependsOn": ["bull_view", "bear_view"], "team": "research_team"},
+            {"stepId": "risk_review", "title": "Risk Review", "dependsOn": ["research_manager"], "team": "risk_team"},
+            {"stepId": "final_decision", "title": "Final Decision", "dependsOn": ["risk_review"], "team": "portfolio_team"},
+        ]
 
     def _call_qwen_streaming(
         self,
@@ -991,6 +1282,8 @@ class QwenRunnerAdapter:
         step_id: str = "unknown",
         agent_name: str = "Qwen Research Agent",
         team: str = "research_team",
+        prompt_tokens: Optional[int] = None,
+        completion_tokens: Optional[int] = None,
     ) -> None:
         payload: Dict[str, Any] = {
             "content": content,
@@ -998,6 +1291,13 @@ class QwenRunnerAdapter:
             "sectionHint": self._infer_section_hint_from_text(content),
             "streaming": True,
         }
+        if prompt_tokens is not None or completion_tokens is not None:
+            payload["tokenUsage"] = {
+                "promptTokens": prompt_tokens or 0,
+                "completionTokens": completion_tokens or 0,
+                "totalTokens": (prompt_tokens or 0) + (completion_tokens or 0),
+                "countingMode": "estimated",
+            }
         if step_id in STEP_DEPENDENCIES:
             payload = self._step_payload(step_id, progress=55, **payload)
 
@@ -1010,6 +1310,123 @@ class QwenRunnerAdapter:
             team=team,
         )
 
+    @classmethod
+    def _estimate_message_tokens(cls, messages: List[Dict[str, Any]]) -> int:
+        total = 0
+        for message in messages:
+            total += cls._estimate_tokens(str(message.get("content") or "")) + 4
+        return total
+
+    @staticmethod
+    def _estimate_tokens(text: str) -> int:
+        normalized = text or ""
+        if not normalized:
+            return 0
+        cjk_chars = sum(1 for char in normalized if "\u4e00" <= char <= "\u9fff")
+        non_space_chars = sum(1 for char in normalized if not char.isspace())
+        latin_or_symbol_chars = max(0, non_space_chars - cjk_chars)
+        estimated = int((cjk_chars * 1.1) + (latin_or_symbol_chars / 4))
+        return max(1, estimated)
+
+    def _update_token_metrics(
+        self,
+        context: AgentRunnerContext,
+        run_id: str,
+        prompt_delta: int,
+        completion_delta: int,
+        step_id: str,
+        agent_name: str,
+        team: str,
+        progress: int,
+        force: bool = False,
+    ) -> None:
+        prompt_delta = max(0, int(prompt_delta or 0))
+        completion_delta = max(0, int(completion_delta or 0))
+        if prompt_delta == 0 and completion_delta == 0 and not force:
+            return
+        if not context.get_run:
+            return
+
+        with self._event_lock:
+            now_monotonic = time.monotonic()
+            state = self._token_metric_state.get(run_id)
+            if not state:
+                run = context.get_run(run_id)
+                if not run:
+                    return
+                state = {
+                    "promptTokens": int(run.metrics.promptTokens or 0),
+                    "completionTokens": int(run.metrics.completionTokens or 0),
+                    "pendingPromptTokens": 0,
+                    "pendingCompletionTokens": 0,
+                    "lastPersistAt": 0.0,
+                }
+                self._token_metric_state[run_id] = state
+
+            state["promptTokens"] = max(0, int(state["promptTokens"]) + prompt_delta)
+            state["completionTokens"] = max(0, int(state["completionTokens"]) + completion_delta)
+            state["pendingPromptTokens"] = max(0, int(state["pendingPromptTokens"]) + prompt_delta)
+            state["pendingCompletionTokens"] = max(0, int(state["pendingCompletionTokens"]) + completion_delta)
+
+            pending_total = int(state["pendingPromptTokens"]) + int(state["pendingCompletionTokens"])
+            should_persist = (
+                force
+                or prompt_delta > 0
+                or pending_total >= 120
+            )
+            if not should_persist:
+                return
+
+            run = context.get_run(run_id)
+            if not run:
+                return
+            next_prompt_tokens = int(state["promptTokens"])
+            next_completion_tokens = int(state["completionTokens"])
+            flushed_prompt_delta = int(state["pendingPromptTokens"])
+            flushed_completion_delta = int(state["pendingCompletionTokens"])
+            next_metrics = run.metrics.model_copy(
+                update={
+                    "promptTokens": next_prompt_tokens,
+                    "completionTokens": next_completion_tokens,
+                    "totalTokens": next_prompt_tokens + next_completion_tokens,
+                }
+            )
+            context.save_run(
+                run.model_copy(
+                    update={
+                        "metrics": next_metrics,
+                        "updatedAt": datetime.now().astimezone().isoformat(timespec="seconds"),
+                    }
+                )
+            )
+
+            metric_payload = self._step_payload(
+                step_id,
+                progress=progress,
+                metrics={
+                    "promptTokens": next_prompt_tokens,
+                    "completionTokens": next_completion_tokens,
+                    "totalTokens": next_prompt_tokens + next_completion_tokens,
+                },
+                tokenDelta={
+                    "promptTokens": flushed_prompt_delta,
+                    "completionTokens": flushed_completion_delta,
+                    "totalTokens": flushed_prompt_delta + flushed_completion_delta,
+                },
+                tokenCountingMode="estimated",
+            )
+            self._append_event(
+                context,
+                run_id,
+                "metric.updated",
+                metric_payload,
+                agent_name=agent_name,
+                team=team,
+            )
+            state["pendingPromptTokens"] = 0
+            state["pendingCompletionTokens"] = 0
+            state["lastPersistAt"] = now_monotonic
+
     @staticmethod
     def _infer_section_hint_from_text(content: str) -> str:
         lowered = content.lower()
@@ -1019,6 +1436,8 @@ class QwenRunnerAdapter:
             return "bull_view"
         if "bear view" in lowered or "反方" in content:
             return "bear_view"
+        if "research manager" in lowered or "研究经理" in content or "共识" in content:
+            return "research_manager"
         if "risk review" in lowered or "风险" in content:
             return "risk_review"
         if "final decision" in lowered or "最终" in content or "建议" in content:
@@ -1056,6 +1475,7 @@ class QwenRunnerAdapter:
             "## Market View\n"
             "## Bull View\n"
             "## Bear View\n"
+            "## Research Manager Summary\n"
             "## Risk Review\n"
             "## Final Decision\n"
             "## Watch Indicators\n"
@@ -1092,7 +1512,7 @@ class QwenRunnerAdapter:
                 ],
                 "evidenceInstructions": [
                     "优先基于 availableEvidence 中的证据进行分析。",
-                    "Market View / Bull View / Bear View / Risk Review / Final Decision 中需要引用相关 evidenceId。",
+                    "Market View / Bull View / Bear View / Research Manager Summary / Risk Review / Final Decision 中需要引用相关 evidenceId。",
                     "不要编造 availableEvidence 之外的证据。",
                     "如果证据不足，需要明确说明还缺少哪些数据。",
                 ],
@@ -1100,6 +1520,7 @@ class QwenRunnerAdapter:
                     "Market View": "市场环境、趋势、流动性、波动和宏观背景。",
                     "Bull View": "支持配置或增配的正方观点。",
                     "Bear View": "风险、反方观点和失效条件。",
+                    "Research Manager Summary": "正反方共识、关键分歧和待验证问题。",
                     "Risk Review": "最大回撤、波动、集中度、流动性、情景风险。",
                     "Final Decision": "建议动作、置信度、投资周期、核心理由、主要风险。",
                     "Watch Indicators": "后续需要观察的指标列表。",
@@ -1121,15 +1542,33 @@ class QwenRunnerAdapter:
         retrieved_evidence: Optional[List[EvidenceItem]] = None,
     ) -> SubmitAgentRunResponse:
         now = datetime.now().astimezone().isoformat(timespec="seconds")
-        run_id = run_id or f"run_qwen_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
+        run_id = run_id or f"{self.run_id_prefix}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
         is_portfolio_task = self._is_portfolio_diagnosis(request)
         asset_ids = [request.assetId] if request.assetId else []
         target_id = request.portfolioId or request.assetId or ("portfolio_diagnosis" if is_portfolio_task else "agent_task")
-        sections = self._parse_qwen_multistep_response(content)
+        parse_error: Optional[str] = None
+        structured_payload = self._merge_structured_qwen_payloads(content)
+        try:
+            sections = self._parse_qwen_multistep_response(content)
+        except Exception as exc:
+            parse_error = str(exc) or exc.__class__.__name__
+            raw_excerpt = content[:1800] if content else "Qwen returned empty or unparseable content."
+            sections = {
+                "Market View": f"Raw Qwen output fallback:\n{raw_excerpt}",
+                "Bull View": "Bull View was not parsed. Review raw Qwen output in Market View fallback report.",
+                "Bear View": "Bear View was not parsed. Review raw Qwen output in Market View fallback report.",
+                "Research Manager Summary": "Research Manager Summary was not parsed. Review raw Qwen output in Market View fallback report.",
+                "Risk Review": "Risk Review was not parsed. Treat this run as low-structure output.",
+                "Final Decision": "Qwen output structure was abnormal. Default action is watch until a structured rerun is available.",
+                "Watch Indicators": "Qwen output structure, evidence quality, runtime stability",
+            }
         final_decision_text = sections["Final Decision"]
         watch_indicators_text = sections["Watch Indicators"]
-        action = self._infer_action(final_decision_text)
-        confidence = self._infer_confidence(final_decision_text)
+        structured_decision = self._get_structured_section_payload(structured_payload, "finalDecision", "final_decision")
+        action = self._normalize_action(structured_decision.get("action")) if structured_decision else ""
+        action = action or self._infer_action(final_decision_text)
+        confidence = self._coerce_confidence(structured_decision.get("confidence")) if structured_decision else None
+        confidence = confidence if confidence is not None else self._infer_confidence(final_decision_text)
         sequence = len(existing_events or [])
 
         agents = [
@@ -1151,6 +1590,13 @@ class QwenRunnerAdapter:
                 agentId="agent-qwen-bear-001",
                 name="Bear Researcher",
                 role="bear_researcher",
+                team="research_team",
+                status="completed",
+            ),
+            AgentParticipant(
+                agentId="agent-qwen-research-manager-001",
+                name="Research Manager",
+                role="research_manager",
                 team="research_team",
                 status="completed",
             ),
@@ -1179,7 +1625,7 @@ class QwenRunnerAdapter:
                     title="Qwen market view assumption",
                     evidenceType="market_snapshot",
                     sourceName="Qwen Runner",
-                    qualityScore=72,
+                    qualityScore=45,
                     summary=sections["Market View"][:600],
                 ),
                 EvidenceReference(
@@ -1187,7 +1633,7 @@ class QwenRunnerAdapter:
                     title="Qwen bull view assumption",
                     evidenceType="research_report",
                     sourceName="Qwen Runner",
-                    qualityScore=72,
+                    qualityScore=45,
                     summary=sections["Bull View"][:600],
                 ),
                 EvidenceReference(
@@ -1195,7 +1641,7 @@ class QwenRunnerAdapter:
                     title="Qwen bear view assumption",
                     evidenceType="research_report",
                     sourceName="Qwen Runner",
-                    qualityScore=72,
+                    qualityScore=45,
                     summary=sections["Bear View"][:600],
                 ),
                 EvidenceReference(
@@ -1203,11 +1649,15 @@ class QwenRunnerAdapter:
                     title="Qwen risk review assumption",
                     evidenceType="macro_data",
                     sourceName="Qwen Runner",
-                    qualityScore=72,
+                    qualityScore=45,
                     summary=sections["Risk Review"][:600],
                 ),
             ]
         evidence_ids = [item.evidenceId for item in evidence]
+        evidence_validation = self._validate_evidence_references(content, evidence_ids, structured_payload)
+        evidence_support = score_evidence_support(content, evidence).to_payload()
+        invalid_evidence_ids = evidence_validation["invalidEvidenceIds"]
+        decision_evidence_ids = evidence_validation["validReferencedEvidenceIds"] or evidence_ids
         evidence_note = (
             f"\n\nEvidence used: {', '.join(evidence_ids)}"
             if evidence_ids
@@ -1224,6 +1674,12 @@ class QwenRunnerAdapter:
                 ("bull", "Bull Researcher", "Bull View Report", f"{sections['Bull View']}{evidence_note}"),
                 ("bear", "Bear Researcher", "Bear View Report", f"{sections['Bear View']}{evidence_note}"),
                 (
+                    "research_manager",
+                    "Research Manager",
+                    "Research Manager Summary Report",
+                    f"{sections.get('Research Manager Summary', 'Research Manager Summary was not explicitly separated.')}{evidence_note}",
+                ),
+                (
                     "risk_rebalance",
                     "Risk Analyst",
                     "Risk Review / Rebalance Suggestions Report",
@@ -1235,6 +1691,12 @@ class QwenRunnerAdapter:
                 ("market", "Market Analyst", "Market View Report", f"{sections['Market View']}{evidence_note}"),
                 ("bull", "Bull Researcher", "Bull View Report", f"{sections['Bull View']}{evidence_note}"),
                 ("bear", "Bear Researcher", "Bear View Report", f"{sections['Bear View']}{evidence_note}"),
+                (
+                    "research_manager",
+                    "Research Manager",
+                    "Research Manager Summary Report",
+                    f"{sections.get('Research Manager Summary', 'Research Manager Summary was not explicitly separated.')}{evidence_note}",
+                ),
                 ("risk", "Risk Analyst", "Risk Review Report", f"{sections['Risk Review']}{evidence_note}"),
             ]
         reports = [
@@ -1248,20 +1710,30 @@ class QwenRunnerAdapter:
             )
             for slug, agent_name, title, summary in report_specs
         ]
-        observation_indicators = self._parse_watch_indicators(watch_indicators_text)
+        structured_watch_indicators = self._coerce_string_list(structured_decision.get("watchIndicators") or structured_decision.get("watch_indicators")) if structured_decision else []
+        structured_risks = self._coerce_string_list(structured_decision.get("risks")) if structured_decision else []
+        structured_thesis = str(structured_decision.get("thesis") or "").strip() if structured_decision else ""
+        structured_summary = str(structured_decision.get("summary") or "").strip() if structured_decision else ""
+        observation_indicators = structured_watch_indicators or self._parse_watch_indicators(watch_indicators_text)
         decision = AgentDecision(
             action=action,
             horizon=request.horizon,
             confidence=confidence,
-            thesis=final_decision_text,
-            summary="Qwen generated a multi-step research review. Treat this as an analyst draft, not a deterministic investment conclusion.",
+            thesis=structured_thesis or final_decision_text,
+            summary=structured_summary or "Qwen generated a multi-step research review. Treat this as an analyst draft, not a deterministic investment conclusion.",
             risks=[
-                sections["Bear View"][:500],
-                sections["Risk Review"][:500],
+                *(structured_risks or [sections["Bear View"][:500], sections["Risk Review"][:500]]),
                 "No TradingAgents multi-agent process has been executed",
-                "No database-backed evidence validation has been performed",
+                f"Rule-based evidence support status: {evidence_support['evidenceSupportStatus']} ({evidence_support['evidenceSupportScore']})",
+                "Evidence semantic support is rule-based in this milestone; no LLM judge or vector validation has been executed",
+                *([f"Qwen output parser fallback used: {parse_error}"] if parse_error else []),
+                *(
+                [f"Invalid evidence references filtered: {', '.join(invalid_evidence_ids)}"]
+                    if invalid_evidence_ids
+                    else []
+                ),
             ],
-            evidenceIds=evidence_ids,
+            evidenceIds=decision_evidence_ids,
             triggerConditions=["Evidence assumptions are independently verified", "Risk budget remains available"],
             invalidationConditions=["Key assumptions fail validation", "Liquidity or drawdown risk exceeds threshold"],
             observationIndicators=observation_indicators or ["Liquidity", "Volatility", "Evidence quality", "Macro context"],
@@ -1271,6 +1743,7 @@ class QwenRunnerAdapter:
             "market": evidence_ids[:2] or evidence_ids,
             "bull": evidence_ids[1:3] or evidence_ids,
             "bear": evidence_ids[2:4] or evidence_ids,
+            "research_manager": evidence_ids[:4] or evidence_ids,
             "risk": evidence_ids[3:5] or evidence_ids,
         }
 
@@ -1290,39 +1763,102 @@ class QwenRunnerAdapter:
                 )
             )
 
-        add_event("reasoning.chunk", "Market Analyst", "analyst_team", {"content": sections["Market View"][:1000]})
-        add_event("report.generated", "Market Analyst", "analyst_team", {"reportId": reports[0].reportId, "title": reports[0].title})
-        add_event("agent.completed", "Market Analyst", "analyst_team", {})
-        add_event("debate.message", "Bull Researcher", "research_team", {"stance": "bull", "content": sections["Bull View"][:1000], "evidenceIds": step_evidence_ids["bull"]})
-        add_event("report.generated", "Bull Researcher", "research_team", {"reportId": reports[1].reportId, "title": reports[1].title})
-        add_event("agent.completed", "Bull Researcher", "research_team", {})
-        add_event("debate.message", "Bear Researcher", "research_team", {"stance": "bear", "content": sections["Bear View"][:1000], "evidenceIds": step_evidence_ids["bear"]})
-        add_event("report.generated", "Bear Researcher", "research_team", {"reportId": reports[2].reportId, "title": reports[2].title})
-        add_event("agent.completed", "Bear Researcher", "research_team", {})
-        add_event("risk.warning", "Risk Analyst", "risk_team", {"level": "MEDIUM", "content": sections["Risk Review"][:1000], "evidenceIds": step_evidence_ids["risk"]})
-        add_event("report.generated", "Risk Analyst", "risk_team", {"reportId": reports[3].reportId, "title": reports[3].title})
-        add_event("agent.completed", "Risk Analyst", "risk_team", {})
-        add_event("reasoning.chunk", "Portfolio Manager", "portfolio_team", {"content": final_decision_text[:1000]})
+        add_event("reasoning.chunk", "Market Analyst", "analyst_team", self._step_payload("market_view", progress=65, content=sections["Market View"][:1000]))
+        if parse_error:
+            add_event(
+                "risk.warning",
+                "Qwen Output Mapper",
+                "runtime_team",
+                {
+                    "level": "MEDIUM",
+                    "content": "Qwen output did not match the expected structure; raw report fallback was used.",
+                    "error": parse_error,
+                },
+            )
+        if invalid_evidence_ids:
+            add_event(
+                "risk.warning",
+                "Evidence Validator",
+                "runtime_team",
+                {
+                    "level": "MEDIUM",
+                    "content": "Qwen referenced evidenceIds that are not available in this run. Invalid references were filtered from the decision evidenceIds.",
+                    **evidence_validation,
+                },
+            )
+        if evidence_support["evidenceSupportStatus"] in {"unsupported", "weak", "partial"}:
+            add_event(
+                "risk.warning",
+                "Evidence Support Scorer",
+                "runtime_team",
+                {
+                    "level": "MEDIUM",
+                    "content": "Rule-based evidence support scoring found weak or partial claim support. Review claim/evidence links before relying on the decision.",
+                    **evidence_support,
+                },
+            )
+        add_event("report.generated", "Market Analyst", "analyst_team", self._step_payload("market_view", progress=95, reportId=reports[0].reportId, title=reports[0].title))
+        add_event("agent.completed", "Market Analyst", "analyst_team", self._step_payload("market_view", progress=100))
+        add_event("debate.message", "Bull Researcher", "research_team", self._step_payload("bull_view", progress=70, stance="bull", content=sections["Bull View"][:1000], evidenceIds=step_evidence_ids["bull"]))
+        add_event("report.generated", "Bull Researcher", "research_team", self._step_payload("bull_view", progress=95, reportId=reports[1].reportId, title=reports[1].title))
+        add_event("agent.completed", "Bull Researcher", "research_team", self._step_payload("bull_view", progress=100))
+        add_event("debate.message", "Bear Researcher", "research_team", self._step_payload("bear_view", progress=70, stance="bear", content=sections["Bear View"][:1000], evidenceIds=step_evidence_ids["bear"]))
+        add_event("report.generated", "Bear Researcher", "research_team", self._step_payload("bear_view", progress=95, reportId=reports[2].reportId, title=reports[2].title))
+        add_event("agent.completed", "Bear Researcher", "research_team", self._step_payload("bear_view", progress=100))
+        add_event(
+            "reasoning.chunk",
+            "Research Manager",
+            "research_team",
+            self._step_payload(
+                "research_manager",
+                progress=65,
+                content=sections.get("Research Manager Summary", "")[:1000],
+                evidenceIds=step_evidence_ids["research_manager"],
+            ),
+        )
+        add_event("report.generated", "Research Manager", "research_team", self._step_payload("research_manager", progress=95, reportId=reports[3].reportId, title=reports[3].title))
+        add_event("agent.completed", "Research Manager", "research_team", self._step_payload("research_manager", progress=100))
+        add_event("risk.warning", "Risk Analyst", "risk_team", self._step_payload("risk_review", progress=65, level="MEDIUM", content=sections["Risk Review"][:1000], evidenceIds=step_evidence_ids["risk"]))
+        add_event("report.generated", "Risk Analyst", "risk_team", self._step_payload("risk_review", progress=95, reportId=reports[4].reportId, title=reports[4].title))
+        add_event("agent.completed", "Risk Analyst", "risk_team", self._step_payload("risk_review", progress=100))
+        add_event("reasoning.chunk", "Portfolio Manager", "portfolio_team", self._step_payload("final_decision", progress=65, content=final_decision_text[:1000]))
         add_event(
             "evidence.linked",
             "Portfolio Manager",
             "portfolio_team",
-            {
-                "evidenceIds": evidence_ids,
-                "summary": (
+            self._step_payload(
+                "final_decision",
+                progress=75,
+                evidenceIds=evidence_ids,
+                summary=(
                     "Retrieved static evidence linked to final decision."
                     if retrieved_evidence
                     else "Qwen multi-step assumptions linked to final decision."
                 ),
-            },
+                **evidence_validation,
+                **evidence_support,
+            ),
         )
-        add_event("decision.updated", "Portfolio Manager", "portfolio_team", {"action": action, "confidence": decision.confidence, "evidenceIds": evidence_ids})
-        add_event("agent.completed", "Portfolio Manager", "portfolio_team", {})
+        add_event(
+            "decision.updated",
+            "Portfolio Manager",
+            "portfolio_team",
+            self._step_payload(
+                "final_decision",
+                progress=85,
+                action=action,
+                confidence=decision.confidence,
+                evidenceIds=decision.evidenceIds,
+                **evidence_validation,
+                **evidence_support,
+            ),
+        )
+        add_event("agent.completed", "Portfolio Manager", "portfolio_team", self._step_payload("final_decision", progress=100))
         add_event("agent.run.completed", None, None, {})
 
         context.save_evidence_references(evidence)
         if context.update_run_outputs:
-            context.update_run_outputs(run_id, reports, evidence, decision, 1)
+            context.update_run_outputs(run_id, reports, evidence, decision, 6)
             for event in events:
                 self._append_existing_event(context, run_id, event)
             if context.update_run_status:
@@ -1331,7 +1867,7 @@ class QwenRunnerAdapter:
         else:
             run = AgentRun(
                 runId=run_id,
-                name="AlphaTrace Qwen Portfolio Diagnosis" if is_portfolio_task else "AlphaTrace Qwen Runner Agent Task",
+                name=self.portfolio_run_name if is_portfolio_task else self.run_name,
                 target=target_id,
                 taskType=request.taskType,
                 riskLevel="medium",
@@ -1339,7 +1875,7 @@ class QwenRunnerAdapter:
                 assetIds=asset_ids,
                 portfolioId=request.portfolioId,
                 strategyId=request.strategyId,
-                triggeredBy="qwen_runner",
+                triggeredBy=self.triggered_by,
                 modelName=model,
                 startedAt=now,
                 updatedAt=now,
@@ -1350,7 +1886,7 @@ class QwenRunnerAdapter:
                 events=[*(existing_events or []), *events],
                 evidenceIds=evidence_ids,
                 finalDecision=decision,
-                metrics=RuntimeMetrics(llmCalls=1, toolCalls=5, generatedReports=len(reports), durationSeconds=0, estimatedCostUsd=None),
+                metrics=RuntimeMetrics(llmCalls=6, toolCalls=6, generatedReports=len(reports), durationSeconds=0, estimatedCostUsd=None),
             )
             context.save_run(run)
         if not run:
@@ -1358,23 +1894,25 @@ class QwenRunnerAdapter:
         return SubmitAgentRunResponse(
             runId=run_id,
             status=run.status,
-            mode="qwen",
-            message=f"Agent task completed by QwenRunnerAdapter using {config_source}. TradingAgents and database persistence were not used.",
+            mode=self.runner_type,
+            message=f"Agent task completed by {self.adapter_display_name} using {config_source}. TradingAgents were not used.",
             run=run,
         )
 
     def _create_running_run(self, request: SubmitAgentRunRequest, model: str, config_source: str) -> AgentRun:
         now = datetime.now().astimezone().isoformat(timespec="seconds")
-        run_id = f"run_qwen_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
+        run_id = f"{self.run_id_prefix}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
         is_portfolio_task = self._is_portfolio_diagnosis(request)
         asset_ids = [request.assetId] if request.assetId else []
         target_id = request.portfolioId or request.assetId or ("portfolio_diagnosis" if is_portfolio_task else "agent_task")
+        agent_prefix = self.runner_type.replace("_", "-")
         agents = [
-            AgentParticipant(agentId="agent-qwen-market-001", name="Market Analyst", role="market_analyst", team="analyst_team", status="running"),
-            AgentParticipant(agentId="agent-qwen-bull-001", name="Bull Researcher", role="bull_researcher", team="research_team", status="running"),
-            AgentParticipant(agentId="agent-qwen-bear-001", name="Bear Researcher", role="bear_researcher", team="research_team", status="running"),
-            AgentParticipant(agentId="agent-qwen-risk-001", name="Risk Analyst", role="risk_analyst", team="risk_team", status="running"),
-            AgentParticipant(agentId="agent-qwen-pm-001", name="Portfolio Manager", role="portfolio_manager", team="portfolio_team", status="running"),
+            AgentParticipant(agentId=f"agent-{agent_prefix}-market-001", name="Market Analyst", role="market_analyst", team="analyst_team", status="running"),
+            AgentParticipant(agentId=f"agent-{agent_prefix}-bull-001", name="Bull Researcher", role="bull_researcher", team="research_team", status="running"),
+            AgentParticipant(agentId=f"agent-{agent_prefix}-bear-001", name="Bear Researcher", role="bear_researcher", team="research_team", status="running"),
+            AgentParticipant(agentId=f"agent-{agent_prefix}-research-manager-001", name="Research Manager", role="research_manager", team="research_team", status="idle"),
+            AgentParticipant(agentId=f"agent-{agent_prefix}-risk-001", name="Risk Analyst", role="risk_analyst", team="risk_team", status="running"),
+            AgentParticipant(agentId=f"agent-{agent_prefix}-pm-001", name="Portfolio Manager", role="portfolio_manager", team="portfolio_team", status="running"),
         ]
         decision = AgentDecision(
             action="watch",
@@ -1389,12 +1927,39 @@ class QwenRunnerAdapter:
             observationIndicators=[],
         )
         events = [
-            AgentRuntimeEvent(eventId=f"evt_{run_id}_001", runId=run_id, type="agent.run.started", timestamp=now, sequence=1, payload={"source": "qwen_runner", "configSource": config_source}),
-            AgentRuntimeEvent(eventId=f"evt_{run_id}_002", runId=run_id, type="reasoning.chunk", timestamp=now, sequence=2, agentName="Qwen Research Agent", team="research_team", payload={"content": "Preparing multi-step Qwen research orchestration."}),
+            AgentRuntimeEvent(
+                eventId=f"evt_{run_id}_001",
+                runId=run_id,
+                type="agent.run.started",
+                timestamp=now,
+                sequence=1,
+                payload={
+                    "source": self.triggered_by,
+                    "runnerType": self.runner_type,
+                    "configSource": config_source,
+                    "contractVersion": ALPHATRACE_RUNTIME_CONTRACT_VERSION,
+                    "dagNodes": self._dag_contract(),
+                },
+            ),
+            AgentRuntimeEvent(
+                eventId=f"evt_{run_id}_002",
+                runId=run_id,
+                type="reasoning.chunk",
+                timestamp=now,
+                sequence=2,
+                agentName=self.initial_agent_name,
+                team="research_team",
+                payload=self._step_payload(
+                    "evidence_retrieval",
+                    progress=5,
+                    content=self.initial_reasoning_content,
+                    runnerType=self.runner_type,
+                ),
+            ),
         ]
         return AgentRun(
             runId=run_id,
-            name="AlphaTrace Qwen Portfolio Diagnosis" if is_portfolio_task else "AlphaTrace Qwen Runner Agent Task",
+            name=self.portfolio_run_name if is_portfolio_task else self.run_name,
             target=target_id,
             taskType=request.taskType,
             riskLevel="medium",
@@ -1402,7 +1967,7 @@ class QwenRunnerAdapter:
             assetIds=asset_ids,
             portfolioId=request.portfolioId,
             strategyId=request.strategyId,
-            triggeredBy="qwen_runner",
+            triggeredBy=self.triggered_by,
             modelName=model,
             startedAt=now,
             updatedAt=now,
@@ -1413,7 +1978,7 @@ class QwenRunnerAdapter:
             events=events,
             evidenceIds=[],
             finalDecision=decision,
-            metrics=RuntimeMetrics(llmCalls=0, toolCalls=5, generatedReports=0, durationSeconds=0, estimatedCostUsd=None),
+            metrics=RuntimeMetrics(llmCalls=0, toolCalls=6, generatedReports=0, durationSeconds=0, estimatedCostUsd=None),
         )
 
     def _append_event(
@@ -1454,11 +2019,12 @@ class QwenRunnerAdapter:
 
     def _mark_run_failed(self, context: AgentRunnerContext, run_id: str, exc: Exception) -> None:
         message = str(exc) or exc.__class__.__name__
+        now = datetime.now().astimezone().isoformat(timespec="seconds")
         self._append_event(
             context,
             run_id,
             "agent.failed",
-            {"error": message},
+            {"error": message, "summary": "Qwen runner step failed. See failure report and final decision fallback."},
             agent_name="Qwen Research Agent",
             team="research_team",
         )
@@ -1466,10 +2032,41 @@ class QwenRunnerAdapter:
             context,
             run_id,
             "agent.run.failed",
-            {"error": message},
+            {"error": message, "summary": "Agent run failed and was persisted for replay."},
         )
+        run = context.get_run(run_id) if context.get_run else None
+        if run and context.update_run_outputs:
+            failure_report = AgentReport(
+                reportId=f"report_{run_id}_failure_001",
+                runId=run_id,
+                agentName="Qwen Research Agent",
+                title="Qwen Runtime Failure Report",
+                summary=(
+                    "The Qwen runner did not complete successfully.\n\n"
+                    f"Failure reason: {message}\n\n"
+                    "No successful final investment analysis was produced. The run is stored for debugging and replay."
+                ),
+                createdAt=now,
+            )
+            fallback_decision = AgentDecision(
+                action="watch",
+                horizon="medium_term",
+                confidence=0.5,
+                thesis=f"Qwen runner failed before producing a reliable decision. Failure reason: {message}",
+                summary="Failure fallback decision. Do not treat this as an investment conclusion.",
+                risks=[
+                    "Qwen runner failed before completion",
+                    "No complete report set was generated",
+                    message,
+                ],
+                evidenceIds=list(run.evidenceIds),
+                triggerConditions=["Rerun succeeds with valid model output"],
+                invalidationConditions=["Runtime failure remains unresolved"],
+                observationIndicators=["Qwen availability", "runtime timeout", "SSE status", "error event"],
+            )
+            context.update_run_outputs(run_id, [failure_report], [], fallback_decision, 0)
         if context.update_run_status:
-            context.update_run_status(run_id, "failed", datetime.now().astimezone().isoformat(timespec="seconds"))
+            context.update_run_status(run_id, "failed", now)
 
     @staticmethod
     def _runtime_steps() -> List[Dict[str, str]]:
@@ -1477,15 +2074,21 @@ class QwenRunnerAdapter:
             {"title": "Market View", "agent": "Market Analyst", "team": "analyst_team", "toolName": "qwen.market_view"},
             {"title": "Bull View", "agent": "Bull Researcher", "team": "research_team", "toolName": "qwen.bull_view"},
             {"title": "Bear View", "agent": "Bear Researcher", "team": "research_team", "toolName": "qwen.bear_view"},
+            {"title": "Research Manager Summary", "agent": "Research Manager", "team": "research_team", "toolName": "qwen.research_manager"},
             {"title": "Risk Review", "agent": "Risk Analyst", "team": "risk_team", "toolName": "qwen.risk_review"},
             {"title": "Final Decision", "agent": "Portfolio Manager", "team": "portfolio_team", "toolName": "qwen.final_decision"},
         ]
 
     def _parse_qwen_multistep_response(self, content: str) -> Dict[str, str]:
+        structured_sections = self._parse_structured_qwen_json(content)
+        if structured_sections:
+            return structured_sections
+
         sections = {
             "Market View": self._extract_section(content, "Market View"),
             "Bull View": self._extract_section(content, "Bull View"),
             "Bear View": self._extract_section(content, "Bear View"),
+            "Research Manager Summary": self._extract_section(content, "Research Manager Summary"),
             "Risk Review": self._extract_section(content, "Risk Review"),
             "Final Decision": self._extract_section(content, "Final Decision"),
             "Watch Indicators": self._extract_section(content, "Watch Indicators"),
@@ -1495,12 +2098,159 @@ class QwenRunnerAdapter:
                 sections[name] = content[:1400] if name == "Final Decision" else f"{name} was not explicitly separated by Qwen. Fallback excerpt:\n{content[:1000]}"
         return sections
 
+    @classmethod
+    def _parse_structured_qwen_json(cls, content: str) -> Optional[Dict[str, str]]:
+        payload = cls._merge_structured_qwen_payloads(content)
+        if not isinstance(payload, dict):
+            return None
+
+        market_view = cls._stringify_structured_section(payload.get("marketView") or payload.get("market_view"))
+        bull_view = cls._stringify_structured_section(payload.get("bullView") or payload.get("bull_view"))
+        bear_view = cls._stringify_structured_section(payload.get("bearView") or payload.get("bear_view"))
+        research_manager = cls._stringify_structured_section(payload.get("researchManager") or payload.get("research_manager"))
+        risk_review = cls._stringify_structured_section(payload.get("riskReview") or payload.get("risk_review"))
+        final_decision = cls._stringify_structured_section(payload.get("finalDecision") or payload.get("final_decision"))
+        watch_indicators = cls._stringify_structured_section(payload.get("watchIndicators") or payload.get("watch_indicators"))
+
+        if not any([market_view, bull_view, bear_view, research_manager, risk_review, final_decision]):
+            return None
+
+        return {
+            "Market View": market_view or "Market View was not provided in structured Qwen output.",
+            "Bull View": bull_view or "Bull View was not provided in structured Qwen output.",
+            "Bear View": bear_view or "Bear View was not provided in structured Qwen output.",
+            "Research Manager Summary": research_manager or "Research Manager Summary was not provided in structured Qwen output.",
+            "Risk Review": risk_review or "Risk Review was not provided in structured Qwen output.",
+            "Final Decision": final_decision or "Final Decision was not provided in structured Qwen output.",
+            "Watch Indicators": watch_indicators or "Watch Indicators were not provided in structured Qwen output.",
+        }
+
+    @staticmethod
+    def _extract_json_payload(content: str) -> Optional[Dict[str, Any]]:
+        payloads = QwenRunnerAdapter._extract_json_payloads(content)
+        return payloads[0] if payloads else None
+
+    @staticmethod
+    def _extract_json_payloads(content: str) -> List[Dict[str, Any]]:
+        candidates: List[str] = []
+        fenced = re.findall(r"```(?:json)?\s*([\s\S]*?)\s*```", content, flags=re.IGNORECASE)
+        candidates.extend(candidate.strip() for candidate in fenced if candidate.strip().startswith("{"))
+
+        stripped = content.strip()
+        if stripped.startswith("{") and stripped.endswith("}"):
+            candidates.append(stripped)
+
+        payloads: List[Dict[str, Any]] = []
+        for candidate in candidates:
+            try:
+                value = json.loads(candidate)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(value, dict):
+                payloads.append(value)
+        return payloads
+
+    @classmethod
+    def _merge_structured_qwen_payloads(cls, content: str) -> Dict[str, Any]:
+        merged: Dict[str, Any] = {}
+        for payload in cls._extract_json_payloads(content):
+            for key, value in payload.items():
+                if value is not None:
+                    merged[key] = value
+        return merged
+
+    @staticmethod
+    def _get_structured_section_payload(payload: Dict[str, Any], *keys: str) -> Dict[str, Any]:
+        for key in keys:
+            value = payload.get(key)
+            if isinstance(value, dict):
+                return value
+        return {}
+
+    @classmethod
+    def _collect_structured_evidence_ids(cls, payload: Dict[str, Any]) -> List[str]:
+        evidence_ids: List[str] = []
+
+        def walk(value: Any) -> None:
+            if isinstance(value, dict):
+                for key, child in value.items():
+                    normalized_key = str(key).lower()
+                    if normalized_key in {"evidenceids", "evidence_refs", "evidencerefs", "evidenceids"}:
+                        evidence_ids.extend(cls._coerce_string_list(child))
+                    else:
+                        walk(child)
+            elif isinstance(value, list):
+                for child in value:
+                    walk(child)
+
+        walk(payload)
+        return list(dict.fromkeys(evidence_ids))
+
+    @classmethod
+    def _validate_evidence_references(
+        cls,
+        content: str,
+        available_evidence_ids: List[str],
+        structured_payload: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        available = set(available_evidence_ids)
+        text_references = cls._extract_evidence_references(content)
+        structured_references = cls._collect_structured_evidence_ids(structured_payload)
+        referenced = list(dict.fromkeys([*text_references, *structured_references]))
+        valid_referenced = [evidence_id for evidence_id in referenced if evidence_id in available]
+        invalid = [evidence_id for evidence_id in referenced if evidence_id not in available]
+        unreferenced_available = [evidence_id for evidence_id in available_evidence_ids if evidence_id not in set(valid_referenced)]
+        if invalid:
+            status = "invalid_references_filtered"
+        elif valid_referenced:
+            status = "valid"
+        else:
+            status = "no_explicit_references"
+        return {
+            "validationStatus": status,
+            "availableEvidenceIds": available_evidence_ids,
+            "referencedEvidenceIds": referenced,
+            "validReferencedEvidenceIds": valid_referenced,
+            "invalidEvidenceIds": invalid,
+            "unreferencedAvailableEvidenceIds": unreferenced_available,
+        }
+
+    @staticmethod
+    def _stringify_structured_section(value: Any) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return value.strip()
+        if isinstance(value, list):
+            lines = []
+            for item in value:
+                if isinstance(item, (dict, list)):
+                    lines.append(f"- {json.dumps(item, ensure_ascii=False)}")
+                else:
+                    lines.append(f"- {item}")
+            return "\n".join(lines).strip()
+        if isinstance(value, dict):
+            lines = []
+            title = value.get("title") or value.get("summary")
+            if title:
+                lines.append(str(title))
+            for key, section_value in value.items():
+                if key in {"title", "summary"} and title:
+                    continue
+                label = re.sub(r"(?<!^)([A-Z])", r" \1", str(key)).replace("_", " ").strip().title()
+                rendered = QwenRunnerAdapter._stringify_structured_section(section_value)
+                if rendered:
+                    lines.append(f"**{label}**\n{rendered}")
+            return "\n\n".join(lines).strip()
+        return str(value).strip()
+
     @staticmethod
     def _extract_section(content: str, section_name: str) -> str:
         headings = [
             "Market View",
             "Bull View",
             "Bear View",
+            "Research Manager Summary",
             "Risk Review",
             "Final Decision",
             "Watch Indicators",
@@ -1534,6 +2284,22 @@ class QwenRunnerAdapter:
         return 0.65
 
     @staticmethod
+    def _coerce_confidence(value: Any) -> Optional[float]:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            value = value.strip().rstrip("%")
+            if not value:
+                return None
+        try:
+            confidence = float(value)
+        except (TypeError, ValueError):
+            return None
+        if confidence > 1:
+            confidence = confidence / 100
+        return max(0.0, min(confidence, 1.0))
+
+    @staticmethod
     def _parse_watch_indicators(content: str) -> List[str]:
         lines = [line.strip(" -*\t\r\n") for line in content.splitlines()]
         items = [line for line in lines if line]
@@ -1554,3 +2320,36 @@ class QwenRunnerAdapter:
             return "no_action"
         return "watch"
 
+    @staticmethod
+    def _normalize_action(value: Any) -> str:
+        normalized = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+        if normalized == "avoid":
+            return "no_action"
+        if normalized in {"overweight", "underweight", "hold", "watch", "no_action"}:
+            return normalized
+        return ""
+
+    @staticmethod
+    def _coerce_string_list(value: Any) -> List[str]:
+        if value is None:
+            return []
+        if isinstance(value, list):
+            items = value
+        elif isinstance(value, str):
+            if "\n" in value:
+                items = value.splitlines()
+            else:
+                items = re.split(r"[、,，;；]", value)
+        else:
+            items = [value]
+        return [str(item).strip(" -*\t\r\n") for item in items if str(item).strip(" -*\t\r\n")]
+
+    @staticmethod
+    def _find_invalid_evidence_references(content: str, valid_evidence_ids: List[str]) -> List[str]:
+        valid = set(valid_evidence_ids)
+        referenced = set(QwenRunnerAdapter._extract_evidence_references(content))
+        return sorted(evidence_id for evidence_id in referenced if evidence_id not in valid)
+
+    @staticmethod
+    def _extract_evidence_references(content: str) -> List[str]:
+        return list(dict.fromkeys(re.findall(r"\bev_(?:static|qwen|bocha)[A-Za-z0-9_-]+\b", content or "")))

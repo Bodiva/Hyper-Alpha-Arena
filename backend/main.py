@@ -27,6 +27,27 @@ from version import __version__
 
 logger = logging.getLogger(__name__)
 
+
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _is_alphatrace_only_profile() -> bool:
+    profile = os.getenv("ALPHATRACE_BACKEND_PROFILE", "").strip().lower()
+    return profile in {"alphatrace", "alphatrace-only", "alpha_trace", "alpha-trace"}
+
+
+def _frontend_watcher_enabled() -> bool:
+    return _env_bool("ALPHATRACE_FRONTEND_WATCHER_ENABLED", not _is_alphatrace_only_profile())
+
+
+def _legacy_runtime_enabled() -> bool:
+    return _env_bool("ALPHATRACE_LEGACY_RUNTIME_ENABLED", not _is_alphatrace_only_profile())
+
+
 app = FastAPI(
     title="Hyper Alpha Arena API",
     version=__version__,
@@ -77,6 +98,7 @@ if os.path.exists(static_dir):
 frontend_watcher_thread = None
 runtime_monitor_thread = None
 runtime_monitor_running = False
+legacy_runtime_started = False
 last_build_time = 0
 
 THREAD_WARNING_THRESHOLDS = (200, 400, 800, 1200)
@@ -272,12 +294,15 @@ def watch_frontend_files():
 
 @app.on_event("startup")
 def on_startup():
-    global frontend_watcher_thread
+    global frontend_watcher_thread, legacy_runtime_started
 
-    # Start frontend file watcher in background thread
-    frontend_watcher_thread = threading.Thread(target=watch_frontend_files, daemon=True)
-    frontend_watcher_thread.start()
-    print("Frontend file watcher started")
+    # Local AlphaTrace profile runs Vite separately and should not rebuild frontend assets.
+    if _frontend_watcher_enabled():
+        frontend_watcher_thread = threading.Thread(target=watch_frontend_files, daemon=True)
+        frontend_watcher_thread.start()
+        print("Frontend file watcher started")
+    else:
+        print("[startup] Frontend watcher skipped by AlphaTrace backend profile")
 
     _start_runtime_monitor()
     print("Runtime monitor started")
@@ -559,35 +584,43 @@ def on_startup():
     except Exception as e:
         print(f"⚠ Failed to clean up backfill tasks: {e}")
 
-    # Initialize all services (scheduler, market data tasks, auto trading, etc.)
-    print("About to initialize services...")
-    from services.startup import initialize_services
-    initialize_services()
-    print("Services initialization completed")
+    if _legacy_runtime_enabled():
+        # Initialize all legacy trading services (scheduler, market data tasks, auto trading, etc.)
+        print("About to initialize services...")
+        from services.startup import initialize_services
+        initialize_services()
+        legacy_runtime_started = True
+        print("Services initialization completed")
 
-    # Warmup numba JIT compilation for pandas_ta indicators
-    # This prevents timeout on first indicator calculation
-    def warmup_numba():
-        try:
-            from services.technical_indicators import calculate_indicator
-            from database.connection import SessionLocal
-            db = SessionLocal()
+        # Warmup numba JIT compilation for pandas_ta indicators
+        # This prevents timeout on first indicator calculation
+        def warmup_numba():
             try:
-                print("[startup] Warming up numba JIT compilation...")
-                calculate_indicator(db, "BTC", "BOLL", "1h")
-                print("[startup] Numba warmup completed")
-            finally:
-                db.close()
-        except Exception as e:
-            print(f"[startup] Numba warmup failed (non-fatal): {e}")
+                from services.technical_indicators import calculate_indicator
+                from database.connection import SessionLocal
+                db = SessionLocal()
+                try:
+                    print("[startup] Warming up numba JIT compilation...")
+                    calculate_indicator(db, "BTC", "BOLL", "1h")
+                    print("[startup] Numba warmup completed")
+                finally:
+                    db.close()
+            except Exception as e:
+                print(f"[startup] Numba warmup failed (non-fatal): {e}")
 
-    # Run warmup in background thread to not block startup
-    threading.Thread(target=warmup_numba, daemon=True).start()
+        # Run warmup in background thread to not block startup
+        threading.Thread(target=warmup_numba, daemon=True).start()
+    else:
+        legacy_runtime_started = False
+        print("[startup] AlphaTrace-only profile active; skipped legacy trading services and BTC indicator warmup")
 
 
 @app.on_event("startup")
 async def restore_bot_webhooks():
     """Restore Telegram webhook and register adapter after container restart."""
+    if not _legacy_runtime_enabled():
+        print("[startup] Telegram webhook restore skipped by AlphaTrace backend profile")
+        return
     try:
         from services.telegram_bot_service import restore_telegram_webhook, get_telegram_adapter
         from services.bot_adapter import register_adapter
@@ -620,6 +653,9 @@ async def restore_bot_webhooks():
 @app.on_event("startup")
 async def restore_discord_gateway():
     """Restore Discord Gateway connection and register adapter after container restart."""
+    if not _legacy_runtime_enabled():
+        print("[startup] Discord Gateway restore skipped by AlphaTrace backend profile")
+        return
     try:
         from database.connection import SessionLocal
         from database.models import BotConfig
@@ -663,6 +699,9 @@ async def restore_discord_gateway():
 @app.on_event("startup")
 async def startup_hyper_insight_wallet_runtime():
     """Start Hyper Insight wallet runtime service."""
+    if not _legacy_runtime_enabled():
+        print("[startup] Hyper Insight wallet runtime skipped by AlphaTrace backend profile")
+        return
     try:
         from services.hyper_insight_wallet_service import hyper_insight_wallet_service
         await hyper_insight_wallet_service.startup()
@@ -676,14 +715,19 @@ def on_shutdown():
     global runtime_monitor_running
     runtime_monitor_running = False
 
-    # Shutdown all services (scheduler, market data tasks, auto trading, etc.)
-    from services.startup import shutdown_services
-    shutdown_services()
+    if legacy_runtime_started:
+        # Shutdown all services (scheduler, market data tasks, auto trading, etc.)
+        from services.startup import shutdown_services
+        shutdown_services()
+    else:
+        print("[shutdown] Legacy services shutdown skipped; AlphaTrace-only runtime was active")
 
 
 @app.on_event("shutdown")
 async def shutdown_discord_gateway():
     """Stop Discord Gateway on shutdown."""
+    if not _legacy_runtime_enabled():
+        return
     try:
         from services.discord_bot_service import stop_discord_gateway
         await stop_discord_gateway()
@@ -694,6 +738,8 @@ async def shutdown_discord_gateway():
 @app.on_event("shutdown")
 async def shutdown_hyper_insight_wallet_runtime():
     """Stop Hyper Insight wallet runtime service."""
+    if not _legacy_runtime_enabled():
+        return
     try:
         from services.hyper_insight_wallet_service import hyper_insight_wallet_service
         await hyper_insight_wallet_service.shutdown()
@@ -706,6 +752,7 @@ from api.market_data_routes import router as market_data_router
 from api.order_routes import router as order_router
 from api.account_routes import router as account_router
 from api.config_routes import router as config_router
+from api.feature_routes import router as feature_router
 from api.ranking_routes import router as ranking_router
 from api.crypto_routes import router as crypto_router
 from api.arena_routes import router as arena_router
@@ -736,6 +783,10 @@ from api.alpha_trace_evidence_routes import router as alpha_trace_evidence_route
 from api.alpha_trace_asset_routes import router as alpha_trace_asset_router
 from api.alpha_trace_strategy_routes import router as alpha_trace_strategy_router
 from api.alpha_trace_portfolio_routes import router as alpha_trace_portfolio_router
+from api.alpha_trace_decision_routes import router as alpha_trace_decision_router
+from api.alpha_trace_leaderboard_routes import router as alpha_trace_leaderboard_router
+from api.alpha_trace_market_data_routes import router as alpha_trace_market_data_router
+from api.alpha_trace_data_source_routes import router as alpha_trace_data_source_router
 from routes.program_routes import router as program_router
 # Removed: AI account routes merged into account_routes (unified AI trader accounts)
 
@@ -743,6 +794,7 @@ app.include_router(market_data_router)
 app.include_router(order_router)
 app.include_router(account_router)
 app.include_router(config_router)
+app.include_router(feature_router)
 app.include_router(ranking_router)
 app.include_router(crypto_router)
 app.include_router(arena_router)
@@ -774,6 +826,10 @@ app.include_router(alpha_trace_evidence_router)
 app.include_router(alpha_trace_asset_router)
 app.include_router(alpha_trace_strategy_router)
 app.include_router(alpha_trace_portfolio_router)
+app.include_router(alpha_trace_decision_router)
+app.include_router(alpha_trace_leaderboard_router)
+app.include_router(alpha_trace_market_data_router)
+app.include_router(alpha_trace_data_source_router)
 # app.include_router(ai_account_router, prefix="/api")  # Removed - merged into account_router
 
 # Strategy route aliases for frontend compatibility

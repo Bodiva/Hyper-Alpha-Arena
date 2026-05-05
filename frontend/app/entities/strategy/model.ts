@@ -96,6 +96,15 @@ export interface LeaderboardItem {
   turnover: number;
   evidenceScore: number;
   riskScore: number;
+  completedRuns?: number;
+  failedRuns?: number;
+  averageConfidence?: number;
+  evidenceCount?: number;
+  reportCount?: number;
+  riskWarnings?: number;
+  decisionCount?: number;
+  runtimeQualityScore?: number;
+  latestRunAt?: string;
   summary: string;
   strengths: string[];
   risks: string[];

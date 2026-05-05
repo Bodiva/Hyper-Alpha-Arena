@@ -13,7 +13,7 @@ import {
   type LeaderboardSortMetric,
   type SettingsMock,
 } from "@/mocks/settings.mock";
-import { shouldUseMockData } from "@/shared/api/api-mode";
+import { httpClient } from "@/shared/api/http-client";
 
 export type {
   DataSourceDefaultStatus,
@@ -33,13 +33,85 @@ export {
   TAG_OPTIONS,
 };
 
-const realModeNotImplemented = (operation: string): never => {
-  throw new Error(`Real API mode for ${operation} is not implemented yet.`);
-};
-
 export const getSettings = (): SettingsMock => {
-  if (!shouldUseMockData()) {
-    realModeNotImplemented("getSettings");
-  }
+  // Settings remains mostly local until the full config backend is introduced.
+  // Returning the defaults in real mode keeps the Settings page usable for runtime credentials.
   return settingsMock;
 };
+
+export interface RuntimeProviderOption {
+  id: string;
+  name: string;
+  base_url: string;
+  models: string[];
+  api_format: string;
+  description?: string;
+}
+
+export interface HyperAiProfileConfig {
+  llm_configured: boolean;
+  llm_api_key_available?: boolean;
+  llm_config_source?: string;
+  llm_provider?: string;
+  llm_model?: string;
+  llm_base_url?: string;
+}
+
+export interface HyperAiToolConfigStatus {
+  name: string;
+  display_name: string;
+  display_name_zh?: string;
+  configured: boolean;
+  api_key_available?: boolean;
+  config_source?: string;
+  enabled: boolean;
+  get_url?: string;
+  get_url_label?: string;
+  get_url_label_zh?: string;
+}
+
+export interface RuntimeCredentialStatus {
+  providers: RuntimeProviderOption[];
+  profile: HyperAiProfileConfig;
+  tools: HyperAiToolConfigStatus[];
+}
+
+export interface SaveQwenConfigPayload {
+  apiKey: string;
+  model: string;
+  baseUrl?: string;
+}
+
+export const getRuntimeCredentialStatus = async (): Promise<RuntimeCredentialStatus> => {
+  const [providersResponse, profile, toolsResponse] = await Promise.all([
+    httpClient.get<{ providers: RuntimeProviderOption[] }>("/hyper-ai/providers"),
+    httpClient.get<HyperAiProfileConfig>("/hyper-ai/profile"),
+    httpClient.get<{ tools: HyperAiToolConfigStatus[] }>("/hyper-ai/tools"),
+  ]);
+
+  return {
+    providers: providersResponse.providers ?? [],
+    profile,
+    tools: toolsResponse.tools ?? [],
+  };
+};
+
+export const saveQwenRuntimeConfig = async (payload: SaveQwenConfigPayload): Promise<{ success: boolean; provider: string; model: string }> =>
+  httpClient.post("/hyper-ai/profile/llm", {
+    provider: "qwen",
+    api_key: payload.apiKey,
+    model: payload.model,
+    base_url: payload.baseUrl,
+  }, { timeoutMs: 45000 });
+
+export const testCurrentQwenRuntimeConfig = async (): Promise<{ success: boolean; provider: string; model: string; base_url?: string }> =>
+  httpClient.post("/hyper-ai/profile/llm/test-current", {}, { timeoutMs: 45000 });
+
+export const saveBochaRuntimeConfig = async (apiKey: string, validateKey = false): Promise<{ success: boolean; tool_name: string; error?: string }> =>
+  httpClient.put("/hyper-ai/tools/bocha/config", {
+    config: { api_key: apiKey },
+    validate_key: validateKey,
+  }, { timeoutMs: 30000 });
+
+export const deleteBochaRuntimeConfig = async (): Promise<{ success: boolean; tool_name: string }> =>
+  httpClient.delete("/hyper-ai/tools/bocha/config");

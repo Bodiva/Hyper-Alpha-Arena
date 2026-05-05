@@ -24,7 +24,7 @@ export type AgentRole =
   | "SCENARIO_ANALYST"
   | "PORTFOLIO_MANAGER";
 
-export type AgentStatus = "IDLE" | "RUNNING" | "COMPLETED" | "FAILED";
+export type AgentStatus = "IDLE" | "RUNNING" | "COMPLETED" | "FAILED" | "CANCELLED";
 
 export type AgentRunStatus =
   | "QUEUED"
@@ -176,6 +176,9 @@ export interface AgentRunMetrics {
   toolCalls: number;
   generatedReports: number;
   durationSeconds: number;
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
   estimatedCostUsd?: number;
 }
 

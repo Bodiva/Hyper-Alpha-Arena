@@ -20,7 +20,7 @@ import {
   TradingAccount,
 } from '@/lib/api'
 import { STRATEGY_RADAR_URL } from '@/lib/strategyRadar'
-import { useAuth } from '@/contexts/AuthContext'
+import { useFeatures } from '@/contexts/FeatureContext'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -42,7 +42,6 @@ import {
 } from '@/components/ui/dialog'
 import PromptPreviewDialog from './PromptPreviewDialog'
 import AiPromptChatModal from './AiPromptChatModal'
-import PremiumRequiredModal from '@/components/ui/PremiumRequiredModal'
 
 interface BindingFormState {
   id?: number
@@ -107,9 +106,6 @@ export default function PromptManager() {
   // AI Prompt Chat Modal
   const [aiChatModalOpen, setAiChatModalOpen] = useState(false)
 
-  // Premium Modal
-  const [premiumModalOpen, setPremiumModalOpen] = useState(false)
-
   // Variables Reference Modal
   const [variablesRefModalOpen, setVariablesRefModalOpen] = useState(false)
   const [variablesRefContent, setVariablesRefContent] = useState<string>('')
@@ -122,8 +118,7 @@ export default function PromptManager() {
     setVariablesRefLang('')
   }, [i18n.language])
 
-  // Auth context
-  const { user, membership } = useAuth()
+  const { entitlements } = useFeatures()
 
   const selectedTemplate = useMemo(
     () => templates.find((tpl) => tpl.id === selectedId) || null,
@@ -384,20 +379,17 @@ export default function PromptManager() {
   }
 
   const handleAiWriteClick = () => {
-    // Check if user is logged in
-    if (!user) {
-      toast.error('Please log in to use this feature')
+    if (!entitlements.canUsePromptGenerator) {
+      toast.error('AI Prompt Generator is disabled by local feature configuration')
       return
     }
 
-    // Limited Time Free - skip premium check
-    // Open AI generator
-    setAiChatModalOpen(true)
-  }
+    if (!selectedTemplate) {
+      toast.error('Create or select a prompt template first')
+      return
+    }
 
-  const handleSubscribe = () => {
-    setPremiumModalOpen(false)
-    window.open('https://www.akooi.com/#pricing-section', '_blank')
+    setAiChatModalOpen(true)
   }
 
   const handleOpenVariablesRef = async () => {
@@ -440,9 +432,9 @@ export default function PromptManager() {
         {/* LEFT COLUMN - Template Selection + Edit Area */}
         <div className="flex-1 flex flex-col h-full gap-4 overflow-hidden">
           <Card className="flex-1 flex flex-col h-full overflow-hidden">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
+            <CardHeader className="space-y-3">
+              <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                <div className="flex flex-wrap items-center gap-2">
                   <CardTitle className="text-base">{t('prompt.templateEditor', 'Prompt Template Editor')}</CardTitle>
                   <Button
                     size="sm"
@@ -458,7 +450,7 @@ export default function PromptManager() {
                     </a>
                   </Button>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <Button
                     size="sm"
                     variant="outline"
@@ -485,6 +477,24 @@ export default function PromptManager() {
                     </Button>
                   )}
                 </div>
+              </div>
+              <div className="flex flex-col gap-3 rounded-md border bg-muted/30 p-3 md:flex-row md:items-center md:justify-between">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-foreground">
+                    {t('prompt.editAndGenerateHere', 'Prompt editing and AI generation are here')}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {t('prompt.editAndGenerateHint', 'Manual edit: choose or create a template, edit Template Text, then Save Template. AI generator writes into the selected template.')}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={handleAiWriteClick}
+                  disabled={!selectedTemplate || saving || !entitlements.canUsePromptGenerator}
+                  className="shrink-0 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white border-0 shadow-md hover:shadow-lg transition-all"
+                >
+                  ✨ {t('prompt.aiPromptGenerator', 'AI Prompt Generator')}
+                </Button>
               </div>
             </CardHeader>
             <CardContent className="flex flex-col gap-4 h-[100%] flex-1 overflow-hidden">
@@ -563,7 +573,7 @@ export default function PromptManager() {
                 <div className="flex gap-2">
                   <Button
                     onClick={handleAiWriteClick}
-                    disabled={!selectedTemplate || saving}
+                    disabled={!selectedTemplate || saving || !entitlements.canUsePromptGenerator}
                     className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white border-0 shadow-lg hover:shadow-xl transition-all"
                   >
                     ✨ {t('prompt.aiWritePrompt', 'AI Write Strategy Prompt')}
@@ -812,15 +822,6 @@ export default function PromptManager() {
         promptName={selectedTemplate?.name}
       />
 
-      {/* Premium Required Modal */}
-      <PremiumRequiredModal
-        isOpen={premiumModalOpen}
-        onClose={() => setPremiumModalOpen(false)}
-        onSubscribe={handleSubscribe}
-        featureName="AI Strategy Prompt Generator"
-        description="Let AI help you write professional trading strategy prompts with natural language conversation."
-      />
-
       {/* Variables Reference Modal */}
       <Dialog open={variablesRefModalOpen} onOpenChange={setVariablesRefModalOpen}>
         <DialogContent className="max-w-5xl max-h-[80vh] overflow-hidden flex flex-col">
@@ -857,12 +858,13 @@ export default function PromptManager() {
                     setVariablesRefModalOpen(false)
                     handleAiWriteClick()
                   }}
+                  disabled={!selectedTemplate || !entitlements.canUsePromptGenerator}
                   className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white border-0 shadow-md hover:shadow-lg transition-all text-xs"
                 >
                   ✨ {t('prompt.tryAiWrite', 'Try AI Write')}
                 </Button>
                 <p className="text-[10px] text-muted-foreground mt-2 text-center">
-                  {t('prompt.premiumFeature', 'Premium feature')}
+                  {t('prompt.localFeature', 'Local feature')}
                 </p>
               </div>
             </div>

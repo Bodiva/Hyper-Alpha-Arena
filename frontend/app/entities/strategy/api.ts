@@ -58,6 +58,24 @@ interface BackendStrategyEvidenceResponse {
   limit: number;
 }
 
+interface BackendLeaderboardListResponse {
+  items: BackendLeaderboardItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+interface BackendLeaderboardItem extends LeaderboardItem {
+  runtimeQualityScore?: number;
+  completedRuns?: number;
+  failedRuns?: number;
+  averageConfidence?: number;
+  evidenceCount?: number;
+  reportCount?: number;
+  riskWarnings?: number;
+  decisionCount?: number;
+}
+
 interface BackendBacktestSummary extends Partial<BacktestSummary> {
   startDate: string;
   endDate: string;
@@ -382,4 +400,15 @@ export const getStrategyEvidenceAsync = async (strategyId: string, delayMs?: num
 };
 
 export const listLeaderboardAsync = (params: ListLeaderboardParams = {}, delayMs?: number): Promise<LeaderboardItem[]> =>
-  mockDelay(listLeaderboard(params), delayMs);
+  shouldUseMockData()
+    ? mockDelay(listLeaderboard(params), delayMs)
+    : httpClient
+        .get<BackendLeaderboardListResponse>(ENDPOINTS.alphaTraceLeaderboard, {
+          params: {
+            strategyId: params.strategyId,
+            assetType: params.assetType,
+            style: params.style,
+            limit: 100,
+          },
+        })
+        .then((response) => response.items);

@@ -6,6 +6,7 @@ export type AgentRunStepId =
   | "market_view"
   | "bull_view"
   | "bear_view"
+  | "research_manager"
   | "risk_review"
   | "final_decision";
 
@@ -40,6 +41,7 @@ const STEP_DEFINITIONS: Array<Pick<AgentRunProgressStep, "stepId" | "label">> = 
   { stepId: "market_view", label: "Market View" },
   { stepId: "bull_view", label: "Bull View" },
   { stepId: "bear_view", label: "Bear View" },
+  { stepId: "research_manager", label: "Research Manager" },
   { stepId: "risk_review", label: "Risk Review" },
   { stepId: "final_decision", label: "Final Decision" },
 ];
@@ -95,9 +97,11 @@ const markReportFallback = (stepsById: Map<AgentRunStepId, AgentRunProgressStep>
         ? "bull_view"
         : text.includes("bear view")
           ? "bear_view"
-          : text.includes("risk review")
-            ? "risk_review"
-            : undefined;
+          : text.includes("research manager") || text.includes("research synthesis")
+            ? "research_manager"
+            : text.includes("risk review")
+              ? "risk_review"
+              : undefined;
 
     if (target) {
       const step = stepsById.get(target);
@@ -115,6 +119,7 @@ const inferStepIdFromContent = (content: string): AgentRunStepId | undefined => 
   if (text.includes("market view") || content.includes("市场")) return "market_view";
   if (text.includes("bull view") || content.includes("正方")) return "bull_view";
   if (text.includes("bear view") || content.includes("反方")) return "bear_view";
+  if (text.includes("research manager") || text.includes("research synthesis") || content.includes("研究经理")) return "research_manager";
   if (text.includes("risk review") || content.includes("风险")) return "risk_review";
   if (text.includes("final decision") || content.includes("最终") || content.includes("建议")) return "final_decision";
   return undefined;
@@ -141,7 +146,94 @@ const buildLiveOutputsByStep = (events: AgentRuntimeEvent[]): Map<AgentRunStepId
   });
   return outputs;
 };
-const buildTimelineFromEvents = (events: AgentRuntimeEvent[]): AgentRuntimeTimelineItem[] =>
+
+const isStreamingChunkEvent = (event: AgentRuntimeEvent): boolean => {
+  if (event.type !== "reasoning.chunk" && event.type !== "debate.message") return false;
+  const payload = payloadRecord(event);
+  return payload.streaming === true && typeof payload.content === "string";
+};
+
+const buildTimelineFromEvents = (events: AgentRuntimeEvent[]): AgentRuntimeTimelineItem[] => {
+  const items: AgentRuntimeTimelineItem[] = [];
+  const streamingGroups = new Map<
+    string,
+    {
+      event: AgentRuntimeEvent;
+      count: number;
+      contentLength: number;
+      tail: string;
+    }
+  >();
+
+  [...events]
+    .sort((a, b) => a.sequence - b.sequence)
+    .forEach((event) => {
+      if (!isStreamingChunkEvent(event)) return;
+      const payload = payloadRecord(event);
+      const stepId = stepIdFromEvent(event) ?? "unknown";
+      const key = `${stepId}:${event.agentName ?? "System"}:${event.type}`;
+      const content = String(payload.content ?? "");
+      const current = streamingGroups.get(key);
+      if (current) {
+        current.event = event;
+        current.count += 1;
+        current.contentLength += content.length;
+        current.tail = `${current.tail}${content}`.slice(-260);
+      } else {
+        streamingGroups.set(key, {
+          event,
+          count: 1,
+          contentLength: content.length,
+          tail: content.slice(-260),
+        });
+      }
+    });
+
+  [...events]
+    .sort((a, b) => a.sequence - b.sequence)
+    .forEach((event) => {
+      if (isStreamingChunkEvent(event)) return;
+      const payload = payloadRecord(event);
+      const summary =
+        typeof payload.summary === "string"
+          ? payload.summary
+          : typeof payload.content === "string"
+            ? payload.content
+            : typeof payload.title === "string"
+              ? payload.title
+              : typeof payload.error === "string"
+                ? payload.error
+                : event.type;
+
+      items.push({
+        eventId: event.eventId,
+        type: event.type,
+        timestamp: event.timestamp,
+        agentName: event.agentName,
+        summary,
+      });
+    });
+
+  streamingGroups.forEach((group, key) => {
+    const stepId = stepIdFromEvent(group.event);
+    const stepLabel = stepId ? STEP_DEFINITIONS.find((step) => step.stepId === stepId)?.label : undefined;
+    const compactTail = group.tail.replace(/\s+/g, " ").trim();
+    items.push({
+      eventId: `stream-${key}`,
+      type: "live.output",
+      timestamp: group.event.timestamp,
+      agentName: group.event.agentName,
+      summary: `${stepLabel ? `${stepLabel}: ` : ""}Live output streamed ${group.count} chunks / ${group.contentLength} chars.${compactTail ? ` Latest: ${compactTail}` : ""}`,
+    });
+  });
+
+  return items.sort((a, b) => a.timestamp.localeCompare(b.timestamp)).slice(-120);
+};
+
+const buildTimelineFromSnapshot = (timeline: AgentRuntimeTimelineItem[] | undefined): AgentRuntimeTimelineItem[] =>
+  (timeline ?? []).filter((event) => event.type !== "reasoning.chunk" && event.type !== "debate.message");
+
+const buildTimelineFromLegacyEvents = (events: AgentRuntimeEvent[]): AgentRuntimeTimelineItem[] =>
   events.map((event) => {
     const payload = payloadRecord(event);
     const summary =
@@ -223,6 +315,14 @@ export const buildAgentRunProgress = ({
       if (event.type === "report.generated" || event.type === "debate.message") markCompleted(bearStep, event, "Bear View generated");
     }
 
+    const researchManagerStep = stepsById.get("research_manager");
+    if (researchManagerStep && (text.includes("research manager") || text.includes("research synthesis"))) {
+      markStarted(researchManagerStep, event, "Research synthesis in progress");
+      if (event.type === "report.generated" || event.type === "agent.completed") {
+        markCompleted(researchManagerStep, event, "Research Manager synthesis generated");
+      }
+    }
+
     const riskStep = stepsById.get("risk_review");
     if (riskStep && (text.includes("risk review") || text.includes("risk analyst") || event.type === "risk.warning")) {
       markStarted(riskStep, event, "Risk review in progress");
@@ -288,7 +388,7 @@ export const buildAgentRunProgress = ({
   const totalSteps = steps.length;
   const percent = totalSteps > 0 ? Math.round((completedCount / totalSteps) * 100) : 0;
   const hasFailed = steps.some((step) => step.status === "failed") || runStatus === "FAILED";
-  const latestTimeline = timeline?.length ? timeline : buildTimelineFromEvents(sortedEvents);
+  const latestTimeline = sortedEvents.length ? buildTimelineFromEvents(sortedEvents) : buildTimelineFromSnapshot(timeline);
   const recentEvents = latestTimeline.slice(-20).reverse();
   const latestEvent = recentEvents[0] ?? null;
   const runningStep = steps.find((step) => step.status === "running");

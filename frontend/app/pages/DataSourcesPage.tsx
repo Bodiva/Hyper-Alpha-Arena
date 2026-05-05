@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import type { AssetType } from "@/entities/asset/model";
+import type { Asset, AssetType } from "@/entities/asset/model";
 import type { DataCategory, DataSource, DataSourceType } from "@/entities/data-source/model";
+import type { Evidence } from "@/entities/evidence/model";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,9 +13,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { listDataSources } from "@/entities/data-source/api";
-import { listEvidence } from "@/entities/evidence/api";
-import { listAssets } from "@/entities/asset/api";
+import { listDataSourcesAsync } from "@/entities/data-source/api";
+import { listEvidenceAsync } from "@/entities/evidence/api";
+import { listAssetsAsync } from "@/entities/asset/api";
 import { getCurrentHashQueryParams, navigateTo } from "@/shared/lib/navigation";
 import ResearchWorkspaceNav from "@/shared/ui/ResearchWorkspaceNav";
 
@@ -117,7 +118,7 @@ const todayDateString = (): string => {
   return `${yyyy}-${mm}-${dd}`;
 };
 
-const findRelatedEvidence = (source: DataSource, evidenceItems: ReturnType<typeof listEvidence>) => {
+const findRelatedEvidence = (source: DataSource, evidenceItems: Evidence[]) => {
   const aliases = new Set([source.name, source.vendor, ...(source.evidenceSources ?? [])]);
   return evidenceItems.filter((evidence) => aliases.has(evidence.sourceName));
 };
@@ -125,7 +126,7 @@ const findRelatedEvidence = (source: DataSource, evidenceItems: ReturnType<typeo
 const findRelatedAssets = (
   source: DataSource,
   relatedEvidenceAssetIds: string[],
-  assets: ReturnType<typeof listAssets>,
+  assets: Asset[],
 ) => {
   const byType = assets.filter((asset) => source.supportedAssetTypes.includes(asset.assetType));
   const byEvidence = assets.filter((asset) => relatedEvidenceAssetIds.includes(asset.id));
@@ -133,9 +134,11 @@ const findRelatedAssets = (
 };
 
 export default function DataSourcesPage() {
-  const dataSources = useMemo(() => listDataSources(), []);
-  const evidenceItems = useMemo(() => listEvidence(), []);
-  const assets = useMemo(() => listAssets(), []);
+  const [dataSources, setDataSources] = useState<DataSource[]>([]);
+  const [evidenceItems, setEvidenceItems] = useState<Evidence[]>([]);
+  const [assets, setAssets] = useState<Asset[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const initialRouteParams = useMemo(() => getCurrentHashQueryParams(), []);
   const linkedSource = initialRouteParams.get("source") ?? undefined;
@@ -148,6 +151,39 @@ export default function DataSourcesPage() {
   const [sourceFilter, setSourceFilter] = useState<string>(linkedSource ?? "ALL");
   const [searchKeyword, setSearchKeyword] = useState<string>(linkedSource ?? "");
   const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = async () => {
+      setIsLoading(true);
+      setLoadError(null);
+      try {
+        const [sources, evidence, assetList] = await Promise.all([
+          listDataSourcesAsync(),
+          listEvidenceAsync({ limit: 100 }),
+          listAssetsAsync({ limit: 100 }),
+        ]);
+        if (cancelled) return;
+        setDataSources(sources);
+        setEvidenceItems(evidence);
+        setAssets(assetList);
+      } catch (error) {
+        if (cancelled) return;
+        setLoadError(error instanceof Error ? error.message : String(error));
+        setDataSources([]);
+        setEvidenceItems([]);
+        setAssets([]);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const sourceOptions = useMemo(() => {
     const names = Array.from(new Set(dataSources.map((source) => source.name))).sort((a, b) => a.localeCompare(b));
@@ -256,6 +292,20 @@ export default function DataSourcesPage() {
           </p>
         </CardHeader>
       </Card>
+
+      {isLoading ? (
+        <Card>
+          <CardContent className="py-4 text-sm text-muted-foreground">正在读取数据源视图...</CardContent>
+        </Card>
+      ) : null}
+
+      {loadError ? (
+        <Card className="border-destructive/40 bg-destructive/5">
+          <CardContent className="py-4 text-sm text-destructive">
+            Data Sources API 加载失败：{loadError}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
         <Card><CardHeader className="pb-2"><CardDescription>数据源总数</CardDescription><CardTitle className="text-lg">{stats.totalSources}</CardTitle></CardHeader></Card>

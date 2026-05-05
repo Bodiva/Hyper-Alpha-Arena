@@ -1,13 +1,13 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { listAssets } from "@/entities/asset/api";
-import { listAgentRuns } from "@/entities/agent/api";
-import { listLeaderboard, listStrategies } from "@/entities/strategy/api";
-import { listEvidence } from "@/entities/evidence/api";
-import { listDecisions } from "@/entities/decision/api";
-import { listPortfolios } from "@/entities/portfolio/api";
-import { listDataSources } from "@/entities/data-source/api";
+import { listAssetsAsync } from "@/entities/asset/api";
+import { listAgentRunsAsync } from "@/entities/agent/api";
+import { listLeaderboardAsync, listStrategiesAsync } from "@/entities/strategy/api";
+import { listEvidenceAsync } from "@/entities/evidence/api";
+import { listDecisionsAsync } from "@/entities/decision/api";
+import { listPortfoliosAsync } from "@/entities/portfolio/api";
+import { listDataSourcesAsync } from "@/entities/data-source/api";
 import {
   BRAND_BADGE,
   PRODUCT_CN_FULL_NAME,
@@ -26,6 +26,28 @@ interface CapabilityCard {
   description: string;
   path: string;
 }
+
+interface DashboardCounts {
+  assets: number;
+  evidence: number;
+  agentRuns: number;
+  strategies: number;
+  portfolios: number;
+  decisions: number;
+  dataSources: number;
+  leaderboard: number;
+}
+
+const EMPTY_COUNTS: DashboardCounts = {
+  assets: 0,
+  evidence: 0,
+  agentRuns: 0,
+  strategies: 0,
+  portfolios: 0,
+  decisions: 0,
+  dataSources: 0,
+  leaderboard: 0,
+};
 
 const WORKFLOW = [
   { title: "Data Sources", desc: "外部数据接入与同步监控", path: "/data-sources" },
@@ -48,15 +70,79 @@ const CAPABILITIES: CapabilityCard[] = [
   { title: "多策略排行榜", description: "多 AI 交易员 / 多策略量化对比", path: "/leaderboard" },
 ];
 
+const MOBILE_MARKET_VIEWS = [
+  {
+    title: "ETF / 指数观察",
+    description: "宽基、行业和主题 ETF 的研究入口",
+    metric: "510300.SH",
+    path: "/assets/asset_etf_510300",
+  },
+  {
+    title: "基金净值跟踪",
+    description: "基金风格、回撤和组合适配观察",
+    metric: "000001.OF",
+    path: "/assets/asset_fund_000001",
+  },
+  {
+    title: "期货结构观察",
+    description: "趋势、持仓量、期限结构和风险提示",
+    metric: "IF 主连",
+    path: "/assets/asset_future_if_main",
+  },
+  {
+    title: "Agent 观点",
+    description: "进入 Agent Lab 查看投研过程",
+    metric: "Qwen Runtime",
+    path: "/agent-lab",
+  },
+];
+
 export default function DashboardPage({ onNavigate }: DashboardPageProps) {
-  const assets = useMemo(() => listAssets(), []);
-  const evidenceItems = useMemo(() => listEvidence(), []);
-  const agentRuns = useMemo(() => listAgentRuns(), []);
-  const strategies = useMemo(() => listStrategies(), []);
-  const portfolios = useMemo(() => listPortfolios(), []);
-  const decisions = useMemo(() => listDecisions(), []);
-  const dataSources = useMemo(() => listDataSources(), []);
-  const leaderboardItems = useMemo(() => listLeaderboard(), []);
+  const [counts, setCounts] = useState<DashboardCounts>(EMPTY_COUNTS);
+  const [isLoadingCounts, setIsLoadingCounts] = useState(true);
+  const [countsError, setCountsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoadingCounts(true);
+    setCountsError(null);
+
+    const safeCount = async (loader: () => Promise<unknown[]>): Promise<number> => {
+      try {
+        return (await loader()).length;
+      } catch (error) {
+        console.warn("[Dashboard] Failed to load dashboard count:", error);
+        return 0;
+      }
+    };
+
+    const loadCounts = async () => {
+      const [assets, evidence, agentRuns, strategies, portfolios, decisions, dataSources, leaderboard] = await Promise.all([
+        safeCount(() => listAssetsAsync({ limit: 100 })),
+        safeCount(() => listEvidenceAsync({ limit: 100 })),
+        safeCount(() => listAgentRunsAsync({ limit: 100 })),
+        safeCount(() => listStrategiesAsync({ limit: 100 })),
+        safeCount(() => listPortfoliosAsync({ limit: 100 })),
+        safeCount(() => listDecisionsAsync({ limit: 100 })),
+        safeCount(() => listDataSourcesAsync({ limit: 100 })),
+        safeCount(() => listLeaderboardAsync({ limit: 100 })),
+      ]);
+
+      if (cancelled) return;
+      setCounts({ assets, evidence, agentRuns, strategies, portfolios, decisions, dataSources, leaderboard });
+      setIsLoadingCounts(false);
+    };
+
+    loadCounts().catch((error) => {
+      if (cancelled) return;
+      setCountsError(error instanceof Error ? error.message : "Failed to load dashboard statistics.");
+      setIsLoadingCounts(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleNavigate = (path: string) => {
     if (onNavigate) {
@@ -68,16 +154,16 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
 
   const stats = useMemo(
     () => [
-      { label: "资产数量", value: assets.length },
-      { label: "证据数量", value: evidenceItems.length },
-      { label: "Agent Run 数量", value: agentRuns.length },
-      { label: "策略数量", value: strategies.length },
-      { label: "组合数量", value: portfolios.length },
-      { label: "决策数量", value: decisions.length },
-      { label: "数据源数量", value: dataSources.length },
-      { label: "Leaderboard 策略数量", value: leaderboardItems.length },
+      { label: "资产数量", value: counts.assets },
+      { label: "证据数量", value: counts.evidence },
+      { label: "Agent Run 数量", value: counts.agentRuns },
+      { label: "策略数量", value: counts.strategies },
+      { label: "组合数量", value: counts.portfolios },
+      { label: "决策数量", value: counts.decisions },
+      { label: "数据源数量", value: counts.dataSources },
+      { label: "Leaderboard 策略数量", value: counts.leaderboard },
     ],
-    [agentRuns.length, assets.length, dataSources.length, decisions.length, evidenceItems.length, leaderboardItems.length, portfolios.length, strategies.length],
+    [counts],
   );
 
   return (
@@ -91,6 +177,46 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
           <p className="text-xs text-muted-foreground">{PRODUCT_DESCRIPTION}</p>
           <p className="text-xs text-muted-foreground">{BRAND_BADGE}</p>
         </CardHeader>
+      </Card>
+
+      <Card className="md:hidden overflow-hidden">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Mobile Market View</CardTitle>
+          <CardDescription>ETF / 基金 / 期货研究入口，不接实时行情</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="rounded-xl border bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 p-4 text-white">
+            <p className="text-xs text-slate-300">AlphaTrace Market Snapshot</p>
+            <p className="mt-2 text-2xl font-semibold">资产研究视图</p>
+            <p className="mt-1 text-xs text-slate-300">静态资产画像 + Evidence + Agent 观点入口</p>
+            <div className="mt-4 h-16 rounded-lg bg-white/10 p-2">
+              <div className="flex h-full items-end gap-1">
+                {[32, 48, 40, 58, 54, 68, 62, 76, 72, 84].map((height, index) => (
+                  <span
+                    key={index}
+                    className="flex-1 rounded-sm bg-emerald-300/80"
+                    style={{ height: `${height}%` }}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-2">
+            {MOBILE_MARKET_VIEWS.map((item) => (
+              <button
+                key={item.title}
+                className="rounded-lg border p-3 text-left transition hover:bg-muted/60"
+                onClick={() => handleNavigate(item.path)}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-medium">{item.title}</p>
+                  <span className="rounded-full bg-muted px-2 py-1 text-[11px] text-muted-foreground">{item.metric}</span>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">{item.description}</p>
+              </button>
+            ))}
+          </div>
+        </CardContent>
       </Card>
 
       <Card>
@@ -127,11 +253,12 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
           <Card key={item.label}>
             <CardHeader className="pb-2">
               <CardDescription>{item.label}</CardDescription>
-              <CardTitle className="text-2xl">{item.value}</CardTitle>
+              <CardTitle className="text-2xl">{isLoadingCounts ? "..." : item.value}</CardTitle>
             </CardHeader>
           </Card>
         ))}
       </div>
+      {countsError ? <p className="text-xs text-destructive">Dashboard statistics unavailable: {countsError}</p> : null}
 
       <Card>
         <CardHeader className="pb-3">

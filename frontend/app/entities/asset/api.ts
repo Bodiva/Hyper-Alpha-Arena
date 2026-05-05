@@ -70,6 +70,61 @@ interface BackendAssetEvidenceResponse {
   limit: number;
 }
 
+export interface AlphaTraceMarketQuote {
+  assetId: string;
+  symbol: string;
+  name: string;
+  assetType: string;
+  market: string;
+  currency: string;
+  price: number;
+  change: number;
+  changePercent: number;
+  volume: number;
+  amount: number;
+  nav?: number | null;
+  premiumDiscount?: number | null;
+  timestamp: string;
+  source: string;
+}
+
+export interface AlphaTraceMarketSnapshot {
+  assetId: string;
+  symbol: string;
+  name: string;
+  assetType: string;
+  market: string;
+  currency: string;
+  quote: AlphaTraceMarketQuote;
+  valuation: Record<string, unknown>;
+  liquidity: Record<string, unknown>;
+  volatility: Record<string, unknown>;
+  trend: Record<string, unknown>;
+  fundFlow: Record<string, unknown>;
+  premiumDiscount: Record<string, unknown>;
+  source: string;
+  collectedAt: string;
+}
+
+export interface AlphaTraceMarketIndicator {
+  assetId: string;
+  symbol: string;
+  name: string;
+  value: number | string;
+  unit?: string | null;
+  interpretation: string;
+  lookbackDays?: number | null;
+  source: string;
+  updatedAt: string;
+}
+
+interface BackendMarketIndicatorResponse {
+  assetId: string;
+  symbol: string;
+  items: AlphaTraceMarketIndicator[];
+  total: number;
+}
+
 const toExtractedFields = (fields: BackendEvidenceItem["extractedFields"]): Evidence["extractedFields"] => {
   if (!fields) return [];
   if (Array.isArray(fields)) {
@@ -217,4 +272,26 @@ export const getAssetEvidenceAsync = async (assetId: string, delayMs?: number): 
 
   const response = await httpClient.get<BackendAssetEvidenceResponse>(ENDPOINTS.alphaTraceAssetEvidence(assetId));
   return response.items.map(mapBackendEvidence);
+};
+
+export const getAssetMarketQuoteAsync = async (assetId: string): Promise<AlphaTraceMarketQuote | undefined> => {
+  if (shouldUseMockData()) {
+    return mockDelay(undefined);
+  }
+  return httpClient.get<AlphaTraceMarketQuote>(ENDPOINTS.alphaTraceMarketQuote(assetId), { timeoutMs: 10000 });
+};
+
+export const getAssetMarketSnapshotAsync = async (assetId: string): Promise<AlphaTraceMarketSnapshot | undefined> => {
+  if (shouldUseMockData()) {
+    return mockDelay(undefined);
+  }
+  return httpClient.get<AlphaTraceMarketSnapshot>(ENDPOINTS.alphaTraceMarketSnapshot(assetId), { timeoutMs: 10000 });
+};
+
+export const getAssetMarketIndicatorsAsync = async (assetId: string): Promise<AlphaTraceMarketIndicator[]> => {
+  if (shouldUseMockData()) {
+    return mockDelay([]);
+  }
+  const response = await httpClient.get<BackendMarketIndicatorResponse>(ENDPOINTS.alphaTraceMarketIndicators(assetId), { timeoutMs: 10000 });
+  return response.items;
 };

@@ -11,7 +11,7 @@ interface FinalDecisionViewProps {
   onEvidenceSelect?: (evidenceId: string) => void;
 }
 
-const TECHNICAL_NOTE_PATTERNS = [/TradingAgents/i, /database-backed/i, /未接入/i, /stub/i];
+const TECHNICAL_NOTE_PATTERNS = [/TradingAgents/i, /database-backed/i, /invalid evidence/i, /Invalid evidence/i, /未接入/i, /stub/i];
 
 const normalizeLine = (value: string): string => value.replace(/^[-*]\s+/, "").replace(/^\d+[.)]\s+/, "").trim();
 

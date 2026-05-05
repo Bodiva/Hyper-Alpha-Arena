@@ -110,9 +110,19 @@ const createSseClient = (options: EventStreamClientOptions): EventStreamClient =
         options.onComplete?.();
       });
 
-      eventSource.addEventListener("done", () => {
+      eventSource.addEventListener("done", (message) => {
         completed = true;
         close();
+        try {
+          const payload = JSON.parse((message as MessageEvent<string>).data) as { message?: string; status?: string };
+          const status = payload.status?.toLowerCase();
+          if (status === "running") {
+            options.onError?.(new Error(payload.message || "Runtime SSE stream ended before the run completed."));
+            return;
+          }
+        } catch {
+          // Some servers may emit an empty done payload; treat it as a normal completion marker.
+        }
         options.onComplete?.();
       });
 

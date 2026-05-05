@@ -95,8 +95,10 @@ def get_profile(db: Session = Depends(get_db)):
 
     return {
         "llm_configured": llm_config.get("configured", False),
-        "llm_provider": profile.llm_provider,
-        "llm_model": profile.llm_model,
+        "llm_api_key_available": bool(llm_config.get("api_key")),
+        "llm_config_source": llm_config.get("source"),
+        "llm_provider": llm_config.get("provider") or profile.llm_provider,
+        "llm_model": llm_config.get("model") or profile.llm_model,
         "llm_base_url": base_url,
         "onboarding_completed": profile.onboarding_completed,
         "nickname": profile.nickname,
@@ -147,6 +149,32 @@ def test_connection(request: TestConnectionRequest):
     )
 
     return result
+
+
+@router.post("/profile/llm/test-current")
+def test_current_llm_configuration(db: Session = Depends(get_db)):
+    """Test the currently saved backend LLM configuration without exposing its API key."""
+    llm_config = get_llm_config(db)
+    if not llm_config.get("configured"):
+        raise HTTPException(status_code=400, detail="LLM configuration is not saved.")
+    if not llm_config.get("api_key"):
+        raise HTTPException(status_code=400, detail="Saved LLM API key is missing or could not be decrypted.")
+
+    result = test_llm_connection(
+        provider=str(llm_config.get("provider") or ""),
+        api_key=str(llm_config.get("api_key") or ""),
+        model=str(llm_config.get("model") or ""),
+        base_url=str(llm_config.get("base_url") or "") or None,
+    )
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error", "Connection test failed"))
+
+    return {
+        "success": True,
+        "provider": llm_config.get("provider"),
+        "model": llm_config.get("model"),
+        "base_url": llm_config.get("base_url"),
+    }
 
 
 @router.post("/profile/llm")
@@ -516,6 +544,7 @@ def list_tools(db: Session = Depends(get_db)):
     for name, meta in EXTERNAL_TOOL_REGISTRY.items():
         tool_cfg = configs.get(name, {})
         has_key = bool(tool_cfg.get("api_key_encrypted"))
+        config_source = tool_cfg.get("source") or ("legacy_hyper_ai_profile" if has_key else "missing")
         tools.append({
             "name": name,
             "display_name": meta["display_name"],
@@ -528,6 +557,8 @@ def list_tools(db: Session = Depends(get_db)):
             "get_url_label": meta.get("get_url_label"),
             "get_url_label_zh": meta.get("get_url_label_zh"),
             "configured": has_key,
+            "api_key_available": has_key,
+            "config_source": config_source,
             "enabled": tool_cfg.get("enabled", False),
         })
     return {"tools": tools}

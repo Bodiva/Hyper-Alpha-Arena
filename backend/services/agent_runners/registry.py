@@ -7,8 +7,8 @@ from services.agent_runners.base import AgentRunnerAdapter, AgentRunnerContext
 
 
 class AgentRunnerNotImplementedError(Exception):
-    def __init__(self, runner_type: str):
-        super().__init__(f"Agent runner '{runner_type}' is not implemented yet.")
+    def __init__(self, runner_type: str, message: str | None = None):
+        super().__init__(message or f"Agent runner '{runner_type}' is not implemented yet.")
         self.runner_type = runner_type
 
 

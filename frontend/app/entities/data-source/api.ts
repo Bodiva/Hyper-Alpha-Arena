@@ -1,9 +1,11 @@
 import type { AssetType } from "../asset/model";
 import type { Evidence } from "../evidence/model";
-import type { DataSource, DataSourceStatus, DataSourceTask, DataSourceType } from "./model";
+import type { DataCategory, DataSource, DataSourceStatus, DataSourceTask, DataSourceType } from "./model";
 import { dataSourcesMock } from "@/mocks/data-sources.mock";
 import { evidenceMock } from "@/mocks/evidence.mock";
 import { shouldUseMockData } from "@/shared/api/api-mode";
+import { ENDPOINTS } from "@/shared/api/endpoints";
+import { httpClient } from "@/shared/api/http-client";
 import { mockDelay } from "@/shared/api/mock-delay";
 
 export interface ListDataSourcesParams {
@@ -11,6 +13,13 @@ export interface ListDataSourcesParams {
   status?: DataSourceStatus;
   assetType?: AssetType;
   keyword?: string;
+}
+
+interface BackendDataSourceListResponse {
+  items: DataSource[];
+  total: number;
+  limit: number;
+  offset?: number;
 }
 
 const normalize = (value: string): string => value.trim().toLowerCase();
@@ -62,7 +71,29 @@ export const getDataSourceEvidence = (sourceName: string): Evidence[] => {
 };
 
 export const listDataSourcesAsync = (params: ListDataSourcesParams = {}, delayMs?: number): Promise<DataSource[]> =>
-  mockDelay(listDataSources(params), delayMs);
+  shouldUseMockData()
+    ? mockDelay(listDataSources(params), delayMs)
+    : listRealDataSources(params);
 
 export const getDataSourceByIdAsync = (sourceId: string, delayMs?: number): Promise<DataSource | undefined> =>
-  mockDelay(getDataSourceById(sourceId), delayMs);
+  shouldUseMockData()
+    ? mockDelay(getDataSourceById(sourceId), delayMs)
+    : httpClient.get<DataSource>(ENDPOINTS.alphaTraceDataSourceDetail(sourceId));
+
+export const getDataSourceTasksAsync = (sourceId: string, delayMs?: number): Promise<DataSourceTask[]> =>
+  shouldUseMockData()
+    ? mockDelay(getDataSourceTasks(sourceId), delayMs)
+    : httpClient.get<DataSourceTask[]>(ENDPOINTS.alphaTraceDataSourceTasks(sourceId));
+
+const listRealDataSources = async (params: ListDataSourcesParams = {}): Promise<DataSource[]> => {
+  const response = await httpClient.get<BackendDataSourceListResponse>(ENDPOINTS.alphaTraceDataSources, {
+    params: {
+      sourceType: params.sourceType,
+      status: params.status,
+      assetType: params.assetType,
+      keyword: params.keyword,
+      limit: 100,
+    },
+  });
+  return response.items ?? [];
+};

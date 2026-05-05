@@ -16,6 +16,14 @@ type StructuredBlock =
 
 const SECTION_TITLES = ["Market View", "Bull View", "Bear View", "Risk Review", "Final Decision", "Watch Indicators"];
 
+const stripStructuredJsonBlocks = (text: string): string => {
+  return text
+    .replace(/```(?:json|JSON)\s*[\s\S]*?```/g, "")
+    .replace(/```(?:json|JSON)\s*[\s\S]*$/g, "")
+    .replace(/^\s*JSON\s*[:：]\s*{[\s\S]*$/i, "")
+    .trim();
+};
+
 const isSectionTitle = (line: string): { text: string; level: 2 | 3 | 4 } | null => {
   const markdownHeading = line.match(/^(#{2,4})\s+(.+)$/);
   if (markdownHeading?.[1] && markdownHeading?.[2]) {
@@ -130,7 +138,7 @@ const parseStructuredText = (text: string): StructuredBlock[] => {
 
 const renderInline = (text: string): ReactNode[] => {
   const nodes: ReactNode[] = [];
-  const pattern = /(\*\*[^*]+\*\*|`[^`]+`|ev_(?:static|qwen)[A-Za-z0-9_-]+|(?<!\*)\*[^*]+\*(?!\*))/g;
+  const pattern = /(\*\*[^*]+\*\*|`[^`]+`|ev_[A-Za-z0-9_-]+|(?<!\*)\*[^*]+\*(?!\*))/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
@@ -177,10 +185,12 @@ const headingClassName = (level: 2 | 3 | 4, compact: boolean): string => {
 };
 
 const StructuredReportView = ({ text, title, className = "", compact = false }: StructuredReportViewProps) => {
-  const content = text?.trim();
+  const originalContent = text?.trim();
+  const content = originalContent ? stripStructuredJsonBlocks(originalContent) : "";
 
   if (!content) {
-    return <p className={`text-muted-foreground ${className}`}>暂无内容。</p>;
+    const jsonOnly = originalContent && !content;
+    return <p className={`text-muted-foreground ${className}`}>{jsonOnly ? "结构化 JSON 已归档到 Reports / Decision 字段。" : "暂无内容。"}</p>;
   }
 
   const blocks = parseStructuredText(content);

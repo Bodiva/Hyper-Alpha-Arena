@@ -1,0 +1,147 @@
+from __future__ import annotations
+
+from typing import Any, Dict, List
+
+
+STATIC_MARKET_DATA_SEED: List[Dict[str, Any]] = [
+    {
+        "assetId": "asset_etf_510300",
+        "symbol": "510300.SH",
+        "name": "沪深300ETF",
+        "assetType": "ETF",
+        "market": "A股",
+        "currency": "CNY",
+        "quote": {
+            "price": 4.128,
+            "change": 0.018,
+            "changePercent": 0.438,
+            "volume": 864_200_000,
+            "amount": 3_568_000_000,
+            "nav": 4.126,
+            "premiumDiscount": 0.048,
+            "timestamp": "2026-04-30T15:00:00+08:00",
+            "source": "alphatrace_static_market_seed",
+        },
+        "snapshot": {
+            "valuation": {"peTtm": 12.8, "pb": 1.35, "percentile3Y": 42, "comment": "估值处于近三年中性偏低区间。"},
+            "liquidity": {"turnoverRank": "high", "avgTurnover20d": 3_220_000_000, "spreadBps": 2.1},
+            "volatility": {"realizedVol20d": 13.6, "realizedVol60d": 15.2, "level": "moderate"},
+            "trend": {"aboveMa20": True, "aboveMa60": True, "momentum": "stable_repair"},
+            "fundFlow": {"netInflow5d": 1_240_000_000, "netInflow20d": 3_860_000_000, "direction": "inflow"},
+            "premiumDiscount": {"current": 0.048, "avg20d": 0.03, "level": "normal"},
+            "collectedAt": "2026-04-30T15:05:00+08:00",
+            "source": "alphatrace_static_market_seed",
+        },
+        "indicators": [
+            {"name": "ma20", "value": 4.06, "unit": "CNY", "interpretation": "价格位于20日均线上方，短期修复趋势仍在。", "lookbackDays": 20},
+            {"name": "ma60", "value": 3.98, "unit": "CNY", "interpretation": "价格位于60日均线上方，中期趋势边际改善。", "lookbackDays": 60},
+            {"name": "volatility20d", "value": 13.6, "unit": "%", "interpretation": "20日波动率处于中等水平，未出现极端波动。", "lookbackDays": 20},
+            {"name": "premiumDiscount", "value": 0.048, "unit": "%", "interpretation": "折溢价处于正常范围，二级市场交易未明显偏离净值。", "lookbackDays": 1},
+        ],
+        "klineBase": {"startTimestamp": 1775059200, "startPrice": 3.92, "dailyStep": 0.007, "volatility": 0.026},
+    },
+    {
+        "assetId": "asset_etf_159915",
+        "symbol": "159915.SZ",
+        "name": "创业板ETF",
+        "assetType": "ETF",
+        "market": "A股",
+        "currency": "CNY",
+        "quote": {
+            "price": 1.932,
+            "change": -0.011,
+            "changePercent": -0.566,
+            "volume": 1_126_000_000,
+            "amount": 2_188_000_000,
+            "nav": 1.934,
+            "premiumDiscount": -0.103,
+            "timestamp": "2026-04-30T15:00:00+08:00",
+            "source": "alphatrace_static_market_seed",
+        },
+        "snapshot": {
+            "valuation": {"peTtm": 28.4, "pb": 3.9, "percentile3Y": 48},
+            "liquidity": {"turnoverRank": "high", "avgTurnover20d": 2_640_000_000, "spreadBps": 2.8},
+            "volatility": {"realizedVol20d": 22.8, "realizedVol60d": 25.1, "level": "high"},
+            "trend": {"aboveMa20": False, "aboveMa60": True, "momentum": "volatile"},
+            "fundFlow": {"netInflow5d": -320_000_000, "netInflow20d": 740_000_000, "direction": "mixed"},
+            "premiumDiscount": {"current": -0.103, "avg20d": -0.04, "level": "normal"},
+            "collectedAt": "2026-04-30T15:05:00+08:00",
+            "source": "alphatrace_static_market_seed",
+        },
+        "indicators": [
+            {"name": "ma20", "value": 1.96, "unit": "CNY", "interpretation": "价格低于20日均线，短期仍有震荡压力。", "lookbackDays": 20},
+            {"name": "volatility20d", "value": 22.8, "unit": "%", "interpretation": "波动率偏高，适合更高风险承受能力账户。", "lookbackDays": 20},
+        ],
+        "klineBase": {"startTimestamp": 1775059200, "startPrice": 1.84, "dailyStep": 0.003, "volatility": 0.035},
+    },
+    {
+        "assetId": "asset_index_000300",
+        "symbol": "000300.SH",
+        "name": "沪深300指数",
+        "assetType": "INDEX",
+        "market": "A股",
+        "currency": "CNY",
+        "quote": {
+            "price": 4138.6,
+            "change": 21.4,
+            "changePercent": 0.52,
+            "volume": 0,
+            "amount": 312_400_000_000,
+            "timestamp": "2026-04-30T15:00:00+08:00",
+            "source": "alphatrace_static_market_seed",
+        },
+        "snapshot": {
+            "valuation": {"peTtm": 12.9, "pb": 1.36, "percentile3Y": 43},
+            "liquidity": {"turnoverRank": "high", "amount20d": 298_000_000_000},
+            "volatility": {"realizedVol20d": 13.8, "level": "moderate"},
+            "trend": {"aboveMa20": True, "aboveMa60": True, "momentum": "stable_repair"},
+            "fundFlow": {"northboundProxy": "neutral", "direction": "stable"},
+            "premiumDiscount": {},
+            "collectedAt": "2026-04-30T15:05:00+08:00",
+            "source": "alphatrace_static_market_seed",
+        },
+        "indicators": [
+            {"name": "ma20", "value": 4072.5, "unit": "index", "interpretation": "指数位于20日均线上方。", "lookbackDays": 20},
+            {"name": "rsi14", "value": 57.2, "unit": "index", "interpretation": "动量中性偏强，未进入过热区间。", "lookbackDays": 14},
+        ],
+        "klineBase": {"startTimestamp": 1775059200, "startPrice": 3926.0, "dailyStep": 7.2, "volatility": 23.0},
+    },
+    {
+        "assetId": "asset_fund_000001",
+        "symbol": "000001.OF",
+        "name": "平衡型基金样例",
+        "assetType": "FUND",
+        "market": "基金",
+        "currency": "CNY",
+        "quote": {
+            "price": 2.184,
+            "change": 0.004,
+            "changePercent": 0.183,
+            "volume": 0,
+            "amount": 0,
+            "nav": 2.184,
+            "timestamp": "2026-04-30T20:00:00+08:00",
+            "source": "alphatrace_static_market_seed",
+        },
+        "snapshot": {
+            "valuation": {"nav": 2.184, "maxDrawdown1Y": 8.7},
+            "liquidity": {"subscriptionRedemption": "T+1", "level": "medium"},
+            "volatility": {"realizedVol60d": 8.6, "level": "low_to_medium"},
+            "trend": {"navTrend60d": "stable"},
+            "fundFlow": {"estimatedNetFlow20d": 120_000_000, "direction": "inflow"},
+            "premiumDiscount": {},
+            "collectedAt": "2026-04-30T20:05:00+08:00",
+            "source": "alphatrace_static_market_seed",
+        },
+        "indicators": [
+            {"name": "nav60dTrend", "value": "stable", "interpretation": "净值近60日平稳，回撤控制优先。", "lookbackDays": 60},
+            {"name": "drawdown1y", "value": 8.7, "unit": "%", "interpretation": "一年最大回撤低于权益宽基。", "lookbackDays": 252},
+        ],
+        "klineBase": {"startTimestamp": 1775059200, "startPrice": 2.12, "dailyStep": 0.002, "volatility": 0.01},
+    },
+]
+
+
+def get_static_market_data_seed() -> List[Dict[str, Any]]:
+    return STATIC_MARKET_DATA_SEED.copy()
+

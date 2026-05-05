@@ -51,6 +51,24 @@ export async function checkRequiredConfigs() {
   return response.json()
 }
 
+export interface FeatureEntitlements {
+  source: string
+  maxSamplingDepth: number
+  canUsePromptGenerator: boolean
+  serviceFeeRate: number
+}
+
+export async function getFeatureEntitlements(): Promise<FeatureEntitlements> {
+  const response = await apiRequest('/features')
+  const data = await response.json()
+  return {
+    source: data.source ?? 'local',
+    maxSamplingDepth: data.max_sampling_depth ?? 10,
+    canUsePromptGenerator: data.can_use_prompt_generator ?? false,
+    serviceFeeRate: data.service_fee_rate ?? 0.03,
+  }
+}
+
 // Crypto-specific API functions
 export async function getCryptoSymbols() {
   const response = await apiRequest('/crypto/symbols')

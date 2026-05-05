@@ -6,11 +6,22 @@ import type { Strategy } from "@/entities/strategy/model";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { getAssetByIdAsync, getAssetEvidenceAsync, listAssetsAsync } from "@/entities/asset/api";
+import {
+  getAssetByIdAsync,
+  getAssetEvidenceAsync,
+  getAssetMarketIndicatorsAsync,
+  getAssetMarketQuoteAsync,
+  getAssetMarketSnapshotAsync,
+  listAssetsAsync,
+  type AlphaTraceMarketIndicator,
+  type AlphaTraceMarketQuote,
+  type AlphaTraceMarketSnapshot,
+} from "@/entities/asset/api";
 import { createDemoAgentRunAsync, getAgentRunsByAssetId } from "@/entities/agent/api";
 import { listStrategies } from "@/entities/strategy/api";
 import { getApiMode } from "@/shared/api/api-mode";
-import { navigateTo } from "@/shared/lib/navigation";
+import { goBackOrDashboard, navigateTo } from "@/shared/lib/navigation";
+import ResearchWorkspaceNav from "@/shared/ui/ResearchWorkspaceNav";
 
 interface AssetDetailPageProps {
   assetId?: string;
@@ -62,6 +73,18 @@ const formatDateTime = (value?: string): string => {
 
 const formatPercent = (value: number, digits = 2): string => `${value.toFixed(digits)}%`;
 const formatNumber = (value: number): string => value.toLocaleString("en-US");
+const formatMarketNumber = (value?: number | null, digits = 2): string =>
+  typeof value === "number" && Number.isFinite(value) ? value.toLocaleString("en-US", { maximumFractionDigits: digits }) : "-";
+
+const formatMarketRecordValue = (record: Record<string, unknown> | undefined, keys: string[]): string => {
+  if (!record) return "-";
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "number") return formatMarketNumber(value);
+    if (typeof value === "string" && value.trim()) return value;
+  }
+  return "-";
+};
 
 const inferRiskLevel = (asset: Asset): "LOW" | "MEDIUM" | "HIGH" => {
   if (asset.assetType === "FUTURE") return "HIGH";
@@ -290,6 +313,11 @@ export default function AssetDetailPage({ assetId }: AssetDetailPageProps) {
   const [isLoadingAsset, setIsLoadingAsset] = useState(true);
   const [assetError, setAssetError] = useState<string | null>(null);
   const [assetNotFound, setAssetNotFound] = useState(false);
+  const [marketQuote, setMarketQuote] = useState<AlphaTraceMarketQuote | undefined>(undefined);
+  const [marketSnapshot, setMarketSnapshot] = useState<AlphaTraceMarketSnapshot | undefined>(undefined);
+  const [marketIndicators, setMarketIndicators] = useState<AlphaTraceMarketIndicator[]>([]);
+  const [isLoadingMarketData, setIsLoadingMarketData] = useState(false);
+  const [marketDataError, setMarketDataError] = useState<string | null>(null);
   const [isCreatingDemoRun, setIsCreatingDemoRun] = useState(false);
   const [demoRunError, setDemoRunError] = useState<string | null>(null);
   const strategies = useMemo(() => {
@@ -305,6 +333,11 @@ export default function AssetDetailPage({ assetId }: AssetDetailPageProps) {
     setIsLoadingAsset(true);
     setAssetError(null);
     setAssetNotFound(false);
+    setMarketQuote(undefined);
+    setMarketSnapshot(undefined);
+    setMarketIndicators([]);
+    setMarketDataError(null);
+    setIsLoadingMarketData(apiMode === "real");
 
     const loadAsset = async () => {
       try {
@@ -322,16 +355,45 @@ export default function AssetDetailPage({ assetId }: AssetDetailPageProps) {
 
         setAsset(targetAsset);
         setRelatedEvidence(await getAssetEvidenceAsync(targetAsset.id));
+
+        if (apiMode === "real") {
+          try {
+            const [quote, snapshot, indicators] = await Promise.all([
+              getAssetMarketQuoteAsync(targetAsset.id),
+              getAssetMarketSnapshotAsync(targetAsset.id),
+              getAssetMarketIndicatorsAsync(targetAsset.id),
+            ]);
+            if (cancelled) return;
+            setMarketQuote(quote);
+            setMarketSnapshot(snapshot);
+            setMarketIndicators(indicators);
+          } catch (error) {
+            if (cancelled) return;
+            setMarketDataError(error instanceof Error ? error.message : "Market data unavailable.");
+          } finally {
+            if (!cancelled) {
+              setIsLoadingMarketData(false);
+            }
+          }
+        } else {
+          setIsLoadingMarketData(false);
+        }
       } catch (error) {
         if (cancelled) return;
         const message = error instanceof Error ? error.message : "Failed to load asset.";
         setAsset(undefined);
         setRelatedEvidence([]);
+        setMarketQuote(undefined);
+        setMarketSnapshot(undefined);
+        setMarketIndicators([]);
         setAssetError(message);
         setAssetNotFound(Boolean(assetId));
       } finally {
         if (!cancelled) {
           setIsLoadingAsset(false);
+          if (apiMode !== "real") {
+            setIsLoadingMarketData(false);
+          }
         }
       }
     };
@@ -341,11 +403,12 @@ export default function AssetDetailPage({ assetId }: AssetDetailPageProps) {
     return () => {
       cancelled = true;
     };
-  }, [assetId]);
+  }, [assetId, apiMode]);
 
   if (isLoadingAsset) {
     return (
       <div className="flex flex-col gap-4 h-full overflow-auto">
+        <ResearchWorkspaceNav />
         <Card>
           <CardContent className="py-12 text-center space-y-2">
             <p className="text-base font-medium">Loading asset...</p>
@@ -359,6 +422,7 @@ export default function AssetDetailPage({ assetId }: AssetDetailPageProps) {
   if (!asset || assetNotFound) {
     return (
       <div className="flex flex-col gap-4 h-full overflow-auto">
+        <ResearchWorkspaceNav />
         <Card>
           <CardHeader>
             <CardTitle className="text-xl">未找到对应资产</CardTitle>
@@ -453,6 +517,7 @@ export default function AssetDetailPage({ assetId }: AssetDetailPageProps) {
 
   return (
     <div className="flex flex-col gap-4 h-full overflow-auto">
+      <ResearchWorkspaceNav />
       <Card>
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -468,6 +533,8 @@ export default function AssetDetailPage({ assetId }: AssetDetailPageProps) {
               <p className="text-xs text-muted-foreground">{asset.description}</p>
             </div>
             <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" onClick={goBackOrDashboard}>返回上一页</Button>
+              <Button size="sm" variant="outline" onClick={() => navigateTo("/dashboard")}>返回 Dashboard</Button>
               <Button size="sm" onClick={handleStartAgentAnalysis} disabled={isCreatingDemoRun}>
                 {isCreatingDemoRun ? "正在创建 Demo Run..." : "发起 Agent 分析"}
               </Button>
@@ -540,6 +607,109 @@ export default function AssetDetailPage({ assetId }: AssetDetailPageProps) {
           </div>
         </CardContent>
       </Card>
+
+      {apiMode === "real" ? (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <CardTitle className="text-base">AlphaTrace Market Data v1</CardTitle>
+                <CardDescription>后端 static market-data seed；不是 legacy BTC feed，也不是实时行情。</CardDescription>
+              </div>
+              <Badge variant="outline">Static Seed</Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3 text-xs">
+            {isLoadingMarketData ? <p className="text-muted-foreground">Loading AlphaTrace market data...</p> : null}
+            {marketDataError ? <p className="text-destructive">Market data unavailable: {marketDataError}</p> : null}
+            {marketQuote ? (
+              <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-2">
+                <div className="rounded border p-2">
+                  <p className="text-muted-foreground">Price</p>
+                  <p className="font-medium">{formatMarketNumber(marketQuote.price, 4)}</p>
+                </div>
+                <div className="rounded border p-2">
+                  <p className="text-muted-foreground">Change</p>
+                  <p className={marketQuote.change >= 0 ? "font-medium text-emerald-600" : "font-medium text-red-600"}>
+                    {formatMarketNumber(marketQuote.change, 4)}
+                  </p>
+                </div>
+                <div className="rounded border p-2">
+                  <p className="text-muted-foreground">Change %</p>
+                  <p className={marketQuote.changePercent >= 0 ? "font-medium text-emerald-600" : "font-medium text-red-600"}>
+                    {formatPercent(marketQuote.changePercent, 2)}
+                  </p>
+                </div>
+                <div className="rounded border p-2">
+                  <p className="text-muted-foreground">Volume</p>
+                  <p className="font-medium">{formatMarketNumber(marketQuote.volume, 0)}</p>
+                </div>
+                <div className="rounded border p-2">
+                  <p className="text-muted-foreground">Amount</p>
+                  <p className="font-medium">{formatMarketNumber(marketQuote.amount, 0)}</p>
+                </div>
+                <div className="rounded border p-2">
+                  <p className="text-muted-foreground">NAV</p>
+                  <p className="font-medium">{formatMarketNumber(marketQuote.nav, 4)}</p>
+                </div>
+                <div className="rounded border p-2">
+                  <p className="text-muted-foreground">Premium</p>
+                  <p className="font-medium">{formatMarketNumber(marketQuote.premiumDiscount, 3)}</p>
+                </div>
+                <div className="rounded border p-2">
+                  <p className="text-muted-foreground">Source</p>
+                  <p className="font-medium">{marketQuote.source}</p>
+                </div>
+              </div>
+            ) : null}
+
+            {marketSnapshot ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2">
+                <div className="rounded border p-2">
+                  <p className="font-medium">Valuation</p>
+                  <p className="text-muted-foreground">PE: {formatMarketRecordValue(marketSnapshot.valuation, ["pe", "peTtm"])}</p>
+                  <p className="text-muted-foreground">PB: {formatMarketRecordValue(marketSnapshot.valuation, ["pb"])}</p>
+                </div>
+                <div className="rounded border p-2">
+                  <p className="font-medium">Liquidity</p>
+                  <p className="text-muted-foreground">Score: {formatMarketRecordValue(marketSnapshot.liquidity, ["score", "liquidityScore"])}</p>
+                  <p className="text-muted-foreground">Turnover: {formatMarketRecordValue(marketSnapshot.liquidity, ["turnover", "turnoverRate"])}</p>
+                </div>
+                <div className="rounded border p-2">
+                  <p className="font-medium">Volatility / Trend</p>
+                  <p className="text-muted-foreground">Vol: {formatMarketRecordValue(marketSnapshot.volatility, ["volatility", "annualizedVolatility"])}</p>
+                  <p className="text-muted-foreground">Trend: {formatMarketRecordValue(marketSnapshot.trend, ["summary", "direction", "trend"])}</p>
+                </div>
+                <div className="rounded border p-2">
+                  <p className="font-medium">Fund Flow</p>
+                  <p className="text-muted-foreground">Flow: {formatMarketRecordValue(marketSnapshot.fundFlow, ["netInflow", "flow", "summary"])}</p>
+                  <p className="text-muted-foreground">Collected: {formatDateTime(marketSnapshot.collectedAt)}</p>
+                </div>
+              </div>
+            ) : null}
+
+            {marketIndicators.length ? (
+              <div className="space-y-2">
+                <p className="font-medium">Indicators</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
+                  {marketIndicators.slice(0, 6).map((indicator) => (
+                    <div key={`${indicator.name}-${indicator.updatedAt}`} className="rounded border p-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="font-medium">{indicator.name}</p>
+                        <Badge variant="outline">
+                          {typeof indicator.value === "number" ? formatMarketNumber(indicator.value, 3) : indicator.value}
+                          {indicator.unit ?? ""}
+                        </Badge>
+                      </div>
+                      <p className="mt-1 text-muted-foreground">{indicator.interpretation}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader className="pb-3">

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 import './index.css'
 import './i18n' // Initialize i18n
@@ -34,7 +34,6 @@ import FactorLibrary from '@/components/factor/FactorLibrary'
 import TraderManagement from '@/components/trader/TraderManagement'
 import { HyperliquidPage } from '@/components/hyperliquid'
 import HyperliquidView from '@/components/hyperliquid/HyperliquidView'
-import PremiumFeaturesView from '@/components/premium/PremiumFeaturesView'
 import KlinesView from '@/components/klines/KlinesView'
 import MobileModelChat from '@/components/mobile/MobileModelChat'
 import MobileDashboard from '@/components/mobile/MobileDashboard'
@@ -63,6 +62,7 @@ import { AuthorizationModal, AgentWalletUpgradeModal } from '@/components/hyperl
 import { ArenaDataProvider } from '@/contexts/ArenaDataContext'
 import { TradingModeProvider, useTradingMode } from '@/contexts/TradingModeContext'
 import { AuthProvider, useAuth } from '@/contexts/AuthContext'
+import { FeatureProvider } from '@/contexts/FeatureContext'
 import { ExchangeProvider } from '@/contexts/ExchangeContext'
 
 interface User {
@@ -117,7 +117,6 @@ const PAGE_TITLES: Record<string, string> = {
   'trader-management': 'AI Trader Management',
   'hyperliquid': 'Manual Trading',
   'klines': 'K-Line Charts',
-  'premium-features': 'Premium Features',
   'model-chat': 'Model Chat',
   'settings': 'Settings',
   'arena-assets': 'Arena Assets',
@@ -143,7 +142,9 @@ const resolvePathToRoute = (pathname: string): RouteTarget | null => {
   if (normalizedPath === '/leaderboard') return { page: 'leaderboard' }
   if (normalizedPath === '/portfolio') return { page: 'portfolio-workspace' }
   if (normalizedPath === '/evidence') return { page: 'evidence-center' }
-  if (normalizedPath === '/data-sources') return { page: 'data-sources' }
+  if (normalizedPath === '/data-sources' || normalizedPath === '/data-source' || normalizedPath === '/datasource') {
+    return { page: 'data-sources' }
+  }
   if (normalizedPath === '/decision-attribution') return { page: 'decision-attribution' }
   if (normalizedPath === '/settings') return { page: 'settings-workbench' }
 
@@ -205,6 +206,8 @@ const getUnknownHashFallback = (hash: string, pathname: string): RouteTarget => 
       'portfolio',
       'leaderboard',
       'data-sources',
+      'data-source',
+      'datasource',
       'settings',
     ].some((prefix) => normalizedHash === prefix || normalizedHash.startsWith(`${prefix}/`))
 
@@ -215,9 +218,40 @@ const getUnknownHashFallback = (hash: string, pathname: string): RouteTarget => 
   return { page: shouldPreferAlphaTraceDashboard ? 'dashboard' : 'hyper-ai' }
 }
 
+const ALPHA_TRACE_PAGE_KEYS = new Set([
+  'dashboard',
+  'asset-research',
+  'asset-detail',
+  'agent-lab',
+  'agent-run-detail',
+  'strategy-lab',
+  'leaderboard',
+  'portfolio-workspace',
+  'evidence-center',
+  'data-sources',
+  'decision-attribution',
+  'settings-workbench',
+])
+
+const resolveRouteFromLocation = (pathname: string, hash: string): RouteTarget | null => {
+  if (pathname === '/callback') return null
+  if (hash) {
+    return resolveHashRoute(hash, pathname) ?? getUnknownHashFallback(hash, pathname)
+  }
+  return parseAlphaTraceRoute(pathname) ?? resolvePathToRoute(pathname)
+}
+
+const isAlphaTraceRouteTarget = (target: RouteTarget | null): boolean => {
+  return !!target && ALPHA_TRACE_PAGE_KEYS.has(target.page)
+}
+
 function App() {
   const { tradingMode } = useTradingMode()
   const { setUser: setAuthUser } = useAuth()
+  const initialRouteTarget = useMemo(() => {
+    return resolveRouteFromLocation(window.location.pathname, window.location.hash.slice(1))
+  }, [])
+  const shouldBypassSplashOnBoot = isAlphaTraceRouteTarget(initialRouteTarget)
   const [user, setUser] = useState<User | null>(null)
   const [account, setAccount] = useState<Account | null>(null)
   const [overview, setOverview] = useState<Overview | null>(null)
@@ -227,8 +261,8 @@ function App() {
   const [aiDecisions, setAiDecisions] = useState<AIDecision[]>([])
   const [allAssetCurves, setAllAssetCurves] = useState<any[]>([])
   const [hyperliquidRefreshKey, setHyperliquidRefreshKey] = useState(0)
-  const [currentPage, setCurrentPage] = useState<string>('hyper-ai')
-  const [routeQuery, setRouteQuery] = useState<string>('')
+  const [currentPage, setCurrentPage] = useState<string>(initialRouteTarget?.page ?? 'hyper-ai')
+  const [routeQuery, setRouteQuery] = useState<string>(initialRouteTarget?.query ?? '')
   const tradingModeRef = useRef(tradingMode)
 
   /**
@@ -259,9 +293,9 @@ function App() {
   }, [])
 
   // Hyper AI states - initialization happens during splash
-  const [showSplash, setShowSplash] = useState(true)
+  const [showSplash, setShowSplash] = useState(() => !shouldBypassSplashOnBoot)
   const [showOnboarding, setShowOnboarding] = useState(false)
-  const [initComplete, setInitComplete] = useState(false)
+  const [initComplete, setInitComplete] = useState(() => shouldBypassSplashOnBoot)
   const initStartedRef = useRef(false)
 
   // Check Hyper AI configuration during splash phase
@@ -286,6 +320,19 @@ function App() {
     setInitComplete(true)
     setShowSplash(false)
   }, [checkHyperAiConfig])
+
+  // AlphaTrace routes do not need the legacy Hyper AI splash gate on refresh.
+  // Keep the config check in the background without forcing onboarding over the workspace.
+  useEffect(() => {
+    if (!shouldBypassSplashOnBoot || initStartedRef.current) return
+    initStartedRef.current = true
+    checkHyperAiConfig()
+      .catch(() => false)
+      .finally(() => {
+        setInitComplete(true)
+        setShowSplash(false)
+      })
+  }, [checkHyperAiConfig, shouldBypassSplashOnBoot])
 
   const handleOnboardingComplete = () => {
     setShowOnboarding(false)
@@ -1038,10 +1085,6 @@ function App() {
           <KlinesView onAccountUpdated={handleAccountUpdated} />
         )}
 
-        {currentPage === 'premium-features' && (
-          <PremiumFeaturesView onAccountUpdated={handleAccountUpdated} onPageChange={handlePageChange} />
-        )}
-
         {currentPage === 'model-chat' && (
           <MobileModelChat />
         )}
@@ -1099,14 +1142,16 @@ function App() {
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <AuthProvider>
-      <ExchangeProvider>
-        <TradingModeProvider>
-          <ArenaDataProvider>
-            <Toaster position="top-right" />
-            <App />
-          </ArenaDataProvider>
-        </TradingModeProvider>
-      </ExchangeProvider>
+      <FeatureProvider>
+        <ExchangeProvider>
+          <TradingModeProvider>
+            <ArenaDataProvider>
+              <Toaster position="top-right" />
+              <App />
+            </ArenaDataProvider>
+          </TradingModeProvider>
+        </ExchangeProvider>
+      </FeatureProvider>
     </AuthProvider>
   </React.StrictMode>,
 )

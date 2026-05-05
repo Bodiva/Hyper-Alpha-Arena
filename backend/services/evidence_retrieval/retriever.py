@@ -4,6 +4,7 @@ import re
 from typing import Iterable, List, Tuple
 
 from schemas.alpha_trace_agent_runtime import EvidenceReference
+from services.evidence_retrieval.external_search import ExternalEvidenceSearch, ExternalSearchResult
 from services.evidence_retrieval.static_evidence_seed import EvidenceItem, get_static_evidence_seed
 
 
@@ -43,14 +44,29 @@ QUESTION_HINTS = [
 class EvidenceRetriever:
     def __init__(self, seed: Iterable[EvidenceItem] | None = None) -> None:
         self._seed = list(seed or get_static_evidence_seed())
+        self.last_external_search: ExternalSearchResult | None = None
 
-    def retrieve(self, asset_id: str | None, question: str, task_type: str, limit: int = 5) -> List[EvidenceItem]:
+    def retrieve(
+        self,
+        asset_id: str | None,
+        question: str,
+        task_type: str,
+        limit: int = 5,
+        include_external: bool = True,
+    ) -> List[EvidenceItem]:
         scored: List[Tuple[float, EvidenceItem]] = []
         query_terms = self._extract_query_terms(question)
         normalized_asset_id = (asset_id or "").lower()
         preferred_types = TASK_TYPE_HINTS.get(task_type, set())
+        all_items = list(self._seed)
 
-        for item in self._seed:
+        self.last_external_search = None
+        if include_external:
+            external_result = ExternalEvidenceSearch().search(asset_id=asset_id, question=question, task_type=task_type, limit=limit)
+            self.last_external_search = external_result
+            all_items.extend(external_result.items)
+
+        for item in all_items:
             score = item.qualityScore * 0.1 + item.reliabilityScore * 0.05
             related_assets = [asset.lower() for asset in item.relatedAssetIds]
             if normalized_asset_id and normalized_asset_id in related_assets:
@@ -65,12 +81,23 @@ class EvidenceRetriever:
 
             if item.evidenceType in preferred_types:
                 score += 12
+            if item.sourceType == "bocha_search":
+                score += 10
 
             if score > 0:
                 scored.append((score, item))
 
         scored.sort(key=lambda pair: (pair[0], pair[1].qualityScore, pair[1].reliabilityScore), reverse=True)
-        return [item for _, item in scored[: max(1, limit)]]
+        deduped: List[EvidenceItem] = []
+        seen = set()
+        for _, item in scored:
+            if item.evidenceId in seen:
+                continue
+            deduped.append(item)
+            seen.add(item.evidenceId)
+            if len(deduped) >= max(1, limit):
+                break
+        return deduped
 
     @staticmethod
     def _extract_query_terms(question: str) -> List[str]:

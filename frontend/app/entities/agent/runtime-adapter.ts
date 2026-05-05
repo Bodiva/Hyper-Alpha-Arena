@@ -66,6 +66,9 @@ const summarizeRuntimeEvent = (event: AgentRuntimeEvent): string => {
     case "evidence.linked":
       return isEvidencePayload(event.payload) ? `Evidence linked: ${event.payload.evidenceIds.join(", ")}` : "Evidence linked";
     case "metric.updated":
+      if (isMetricPayload(event.payload) && typeof event.payload.metrics.totalTokens === "number") {
+        return `Runtime metrics updated · tokens ${Math.round(event.payload.metrics.totalTokens).toLocaleString("en-US")}`;
+      }
       return "Runtime metrics updated";
     case "checkpoint.created":
       return "label" in event.payload ? `Checkpoint: ${event.payload.label}` : "Checkpoint created";

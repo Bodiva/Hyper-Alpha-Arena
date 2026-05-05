@@ -4,7 +4,7 @@ import type { Asset, AssetType } from "@/entities/asset/model";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { listEvidenceAsync } from "@/entities/evidence/api";
+import { getEvidenceByIdAsync, listEvidenceAsync } from "@/entities/evidence/api";
 import { listAssetsAsync } from "@/entities/asset/api";
 import { listAgentRuns } from "@/entities/agent/api";
 import { listDecisions } from "@/entities/decision/api";
@@ -28,6 +28,8 @@ const EVIDENCE_TYPE_FILTERS: EvidenceTypeFilter[] = [
   "market_snapshot",
   "industry_data",
   "user_upload",
+  "external_search",
+  "runtime_context",
 ];
 
 const EVIDENCE_TYPE_LABEL: Record<EvidenceTypeFilter, string> = {
@@ -40,6 +42,8 @@ const EVIDENCE_TYPE_LABEL: Record<EvidenceTypeFilter, string> = {
   market_snapshot: "行情快照",
   industry_data: "产业数据",
   user_upload: "用户上传",
+  external_search: "外部搜索",
+  runtime_context: "运行上下文",
 };
 
 const ASSET_TYPE_FILTERS: AssetTypeFilter[] = ["ALL", "ETF", "FUND", "FUTURE", "INDEX"];
@@ -76,6 +80,33 @@ const scoreVariant = (score: number): "default" | "secondary" | "destructive" =>
   if (score >= 85) return "default";
   if (score >= 70) return "secondary";
   return "destructive";
+};
+
+const hasSourceUrl = (url?: string): url is string => {
+  return Boolean(url && /^https?:\/\//i.test(url));
+};
+
+const metadataText = (metadata: Record<string, unknown> | undefined, key: string): string | undefined => {
+  const value = metadata?.[key];
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+};
+
+const metadataNumber = (metadata: Record<string, unknown> | undefined, key: string): number | undefined => {
+  const value = metadata?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+};
+
+const sourceTypeLabel = (sourceType?: string): string => {
+  if (!sourceType) return "unknown source";
+  if (sourceType === "bocha_search") return "Bocha Search";
+  if (sourceType === "agent_run") return "Agent Run";
+  if (sourceType === "static_seed") return "Static Seed";
+  return sourceType;
+};
+
+const supportStatusLabel = (status?: string): string => {
+  if (!status) return "support not scored";
+  return status.replace(/_/g, " ");
 };
 
 const qualityPass = (score: number, filter: QualityFilter): boolean => {
@@ -132,10 +163,14 @@ export default function EvidenceCenterPage() {
         limit: 100,
       }),
       listAssetsAsync({ limit: 100 }),
+      linkedEvidenceId ? getEvidenceByIdAsync(linkedEvidenceId).catch(() => undefined) : Promise.resolve(undefined),
     ])
-      .then(([items, assetItems]) => {
+      .then(([items, assetItems, linkedEvidence]) => {
         if (cancelled) return;
-        setEvidenceItems(items);
+        const mergedItems = linkedEvidence && !items.some((item) => item.id === linkedEvidence.id)
+          ? [linkedEvidence, ...items]
+          : items;
+        setEvidenceItems(mergedItems);
         setAssets(assetItems);
       })
       .catch((error) => {
@@ -154,20 +189,27 @@ export default function EvidenceCenterPage() {
     return () => {
       cancelled = true;
     };
-  }, [linkedAssetId, linkedSource]);
+  }, [linkedAssetId, linkedEvidenceId, linkedSource]);
 
   const assetById = useMemo(() => new Map(assets.map((asset) => [asset.id, asset])), [assets]);
 
   const decisionIdsByEvidence = useMemo(() => {
     const map = new Map<string, string[]>();
+    evidenceItems.forEach((item) => {
+      if (item.usedByDecisionIds?.length) {
+        map.set(item.id, [...item.usedByDecisionIds]);
+      }
+    });
     decisions.forEach((decision) => {
       decision.evidenceIds.forEach((evidenceId) => {
         const current = map.get(evidenceId) ?? [];
-        map.set(evidenceId, [...current, decision.decisionId]);
+        if (!current.includes(decision.decisionId)) {
+          map.set(evidenceId, [...current, decision.decisionId]);
+        }
       });
     });
     return map;
-  }, [decisions]);
+  }, [decisions, evidenceItems]);
 
   const runIdsByEvidence = useMemo(() => {
     const map = new Map<string, string[]>();
@@ -441,6 +483,8 @@ export default function EvidenceCenterPage() {
                 .map((assetId) => assetById.get(assetId))
                 .filter((asset): asset is NonNullable<typeof asset> => Boolean(asset));
               const lowSignal = item.qualityScore < 70 || item.reliabilityScore < 70;
+              const supportScore = metadataNumber(item.metadata, "evidenceSupportScore");
+              const supportStatus = metadataText(item.metadata, "evidenceSupportStatus");
 
               return (
                 <Card key={item.id} className={lowSignal ? "border-red-300/70" : ""}>
@@ -452,8 +496,14 @@ export default function EvidenceCenterPage() {
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <Badge variant="outline">{EVIDENCE_TYPE_LABEL[item.evidenceType]}</Badge>
+                        <Badge variant="outline">{sourceTypeLabel(item.sourceType)}</Badge>
                         <Badge variant={scoreVariant(item.qualityScore)}>质量 {item.qualityScore}</Badge>
                         <Badge variant={scoreVariant(item.reliabilityScore)}>可信度 {item.reliabilityScore}</Badge>
+                        {supportScore !== undefined && (
+                          <Badge variant={supportScore >= 0.6 ? "secondary" : "destructive"}>
+                            支撑度 {(supportScore * 100).toFixed(0)}% · {supportStatusLabel(supportStatus)}
+                          </Badge>
+                        )}
                       </div>
                     </div>
                   </CardHeader>
@@ -505,6 +555,13 @@ export default function EvidenceCenterPage() {
                       <Button size="sm" variant={selectedEvidenceId === item.id ? "default" : "outline"} onClick={() => setSelectedEvidenceId(item.id)}>
                         查看详情
                       </Button>
+                      {hasSourceUrl(item.url) ? (
+                        <Button size="sm" variant="outline" asChild>
+                          <a href={item.url} target="_blank" rel="noreferrer">
+                            打开来源网页
+                          </a>
+                        </Button>
+                      ) : null}
                       <Button
                         size="sm"
                         variant="outline"
@@ -539,14 +596,75 @@ export default function EvidenceCenterPage() {
                     <p className="font-medium">{selectedEvidence.title}</p>
                     <div className="flex flex-wrap gap-2">
                       <Badge variant="outline">{EVIDENCE_TYPE_LABEL[selectedEvidence.evidenceType]}</Badge>
+                      <Badge variant="outline">{sourceTypeLabel(selectedEvidence.sourceType)}</Badge>
                       <Badge variant={scoreVariant(selectedEvidence.qualityScore)}>质量 {selectedEvidence.qualityScore}</Badge>
                       <Badge variant={scoreVariant(selectedEvidence.reliabilityScore)}>可信度 {selectedEvidence.reliabilityScore}</Badge>
+                      {metadataNumber(selectedEvidence.metadata, "evidenceSupportScore") !== undefined && (
+                        <Badge variant={(metadataNumber(selectedEvidence.metadata, "evidenceSupportScore") ?? 0) >= 0.6 ? "secondary" : "destructive"}>
+                          支撑度 {((metadataNumber(selectedEvidence.metadata, "evidenceSupportScore") ?? 0) * 100).toFixed(0)}% · {supportStatusLabel(metadataText(selectedEvidence.metadata, "evidenceSupportStatus"))}
+                        </Badge>
+                      )}
                     </div>
                     <p className="text-muted-foreground">来源：{selectedEvidence.sourceName}</p>
-                    <p className="text-muted-foreground">URL：{selectedEvidence.url}</p>
+                    <div className="rounded border bg-muted/30 p-2">
+                      <p className="font-medium">Governance / Provenance</p>
+                      <p className="text-muted-foreground">Source type: {sourceTypeLabel(selectedEvidence.sourceType)}</p>
+                      <p className="text-muted-foreground">
+                        Provenance: {metadataText(selectedEvidence.metadata, "provenanceStatus") ?? "unknown"}
+                      </p>
+                      <p className="text-muted-foreground">
+                        {metadataText(selectedEvidence.metadata, "governanceNote") ?? "No additional governance note recorded."}
+                      </p>
+                      {metadataText(selectedEvidence.metadata, "lastGovernanceEventType") && (
+                        <p className="text-muted-foreground">
+                          Last governance event: {metadataText(selectedEvidence.metadata, "lastGovernanceEventType")}
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-muted-foreground">Canonical Source URL</p>
+                        {selectedEvidence.sourceType === "bocha_search" ? (
+                          <Badge variant="outline">Bocha external search result</Badge>
+                        ) : null}
+                      </div>
+                      {hasSourceUrl(selectedEvidence.url) ? (
+                        <div className="rounded border bg-background p-2">
+                          <a
+                            href={selectedEvidence.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="block break-all text-blue-600 hover:underline"
+                          >
+                            {selectedEvidence.url}
+                          </a>
+                          <p className="mt-1 text-muted-foreground">
+                            该 URL 是证据的 canonical source。内嵌预览只是 best-effort，若为空请以原网页为准。
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="break-all text-muted-foreground">{selectedEvidence.url || "无来源 URL"}</p>
+                      )}
+                    </div>
                     <p className="text-muted-foreground">发布时间：{formatDateTime(selectedEvidence.publishedAt)}</p>
                     <p className="text-muted-foreground">采集时间：{formatDateTime(selectedEvidence.collectedAt)}</p>
                     <p className="text-muted-foreground">摘要：{selectedEvidence.summary}</p>
+
+                    {hasSourceUrl(selectedEvidence.url) ? (
+                      <details className="rounded border p-2">
+                        <summary className="cursor-pointer font-medium">内嵌网页预览</summary>
+                        <p className="mt-2 text-muted-foreground">
+                          若目标站点设置了 X-Frame-Options 或 CSP，预览可能为空；此时请使用上方来源链接打开原网页。
+                        </p>
+                        <iframe
+                          title={`Evidence source preview ${selectedEvidence.id}`}
+                          src={selectedEvidence.url}
+                          className="mt-2 h-[420px] w-full rounded border bg-white"
+                          sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+                          referrerPolicy="no-referrer"
+                        />
+                      </details>
+                    ) : null}
 
                     <div className="space-y-1">
                       <p className="font-medium">相关资产</p>

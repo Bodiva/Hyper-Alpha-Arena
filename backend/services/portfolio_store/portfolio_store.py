@@ -10,6 +10,7 @@ from schemas.alpha_trace_portfolio import (
 )
 from schemas.alpha_trace_strategy import AlphaTraceStrategyItem
 from services.asset_store.asset_store import get_static_asset_store
+from services.domain_store import get_domain_store_type, get_mysql_domain_store
 from services.portfolio_store.static_portfolio_seed import get_static_portfolio_seed
 from services.strategy_store.strategy_store import get_static_strategy_store
 
@@ -128,4 +129,36 @@ class StaticPortfolioStore:
 
 
 def get_static_portfolio_store() -> StaticPortfolioStore:
+    if get_domain_store_type() == "mysql":
+        return MysqlPortfolioStore()
     return StaticPortfolioStore()
+
+
+class MysqlPortfolioStore(StaticPortfolioStore):
+    """Portfolio Store backed by MySQL seed payloads."""
+
+    def __init__(self) -> None:
+        domain_store = get_mysql_domain_store()
+        raw_items = []
+        for item in get_static_portfolio_seed():
+            normalized = dict(item)
+            normalized["positions"] = item.get("holdings", [])
+            normalized["rebalanceSuggestions"] = item.get("rebalanceRecommendations", [])
+            raw_items.append(AlphaTracePortfolioItem.model_validate(normalized).model_dump(mode="json"))
+        domain_store.seed_if_empty(
+            domain_store.portfolios,
+            "portfolio_id",
+            raw_items,
+            lambda item: {
+                "portfolio_id": item["portfolioId"],
+                "risk_level": item.get("riskLevel"),
+                "objective": item.get("objective"),
+                "status": item.get("status"),
+                "updated_at": item.get("updatedAt"),
+            },
+        )
+        self._items = [
+            AlphaTracePortfolioItem.model_validate(item)
+            for item in domain_store.fetch_all(domain_store.portfolios)
+        ]
+        self._by_id = {item.portfolioId: item for item in self._items}

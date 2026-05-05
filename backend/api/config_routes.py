@@ -10,6 +10,7 @@ import logging
 
 from database.connection import SessionLocal
 from database.models import SystemConfig, GlobalSamplingConfig
+from services.feature_entitlements import get_feature_entitlements
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +86,12 @@ async def update_global_sampling_config(payload: dict, db: Session = Depends(get
                 raise HTTPException(
                     status_code=400,
                     detail="sampling_depth must be between 10 and 60"
+                )
+            max_sampling_depth = get_feature_entitlements()["max_sampling_depth"]
+            if sampling_depth > max_sampling_depth:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"sampling_depth exceeds local entitlement limit ({max_sampling_depth})"
                 )
 
         config = db.query(GlobalSamplingConfig).first()

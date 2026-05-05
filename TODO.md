@@ -70,3 +70,18 @@ pnpm lint
 pnpm typecheck
 pnpm test
 ```
+
+## 6. AlphaTrace MVP Freeze
+
+- [x] Task 36: Portfolio Diagnosis Agent Task.
+- [x] Task 37: Decision Store/API and Decision Attribution real mode.
+- [x] Task 38: Leaderboard real mode minimal integration.
+- [x] Task 39: Agent Runtime stability and error fallbacks.
+- [x] Task 40: Demo closure script and checklist.
+- [x] Task 41: Narrow/mobile AlphaTrace Market View layout.
+- [x] Task 42: Qwen JSON structured output parser with text fallback.
+- [x] Task 43: Evidence reference validation.
+- [x] Task 44: TradingAgents adapter design stub only.
+- [x] Task 45: MVP freeze documentation.
+
+Freeze note: do not continue expanding AlphaTrace MVP features in this phase. Use `docs/engineering/21_alpha_trace_mvp_freeze.md` for known limitations and next roadmap planning.

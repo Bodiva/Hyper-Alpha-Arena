@@ -4,10 +4,11 @@ import type { Decision, DecisionAction, DecisionHorizon } from "@/entities/decis
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { listDecisions } from "@/entities/decision/api";
-import { listAssets } from "@/entities/asset/api";
-import { listEvidence } from "@/entities/evidence/api";
-import { listAgentRuns } from "@/entities/agent/api";
+import { listDecisionsAsync } from "@/entities/decision/api";
+import { listAssetsAsync } from "@/entities/asset/api";
+import { listEvidenceAsync } from "@/entities/evidence/api";
+import { listAgentRunsAsync } from "@/entities/agent/api";
+import { getApiMode } from "@/shared/api/api-mode";
 import { getCurrentHashQueryParams, navigateTo } from "@/shared/lib/navigation";
 import ResearchWorkspaceNav from "@/shared/ui/ResearchWorkspaceNav";
 
@@ -101,11 +102,22 @@ const goToRunDetail = (runId: string) => {
   navigateTo(`/agent-lab/runs/${encodeURIComponent(runId)}`);
 };
 
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "object" && error !== null && "message" in error) {
+    return String((error as { message?: unknown }).message);
+  }
+  return String(error);
+};
+
 export default function DecisionAttributionPage() {
-  const decisions = useMemo(() => listDecisions(), []);
-  const assets = useMemo(() => listAssets(), []);
-  const evidenceItems = useMemo(() => listEvidence(), []);
-  const agentRuns = useMemo(() => listAgentRuns(), []);
+  const apiMode = getApiMode();
+  const [decisions, setDecisions] = useState<Decision[]>([]);
+  const [assets, setAssets] = useState<Awaited<ReturnType<typeof listAssetsAsync>>>([]);
+  const [evidenceItems, setEvidenceItems] = useState<Awaited<ReturnType<typeof listEvidenceAsync>>>([]);
+  const [agentRuns, setAgentRuns] = useState<Awaited<ReturnType<typeof listAgentRunsAsync>>>([]);
+  const [isLoadingDecisions, setIsLoadingDecisions] = useState(true);
+  const [decisionError, setDecisionError] = useState<string | null>(null);
 
   const initialRouteParams = useMemo(() => getCurrentHashQueryParams(), []);
   const linkedAssetId = initialRouteParams.get("assetId") ?? undefined;
@@ -121,6 +133,50 @@ export default function DecisionAttributionPage() {
   const [confidenceFilter, setConfidenceFilter] = useState<ConfidenceFilter>("ALL");
   const [searchKeyword, setSearchKeyword] = useState<string>("");
   const [selectedDecisionId, setSelectedDecisionId] = useState<string | null>(linkedDecisionId ?? null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadDecisionContext = async () => {
+      setIsLoadingDecisions(true);
+      setDecisionError(null);
+      try {
+        const [nextDecisions, nextAssets, nextEvidence, nextRuns] = await Promise.all([
+          listDecisionsAsync({
+            assetId: linkedAssetId,
+            runId: linkedRunId,
+            portfolioId: linkedPortfolioId,
+            limit: 200,
+          }),
+          listAssetsAsync({ limit: 200 }),
+          listEvidenceAsync({ limit: 200 }),
+          listAgentRunsAsync({}),
+        ]);
+        if (cancelled) return;
+        setDecisions(nextDecisions);
+        setAssets(nextAssets);
+        setEvidenceItems(nextEvidence);
+        setAgentRuns(nextRuns);
+      } catch (error) {
+        if (cancelled) return;
+        setDecisionError(getErrorMessage(error));
+        setDecisions([]);
+        setAssets([]);
+        setEvidenceItems([]);
+        setAgentRuns([]);
+      } finally {
+        if (!cancelled) {
+          setIsLoadingDecisions(false);
+        }
+      }
+    };
+
+    loadDecisionContext();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [linkedAssetId, linkedPortfolioId, linkedRunId]);
 
   const assetById = useMemo(() => new Map(assets.map((asset) => [asset.id, asset])), [assets]);
   const evidenceById = useMemo(() => new Map(evidenceItems.map((item) => [item.id, item])), [evidenceItems]);
@@ -280,11 +336,30 @@ export default function DecisionAttributionPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-xl">Decision Attribution 决策归因</CardTitle>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle className="text-xl">Decision Attribution 决策归因</CardTitle>
+            <Badge variant={apiMode === "real" ? "default" : "secondary"}>
+              Data Mode: {apiMode === "real" ? "Real API / AgentRun Decision Store" : "Mock"}
+            </Badge>
+          </div>
           <CardDescription>连接投资建议、证据链、Agent Run、实际结果与复盘结论</CardDescription>
           <p className="text-xs text-muted-foreground">让每一次投资判断都能被追踪、解释、复盘和持续改进。</p>
         </CardHeader>
       </Card>
+
+      {isLoadingDecisions ? (
+        <Card>
+          <CardContent className="py-4 text-sm text-muted-foreground">正在加载决策归因数据...</CardContent>
+        </Card>
+      ) : null}
+
+      {decisionError ? (
+        <Card className="border-destructive/40">
+          <CardContent className="py-4 text-sm text-destructive">
+            Decision API 加载失败：{decisionError}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
         <Card><CardHeader className="pb-2"><CardDescription>决策总数</CardDescription><CardTitle className="text-lg">{stats.total}</CardTitle></CardHeader></Card>

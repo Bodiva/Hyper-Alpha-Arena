@@ -37,6 +37,12 @@ export const ENDPOINTS = {
   alphaTraceAgentRunReports: (runId = ":runId") => `/alpha-trace/agent-runs/${runId}/reports`,
   alphaTraceAgentRunEvidence: (runId = ":runId") => `/alpha-trace/agent-runs/${runId}/evidence`,
   alphaTraceAgentRunDecision: (runId = ":runId") => `/alpha-trace/agent-runs/${runId}/decision`,
+  alphaTraceAgentRunCancel: (runId = ":runId") => `/alpha-trace/agent-runs/${runId}/cancel`,
+  alphaTraceAgentRunWorkerArtifacts: (runId = ":runId") => `/alpha-trace/agent-runs/${runId}/worker-artifacts`,
+  alphaTraceAgentRunnerStatus: "/alpha-trace/agent-runs/runners/status",
+  alphaTraceAgentRunnerCapabilities: "/alpha-trace/agent-runs/runners/capabilities",
+  alphaTraceAgentRuntimeLogs: "/alpha-trace/agent-runs/runtime/logs",
+  alphaTraceAgentRuntimeWorkers: "/alpha-trace/agent-runs/runtime/workers",
   alphaTraceDemoAgentRun: "/alpha-trace/agent-runs/demo",
   alphaTraceSubmitAgentRun: "/alpha-trace/agent-runs/submit",
   alphaTraceEvidence: "/alpha-trace/evidence",
@@ -45,10 +51,15 @@ export const ENDPOINTS = {
   alphaTraceAssets: "/alpha-trace/assets",
   alphaTraceAssetDetail: (assetId = ":assetId") => `/alpha-trace/assets/${assetId}`,
   alphaTraceAssetEvidence: (assetId = ":assetId") => `/alpha-trace/assets/${assetId}/evidence`,
+  alphaTraceMarketQuote: (assetId = ":assetId") => `/alpha-trace/market-data/assets/${assetId}/quote`,
+  alphaTraceMarketSnapshot: (assetId = ":assetId") => `/alpha-trace/market-data/assets/${assetId}/snapshot`,
+  alphaTraceMarketKlines: (assetId = ":assetId") => `/alpha-trace/market-data/assets/${assetId}/klines`,
+  alphaTraceMarketIndicators: (assetId = ":assetId") => `/alpha-trace/market-data/assets/${assetId}/indicators`,
   alphaTraceStrategies: "/alpha-trace/strategies",
   alphaTraceStrategyDetail: (strategyId = ":strategyId") => `/alpha-trace/strategies/${strategyId}`,
   alphaTraceStrategyAssets: (strategyId = ":strategyId") => `/alpha-trace/strategies/${strategyId}/assets`,
   alphaTraceStrategyEvidence: (strategyId = ":strategyId") => `/alpha-trace/strategies/${strategyId}/evidence`,
+  alphaTraceLeaderboard: "/alpha-trace/leaderboard",
   alphaTracePortfolios: "/alpha-trace/portfolios",
   alphaTracePortfolioDetail: (portfolioId = ":portfolioId") => `/alpha-trace/portfolios/${portfolioId}`,
   alphaTracePortfolioHoldings: (portfolioId = ":portfolioId") => `/alpha-trace/portfolios/${portfolioId}/holdings`,
@@ -56,6 +67,13 @@ export const ENDPOINTS = {
   alphaTracePortfolioAssets: (portfolioId = ":portfolioId") => `/alpha-trace/portfolios/${portfolioId}/assets`,
   alphaTracePortfolioStrategies: (portfolioId = ":portfolioId") => `/alpha-trace/portfolios/${portfolioId}/strategies`,
   alphaTracePortfolioDecisions: (portfolioId = ":portfolioId") => `/alpha-trace/portfolios/${portfolioId}/decisions`,
+  alphaTraceDecisions: "/alpha-trace/decisions",
+  alphaTraceDecisionDetail: (decisionId = ":decisionId") => `/alpha-trace/decisions/${decisionId}`,
+  alphaTraceDecisionEvidence: (decisionId = ":decisionId") => `/alpha-trace/decisions/${decisionId}/evidence`,
+  alphaTraceDecisionAgentRun: (decisionId = ":decisionId") => `/alpha-trace/decisions/${decisionId}/agent-run`,
+  alphaTraceDataSources: "/alpha-trace/data-sources",
+  alphaTraceDataSourceDetail: (sourceId = ":sourceId") => `/alpha-trace/data-sources/${sourceId}`,
+  alphaTraceDataSourceTasks: (sourceId = ":sourceId") => `/alpha-trace/data-sources/${sourceId}/tasks`,
 } as const;
 
 export const ASSETS = ENDPOINTS.assets;
@@ -96,6 +114,12 @@ export const ALPHA_TRACE_AGENT_RUN_EVENTS_STREAM = ENDPOINTS.alphaTraceAgentRunE
 export const ALPHA_TRACE_AGENT_RUN_REPORTS = ENDPOINTS.alphaTraceAgentRunReports;
 export const ALPHA_TRACE_AGENT_RUN_EVIDENCE = ENDPOINTS.alphaTraceAgentRunEvidence;
 export const ALPHA_TRACE_AGENT_RUN_DECISION = ENDPOINTS.alphaTraceAgentRunDecision;
+export const ALPHA_TRACE_AGENT_RUN_CANCEL = ENDPOINTS.alphaTraceAgentRunCancel;
+export const ALPHA_TRACE_AGENT_RUN_WORKER_ARTIFACTS = ENDPOINTS.alphaTraceAgentRunWorkerArtifacts;
+export const ALPHA_TRACE_AGENT_RUNNER_STATUS = ENDPOINTS.alphaTraceAgentRunnerStatus;
+export const ALPHA_TRACE_AGENT_RUNNER_CAPABILITIES = ENDPOINTS.alphaTraceAgentRunnerCapabilities;
+export const ALPHA_TRACE_AGENT_RUNTIME_LOGS = ENDPOINTS.alphaTraceAgentRuntimeLogs;
+export const ALPHA_TRACE_AGENT_RUNTIME_WORKERS = ENDPOINTS.alphaTraceAgentRuntimeWorkers;
 export const ALPHA_TRACE_DEMO_AGENT_RUN = ENDPOINTS.alphaTraceDemoAgentRun;
 export const ALPHA_TRACE_SUBMIT_AGENT_RUN = ENDPOINTS.alphaTraceSubmitAgentRun;
 export const ALPHA_TRACE_EVIDENCE = ENDPOINTS.alphaTraceEvidence;
@@ -104,10 +128,15 @@ export const ALPHA_TRACE_EVIDENCE_SEARCH = ENDPOINTS.alphaTraceEvidenceSearch;
 export const ALPHA_TRACE_ASSETS = ENDPOINTS.alphaTraceAssets;
 export const ALPHA_TRACE_ASSET_DETAIL = ENDPOINTS.alphaTraceAssetDetail;
 export const ALPHA_TRACE_ASSET_EVIDENCE = ENDPOINTS.alphaTraceAssetEvidence;
+export const ALPHA_TRACE_MARKET_QUOTE = ENDPOINTS.alphaTraceMarketQuote;
+export const ALPHA_TRACE_MARKET_SNAPSHOT = ENDPOINTS.alphaTraceMarketSnapshot;
+export const ALPHA_TRACE_MARKET_KLINES = ENDPOINTS.alphaTraceMarketKlines;
+export const ALPHA_TRACE_MARKET_INDICATORS = ENDPOINTS.alphaTraceMarketIndicators;
 export const ALPHA_TRACE_STRATEGIES = ENDPOINTS.alphaTraceStrategies;
 export const ALPHA_TRACE_STRATEGY_DETAIL = ENDPOINTS.alphaTraceStrategyDetail;
 export const ALPHA_TRACE_STRATEGY_ASSETS = ENDPOINTS.alphaTraceStrategyAssets;
 export const ALPHA_TRACE_STRATEGY_EVIDENCE = ENDPOINTS.alphaTraceStrategyEvidence;
+export const ALPHA_TRACE_LEADERBOARD = ENDPOINTS.alphaTraceLeaderboard;
 export const ALPHA_TRACE_PORTFOLIOS = ENDPOINTS.alphaTracePortfolios;
 export const ALPHA_TRACE_PORTFOLIO_DETAIL = ENDPOINTS.alphaTracePortfolioDetail;
 export const ALPHA_TRACE_PORTFOLIO_HOLDINGS = ENDPOINTS.alphaTracePortfolioHoldings;
@@ -115,3 +144,10 @@ export const ALPHA_TRACE_PORTFOLIO_RECOMMENDATIONS = ENDPOINTS.alphaTracePortfol
 export const ALPHA_TRACE_PORTFOLIO_ASSETS = ENDPOINTS.alphaTracePortfolioAssets;
 export const ALPHA_TRACE_PORTFOLIO_STRATEGIES = ENDPOINTS.alphaTracePortfolioStrategies;
 export const ALPHA_TRACE_PORTFOLIO_DECISIONS = ENDPOINTS.alphaTracePortfolioDecisions;
+export const ALPHA_TRACE_DECISIONS = ENDPOINTS.alphaTraceDecisions;
+export const ALPHA_TRACE_DECISION_DETAIL = ENDPOINTS.alphaTraceDecisionDetail;
+export const ALPHA_TRACE_DECISION_EVIDENCE = ENDPOINTS.alphaTraceDecisionEvidence;
+export const ALPHA_TRACE_DECISION_AGENT_RUN = ENDPOINTS.alphaTraceDecisionAgentRun;
+export const ALPHA_TRACE_DATA_SOURCES = ENDPOINTS.alphaTraceDataSources;
+export const ALPHA_TRACE_DATA_SOURCE_DETAIL = ENDPOINTS.alphaTraceDataSourceDetail;
+export const ALPHA_TRACE_DATA_SOURCE_TASKS = ENDPOINTS.alphaTraceDataSourceTasks;

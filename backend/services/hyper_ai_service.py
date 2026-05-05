@@ -183,8 +183,57 @@ def get_or_create_profile(db: Session) -> HyperAiProfile:
     return profile
 
 
+def _format_llm_config(provider_name: str, model_name: Optional[str], base_url_value: Optional[str], api_key: Optional[str], source: str) -> Dict[str, Any]:
+    provider = get_provider(provider_name)
+    base_url = base_url_value or (provider.base_url if provider else "")
+    model = model_name or (provider.models[0] if provider and provider.models else "")
+
+    if provider_name == "custom" and base_url:
+        _, api_format = detect_api_format(base_url)
+        api_format = api_format or "openai"
+    else:
+        api_format = provider.api_format if provider else "openai"
+
+    return {
+        "configured": True,
+        "provider": provider_name,
+        "base_url": base_url,
+        "model": model,
+        "api_key": api_key,
+        "api_key_available": bool(api_key),
+        "api_format": api_format,
+        "source": source,
+    }
+
+
+def _get_mysql_llm_config() -> Optional[Dict[str, Any]]:
+    try:
+        from services.system_config_store import get_mysql_system_config_store
+
+        config = get_mysql_system_config_store().get_llm_config()
+        if not config.get("configured"):
+            return None
+        provider_name = str(config.get("provider") or "")
+        if not provider_name:
+            return None
+        return _format_llm_config(
+            provider_name=provider_name,
+            model_name=config.get("model"),
+            base_url_value=config.get("base_url"),
+            api_key=config.get("api_key"),
+            source="mysql_system_config",
+        )
+    except Exception as exc:
+        logger.warning("Failed to read AlphaTrace MySQL LLM config, falling back to legacy profile: %s", exc)
+        return None
+
+
 def get_llm_config(db: Session) -> Dict[str, Any]:
     """Get LLM configuration from user profile."""
+    mysql_config = _get_mysql_llm_config()
+    if mysql_config:
+        return mysql_config
+
     profile = get_or_create_profile(db)
 
     if not profile.llm_provider:
@@ -216,7 +265,9 @@ def get_llm_config(db: Session) -> Dict[str, Any]:
         "base_url": base_url,
         "model": model,
         "api_key": api_key,
-        "api_format": api_format
+        "api_key_available": bool(api_key),
+        "api_format": api_format,
+        "source": "legacy_hyper_ai_profile",
     }
 
 
@@ -311,6 +362,17 @@ def save_llm_config(
 
     db.commit()
     db.refresh(profile)
+    try:
+        from services.system_config_store import get_mysql_system_config_store
+
+        get_mysql_system_config_store().save_llm_config(
+            provider=provider,
+            api_key=api_key,
+            model=model,
+            base_url=base_url,
+        )
+    except Exception as exc:
+        logger.warning("Failed to persist AlphaTrace MySQL LLM config; legacy profile was saved: %s", exc)
     return profile
 
 

@@ -5,6 +5,7 @@ from typing import List, Optional
 from schemas.alpha_trace_asset import AlphaTraceAssetItem
 from schemas.alpha_trace_evidence import AlphaTraceEvidenceItem
 from schemas.alpha_trace_strategy import AlphaTraceStrategyItem
+from services.domain_store import get_domain_store_type, get_mysql_domain_store
 from services.asset_store.asset_store import get_static_asset_store
 from services.evidence_retrieval.evidence_store import get_static_evidence_store
 from services.strategy_store.static_strategy_seed import get_static_strategy_seed
@@ -135,4 +136,31 @@ class StaticStrategyStore:
 
 
 def get_static_strategy_store() -> StaticStrategyStore:
+    if get_domain_store_type() == "mysql":
+        return MysqlStrategyStore()
     return StaticStrategyStore()
+
+
+class MysqlStrategyStore(StaticStrategyStore):
+    """Strategy Store backed by MySQL seed payloads."""
+
+    def __init__(self) -> None:
+        domain_store = get_mysql_domain_store()
+        seed = [
+            AlphaTraceStrategyItem.model_validate(item).model_dump(mode="json")
+            for item in get_static_strategy_seed()
+        ]
+        domain_store.seed_if_empty(
+            domain_store.strategies,
+            "strategy_id",
+            seed,
+            lambda item: {
+                "strategy_id": item["strategyId"],
+                "strategy_type": item.get("strategyType"),
+                "style": item.get("style"),
+                "status": item.get("status"),
+                "updated_at": item.get("updatedAt"),
+            },
+        )
+        self._items = [AlphaTraceStrategyItem.model_validate(item) for item in domain_store.fetch_all(domain_store.strategies)]
+        self._by_id = {item.strategyId: item for item in self._items}

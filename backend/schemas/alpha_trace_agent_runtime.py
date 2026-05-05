@@ -9,6 +9,7 @@ AgentRuntimeEventType = Literal[
     "agent.run.started",
     "agent.run.completed",
     "agent.run.failed",
+    "agent.run.cancelled",
     "agent.started",
     "agent.completed",
     "agent.failed",
@@ -26,7 +27,7 @@ AgentRuntimeEventType = Literal[
 
 AgentRuntimeStatus = Literal["idle", "running", "completed", "failed", "cancelled"]
 AgentRunStatus = Literal["queued", "running", "completed", "partially_completed", "failed", "cancelled"]
-AgentStatus = Literal["idle", "running", "completed", "failed"]
+AgentStatus = Literal["idle", "running", "completed", "failed", "cancelled"]
 ToolCallStatus = Literal["running", "completed", "failed"]
 AgentDecisionAction = Literal["overweight", "underweight", "hold", "watch", "no_action"]
 AgentDecisionHorizon = Literal["short_term", "medium_term", "long_term"]
@@ -40,7 +41,7 @@ AgentTaskType = Literal[
 ]
 InvestmentHorizon = Literal["short_term", "medium_term", "long_term"]
 RiskPreference = Literal["conservative", "balanced", "aggressive"]
-AgentRunnerMode = Literal["stub", "qwen", "tradingagents", "custom_runner"]
+AgentRunnerMode = Literal["stub", "qwen", "alphatrace_native", "tradingagents", "langalpha", "custom_runner"]
 
 
 class ToolCall(BaseModel):
@@ -83,6 +84,9 @@ class RuntimeMetrics(BaseModel):
     toolCalls: int = 0
     generatedReports: int = 0
     durationSeconds: int = 0
+    promptTokens: int = 0
+    completionTokens: int = 0
+    totalTokens: int = 0
     estimatedCostUsd: Optional[float] = None
 
 
@@ -182,6 +186,7 @@ class AgentRunnerConfig(BaseModel):
     modelProvider: str = "none"
     modelName: str = "none"
     enableStreaming: bool = True
+    extraParams: Dict[str, Any] = Field(default_factory=dict)
 
 
 class SubmitAgentRunRequest(BaseModel):

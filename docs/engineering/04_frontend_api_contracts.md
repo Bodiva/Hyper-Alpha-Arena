@@ -694,3 +694,18 @@ Frontend service methods:
 7. `getPortfolioDecisionsAsync(portfolioId)`
 
 `PortfolioWorkspacePage` now uses these async methods in real mode and keeps mock mode unchanged. Related assets and strategies are resolved through backend Asset Store and Strategy Store. Decisions currently degrade safely to an empty list until Decision Store/API is introduced.
+
+## Task 37: Decision Store/API and Decision Attribution Real Mode
+
+Task 37 adds AlphaTrace Decision API endpoints derived from the AgentRunStore:
+
+- `GET /api/alpha-trace/decisions`
+- `GET /api/alpha-trace/decisions/{decisionId}`
+- `GET /api/alpha-trace/decisions/{decisionId}/evidence`
+- `GET /api/alpha-trace/decisions/{decisionId}/agent-run`
+
+Frontend `DecisionAttributionPage` now uses real mode service calls for decisions, assets, evidence, and agent runs. Mock mode remains unchanged. The decision API reads existing Qwen/stub AgentRun JSON store records and maps `finalDecision` into a Decision Attribution view with placeholder actual outcome and rule-derived attribution factors.
+
+## Task 38: Leaderboard Real Mode Minimal Integration
+
+Task 38 adds `GET /api/alpha-trace/leaderboard` as a runtime quality leaderboard. The endpoint derives runtime quality from the AgentRun JSON store and static StrategyStore. It does not compute true returns, backtest results, or live trading performance. Frontend `LeaderboardPage` now uses `listLeaderboardAsync` in real mode and displays `Data Mode: Real API / Runtime Quality Leaderboard`.

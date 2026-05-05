@@ -6,7 +6,9 @@ export type EvidenceType =
   | "macro_data"
   | "market_snapshot"
   | "industry_data"
-  | "user_upload";
+  | "user_upload"
+  | "external_search"
+  | "runtime_context";
 
 export interface ExtractedField {
   field: string;
@@ -19,6 +21,7 @@ export interface Evidence {
   title: string;
   evidenceType: EvidenceType;
   sourceName: string;
+  sourceType?: string;
   url: string;
   publishedAt: string;
   collectedAt: string;
@@ -28,4 +31,6 @@ export interface Evidence {
   reliabilityScore: number;
   extractedFields: ExtractedField[];
   usedByAgentRunIds: string[];
+  usedByDecisionIds?: string[];
+  metadata?: Record<string, unknown>;
 }

@@ -121,3 +121,27 @@ Task 32 exposes the static evidence seed through backend Evidence API endpoints:
 ## Task 33: Asset-aware Evidence Retrieval
 
 The static asset seed now provides asset aliases such as `asset_index_000300`, `000300.SH`, `510300.SH`, and `IF_MAIN`. Asset-scoped evidence lookup uses these identifiers to query the same static Evidence Store used by QwenRunner evidence retrieval.
+
+## Task 39.5: Optional Bocha Web Search Evidence
+
+Evidence retrieval can now optionally merge Bocha Web Search results with the static evidence seed.
+
+Runtime behavior:
+
+1. `EvidenceRetriever` always queries the static seed first.
+2. If `BOCHA_API_KEY` is configured, `ExternalEvidenceSearch` calls `POST https://api.bocha.cn/v1/web-search`.
+3. Bocha results are mapped to `EvidenceItem` with `sourceType=bocha_search` and `evidenceType=external_search`.
+4. Static and Bocha evidence are merged, scored, de-duplicated, and injected into the Qwen prompt.
+5. If Bocha is disabled, times out, rate-limited, or returns an error, the run continues with static evidence fallback.
+
+Runtime events now include:
+
+- `tool.called` with `toolName=bocha.search`
+- `tool.result` with `toolName=bocha.search`, status `disabled | completed | failed`
+- `evidence.linked` with selected evidence IDs
+
+Security boundary:
+
+- `BOCHA_API_KEY` is read only from backend environment variables.
+- The frontend does not call Bocha and never receives the API key.
+- Bocha is not treated as real-time market data.

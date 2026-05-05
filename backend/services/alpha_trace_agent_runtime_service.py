@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 from sqlalchemy.orm import Session
@@ -10,6 +11,7 @@ from schemas.alpha_trace_agent_runtime import (
     AgentReport,
     AgentRun,
     AgentRuntimeEvent,
+    AgentRunnerConfig,
     CreateDemoAgentRunRequest,
     EvidenceReference,
     RuntimeMetrics,
@@ -17,11 +19,16 @@ from schemas.alpha_trace_agent_runtime import (
     SubmitAgentRunResponse,
     ToolCall,
 )
+from services.agent_runtime_status_machine import can_transition_status, is_terminal_status
 from services.agent_runtime_store.registry import get_agent_run_store
+from services.agent_orchestrator.subprocess_orchestrator import cancel_subprocess_worker
 from services.agent_runners.base import AgentRunnerContext
+from services.agent_runners.langalpha_adapter import LangAlphaAdapter
+from services.agent_runners.native_multi_agent_runner import AlphaTraceNativeRunnerAdapter
 from services.agent_runners.registry import AgentRunnerRegistry
 from services.agent_runners.qwen_runner import QwenRunnerAdapter
 from services.agent_runners.stub_runner import StubAgentRunnerAdapter
+from services.agent_runners.tradingagents_adapter import TradingAgentsAdapter
 
 DEMO_RUN_ID = "demo-run-001"
 
@@ -216,6 +223,9 @@ _DEMO_RUNS: Dict[str, AgentRun] = {
 _RUNNER_REGISTRY = AgentRunnerRegistry()
 _RUNNER_REGISTRY.register_runner(StubAgentRunnerAdapter())
 _RUNNER_REGISTRY.register_runner(QwenRunnerAdapter())
+_RUNNER_REGISTRY.register_runner(AlphaTraceNativeRunnerAdapter())
+_RUNNER_REGISTRY.register_runner(TradingAgentsAdapter())
+_RUNNER_REGISTRY.register_runner(LangAlphaAdapter())
 _STORE = get_agent_run_store()
 
 
@@ -244,6 +254,9 @@ def _append_agent_run_event(run_id: str, event: AgentRuntimeEvent) -> None:
 
 
 def _update_agent_run_status(run_id: str, status: str, timestamp: Optional[str] = None) -> None:
+    current = _STORE.get_run(run_id)
+    if current and not can_transition_status(current.status, status):
+        return
     _STORE.update_run_status(run_id, status, timestamp)
 
 
@@ -303,6 +316,73 @@ def get_agent_run_evidence(run_id: str) -> List[EvidenceReference]:
 
 def get_agent_run_decision(run_id: str) -> Optional[AgentDecision]:
     return _STORE.get_decision(run_id)
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def cancel_agent_run(run_id: str) -> Optional[AgentRun]:
+    run = get_agent_run(run_id)
+    if not run:
+        return None
+    if is_terminal_status(run.status):
+        return run
+
+    timestamp = _now_iso()
+    worker_cancel_result = cancel_subprocess_worker(run_id)
+    sequence = max([event.sequence for event in get_agent_run_events(run_id)] or [0]) + 1
+    _append_agent_run_event(
+        run_id,
+        AgentRuntimeEvent(
+            eventId=f"{run_id}_cancelled_{sequence}",
+            runId=run_id,
+            type="agent.run.cancelled",
+            timestamp=timestamp,
+            sequence=sequence,
+            payload={
+                "message": "Agent run cancellation requested. Subprocess workers are terminated when registered; non-worker runners remain cooperative.",
+                "previousStatus": run.status,
+                "workerCancellation": worker_cancel_result,
+            },
+        ),
+    )
+    _update_agent_run_status(run_id, "cancelled", timestamp)
+    return get_agent_run(run_id)
+
+
+def retry_agent_run(run_id: str, db: Optional[Session] = None) -> Optional[SubmitAgentRunResponse]:
+    run = get_agent_run(run_id)
+    if not run:
+        return None
+    if not is_terminal_status(run.status):
+        raise ValueError("Only terminal Agent Runs can be retried.")
+
+    if run.triggeredBy in {"stub", "qwen", "qwen_runner", "alphatrace_native", "tradingagents", "langalpha"}:
+        runner_type = run.triggeredBy
+        if runner_type == "qwen_runner":
+            runner_type = "qwen"
+    elif "stub" in run.triggeredBy:
+        runner_type = "stub"
+    else:
+        runner_type = "qwen"
+    request = SubmitAgentRunRequest(
+        assetId=run.assetIds[0] if run.assetIds else None,
+        portfolioId=run.portfolioId,
+        strategyId=run.strategyId,
+        taskType=run.taskType,
+        question=f"Retry AgentRun {run.runId}: {run.name}. Target: {run.target}",
+        horizon=run.finalDecision.horizon,
+        riskPreference="balanced",
+        runnerConfig=AgentRunnerConfig(
+            runnerType=runner_type,
+            modelProvider="qwen" if runner_type in {"qwen", "alphatrace_native"} else "none",
+            modelName="qwen-plus" if runner_type in {"qwen", "alphatrace_native"} else (run.modelName or "none"),
+            enableStreaming=True,
+            extraParams={"retryOfRunId": run.runId},
+        ),
+    )
+    return submit_agent_run(request, db=db)
 
 
 def _copy_runtime_artifacts(run_id: str, source_label: str) -> tuple[List[ToolCall], List[AgentReport], List[AgentRuntimeEvent]]:

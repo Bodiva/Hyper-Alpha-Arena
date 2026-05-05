@@ -52,8 +52,12 @@ const resolvePathToRouteTarget = (pathname: string): RouteTarget | null => {
   if (normalizedPath === "/leaderboard") return { page: "leaderboard" };
   if (normalizedPath === "/portfolio") return { page: "portfolio-workspace" };
   if (normalizedPath === "/evidence") return { page: "evidence-center" };
-  if (normalizedPath === "/data-sources") return { page: "data-sources" };
-  if (normalizedPath === "/decision-attribution") return { page: "decision-attribution" };
+  if (normalizedPath === "/data-sources" || normalizedPath === "/data-source" || normalizedPath === "/datasource") {
+    return { page: "data-sources" };
+  }
+  if (normalizedPath === "/decision-attribution" || normalizedPath === "/decisions") {
+    return { page: "decision-attribution" };
+  }
   if (normalizedPath === "/settings") return { page: "settings-workbench" };
 
   const assetDetailMatch = normalizedPath.match(/^\/assets\/([^/]+)$/);
@@ -118,8 +122,12 @@ export const parseAlphaTraceRoute = (value?: string): RouteTarget | null => {
   if (normalizedRoute === "leaderboard") return createTarget("leaderboard", undefined, hashQuery);
   if (normalizedRoute === "portfolio") return createTarget("portfolio-workspace", undefined, hashQuery);
   if (normalizedRoute === "evidence") return createTarget("evidence-center", undefined, hashQuery);
-  if (normalizedRoute === "data-sources") return createTarget("data-sources", undefined, hashQuery);
-  if (normalizedRoute === "decision-attribution") return createTarget("decision-attribution", undefined, hashQuery);
+  if (normalizedRoute === "data-sources" || normalizedRoute === "data-source" || normalizedRoute === "datasource") {
+    return createTarget("data-sources", undefined, hashQuery);
+  }
+  if (normalizedRoute === "decision-attribution" || normalizedRoute === "decisions") {
+    return createTarget("decision-attribution", undefined, hashQuery);
+  }
   if (normalizedRoute === "settings") return createTarget("settings-workbench", undefined, hashQuery);
 
   const pathTarget = resolvePathToRouteTarget(`/${normalizedRoute}`);
@@ -195,6 +203,18 @@ export const navigateTo = (path: string, params?: RouteParams): void => {
 
   win.history.pushState(null, "", createHashUrl(path, params));
   win.dispatchEvent(new Event("hashchange"));
+};
+
+export const goBackOrDashboard = (): void => {
+  const win = safeWindow();
+  if (!win) return;
+
+  if (win.history.length > 1) {
+    win.history.back();
+    return;
+  }
+
+  navigateTo("/dashboard");
 };
 
 export const getCurrentHashQueryParams = (): URLSearchParams => {
