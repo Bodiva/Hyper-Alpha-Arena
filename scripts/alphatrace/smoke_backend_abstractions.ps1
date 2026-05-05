@@ -44,7 +44,8 @@ $files = @(
   "backend/services/model_providers/catalog.py",
   "backend/services/model_providers/__init__.py",
   "backend/services/runtime_config/facade.py",
-  "backend/services/runtime_config/__init__.py"
+  "backend/services/runtime_config/__init__.py",
+  "backend/services/runtime_readiness.py"
 )
 
 Write-Host "[AlphaTrace] py_compile backend abstraction files"
@@ -64,6 +65,7 @@ $pythonSmoke = @(
   "from services.data_api import get_data_api_catalog",
   "from services.model_providers import list_model_provider_descriptors",
   "from services.runtime_config import get_runtime_config_facade",
+  "from services.runtime_readiness import get_runtime_readiness_summary",
   "from schemas.alpha_trace_agent_runtime import EvidenceReference",
   "items = build_default_integration_registry().diagnostics()",
   "print('integrations', len(items))",
@@ -97,6 +99,9 @@ $pythonSmoke = @(
   "assert {'qwen_openai_compatible','tradingagents_model_bridge','langalpha_byok_bridge'} <= provider_ids, 'model provider catalog smoke failed'",
   "index = get_alphatrace_architecture_index()",
   "assert 'runtime_config' in {layer['layerId'] for layer in index['layers']}, 'architecture index smoke failed'",
+  "readiness = get_runtime_readiness_summary()",
+  "assert readiness['overallStatus'] in ('ready','degraded','action_required'), 'runtime readiness smoke failed'",
+  "assert 'runtimeConfig' in readiness['sections'], 'runtime readiness sections smoke failed'",
   "task_store = MemoryAsyncTaskStore()",
   "scheduler = InProcessAsyncTaskScheduler(store=task_store)",
   "spec = AsyncTaskSpec(task_id='task_smoke_script', run_id='run_smoke_script', runner_type='stub', task_type='smoke')",

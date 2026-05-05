@@ -60,6 +60,7 @@ from services.async_tasks import get_async_task_store_type, get_mysql_async_task
 from services.system_config_store import get_mysql_system_config_store
 from services.runtime_config import get_runtime_config_facade
 from services.model_providers import list_model_provider_descriptors
+from services.runtime_readiness import get_runtime_readiness_summary
 
 router = APIRouter(prefix="/api/alpha-trace/agent-runs", tags=["AlphaTrace Agent Runtime"])
 
@@ -377,6 +378,11 @@ def get_agent_runtime_architecture_endpoint(db: Session = Depends(get_db)):
         **get_alphatrace_architecture_index(db),
         "message": "AlphaTrace architecture index is a product-owned map of API, data, model, orchestration, runner, tool and artifact boundaries.",
     }
+
+
+@router.get("/runtime/readiness")
+def get_agent_runtime_readiness_endpoint(db: Session = Depends(get_db)):
+    return get_runtime_readiness_summary(db)
 
 
 @router.get("/runtime/model-providers")

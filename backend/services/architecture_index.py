@@ -53,7 +53,10 @@ def get_alphatrace_architecture_index(db: Session | None = None) -> dict[str, An
                 "layerId": "runtime_config",
                 "displayName": "Runtime Config Facade",
                 "status": "active",
-                "contracts": ("/api/alpha-trace/agent-runs/runtime/config",),
+                "contracts": (
+                    "/api/alpha-trace/agent-runs/runtime/config",
+                    "/api/alpha-trace/agent-runs/runtime/readiness",
+                ),
             },
             {
                 "layerId": "data_api",
@@ -117,6 +120,7 @@ def get_alphatrace_architecture_index(db: Session | None = None) -> dict[str, An
         },
         "links": {
             "runtimeConfig": "/api/alpha-trace/agent-runs/runtime/config",
+            "runtimeReadiness": "/api/alpha-trace/agent-runs/runtime/readiness",
             "modelProviders": "/api/alpha-trace/agent-runs/runtime/model-providers",
             "orchestrators": "/api/alpha-trace/agent-runs/runtime/orchestrators",
             "taskSpecs": "/api/alpha-trace/agent-runs/runtime/task-specs",

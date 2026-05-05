@@ -2460,3 +2460,23 @@ Expected:
 - `frontend/app/shared/api/endpoints.ts` exports the task specs endpoint.
 - `frontend/app/entities/runtime/api.ts` exports task spec types and `getTaskSpecContractsAsync`.
 - No existing page wiring is changed in this milestone.
+
+### M181 Runtime Readiness Summary
+
+Required backend compile:
+
+```powershell
+python -m py_compile backend/services/runtime_readiness.py backend/services/architecture_index.py backend/api/alpha_trace_agent_runtime_routes.py
+```
+
+Required regression:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1
+```
+
+Expected:
+
+- `/runtime/readiness` response contains runtimeConfig, modelProviders, orchestrators, taskSpecs, and artifacts sections.
+- Response includes action items for missing optional/blocking configuration.
+- No raw credentials are returned.

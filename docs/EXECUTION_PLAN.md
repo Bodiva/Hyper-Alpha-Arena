@@ -5891,3 +5891,33 @@ Validation:
 Rollback:
 
 Remove the endpoint constant, types, and helper.
+
+## M181 - Runtime Readiness Summary
+
+Status: Completed
+
+Goal:
+
+Provide a consolidated sanitized readiness endpoint across runtime config, model providers, orchestrators, task specs, and artifacts.
+
+Scope:
+
+1. Add `runtime_readiness` service.
+2. Add `GET /api/alpha-trace/agent-runs/runtime/readiness`.
+3. Include readiness link in the architecture index.
+4. Update backend abstraction smoke.
+
+Acceptance:
+
+1. Backend py_compile passes.
+2. Backend abstraction smoke verifies readiness sections.
+3. Response contains no raw credentials.
+
+Validation:
+
+1. `python -m py_compile backend/services/runtime_readiness.py backend/services/architecture_index.py backend/api/alpha_trace_agent_runtime_routes.py`.
+2. `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`.
+
+Rollback:
+
+Remove the readiness service, route, architecture link, and smoke additions.

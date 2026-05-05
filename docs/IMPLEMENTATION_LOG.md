@@ -4424,3 +4424,25 @@ Notes:
 
 Next:
 - Continue with a consolidated runtime diagnostics endpoint or deeper backend module boundary documentation.
+
+## 2026-05-05 - M181 Runtime Readiness Summary
+
+Goal:
+- Provide one sanitized backend readiness endpoint for Settings/Agent Lab diagnostics.
+
+Changes:
+- Added `backend/services/runtime_readiness.py`.
+- Added `GET /api/alpha-trace/agent-runs/runtime/readiness`.
+- Updated `backend/services/architecture_index.py`.
+- Updated `scripts/alphatrace/smoke_backend_abstractions.ps1`.
+
+Validation:
+- `python -m py_compile backend/services/runtime_readiness.py backend/services/architecture_index.py backend/api/alpha_trace_agent_runtime_routes.py`: passed.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`: passed.
+
+Notes:
+- The readiness endpoint aggregates config, model provider, orchestrator, task spec, and artifact readiness.
+- It returns action items for Qwen/Bocha/TradingAgents availability without raw keys.
+
+Next:
+- Continue with frontend API typing for runtime readiness or a backend endpoint smoke pack.
