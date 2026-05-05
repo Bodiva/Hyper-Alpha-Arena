@@ -14,7 +14,7 @@ The product should let a user:
 2. Submit investment research tasks to controlled agent runners.
 3. Observe agent progress through runtime events, SSE, live output, reports, evidence references, and final decisions.
 4. Replay completed runs and inspect why a recommendation was made.
-5. Gradually replace static seed data and JSON persistence with governed domain data and MySQL-backed product storage.
+5. Gradually replace static seed data and JSON persistence with governed domain data in ClickHouse and system configuration/task control in MySQL.
 
 ## Non-Goals
 
@@ -53,9 +53,9 @@ Known limitations:
 
 ## Technical Constraints
 
-1. MySQL 8.0+ is the target production database for AlphaTrace product data.
-2. MySQL JSON columns may be used for flexible payloads; query-critical fields must also be stored as typed columns or generated/indexable columns.
-3. JSON store must remain available as local development fallback until MySQL store is stable.
+1. MySQL 8.0+ is the target store for AlphaTrace system configuration, credential metadata, and task/run control state. ClickHouse is the target store for structured business, analytical, market, evidence, runtime event/report/decision, and leaderboard data.
+2. MySQL JSON columns may be used for small configuration/control payloads. ClickHouse schemas should use typed columns plus JSON/string payload columns only where flexible analysis data requires it.
+3. JSON store must remain available as local development fallback until MySQL config/task stores and ClickHouse business stores are stable.
 4. Frontend API contracts must continue to expose AlphaTrace schemas only.
 5. Runner adapters may execute Qwen, TradingAgents, LangAlpha, or custom engines, but they must map outputs into AlphaTrace schemas.
 6. API keys must remain backend-only. Frontend must never store or transmit raw provider keys except through approved server-side credential settings.
@@ -67,10 +67,12 @@ The long-term backend is AlphaTrace-owned:
 
 1. API layer: asset, evidence, strategy, portfolio, decision, leaderboard, market data, agent runtime, model config, workspace/auth.
 2. Domain services: stable business logic and schema mapping.
-3. Domain stores: MySQL-backed implementations with JSON fallback during transition.
+3. Domain stores: ClickHouse-backed structured business implementations with static/JSON fallback during transition.
 4. Agent runtime: submit, status, events, reports, evidence refs, decisions, SSE, cancellation, retry, timeout.
-5. Runner adapters: Stub, Qwen, TradingAgents, LangAlpha, Custom.
-6. Integrations: model providers, external evidence/data providers, file ingestion, market data providers.
+5. Multi-agent orchestration: product-owned agent DAG, agent roles, configurable skills, and tool bindings.
+6. Runner adapters: Stub, Qwen, TradingAgents, LangAlpha, Custom.
+7. Data Center: internal/external connector governance, store routing, tool input normalization, and legacy isolation.
+8. Integrations: model providers, external tools, file ingestion, market data providers.
 
 TradingAgents remains an in-process runner adapter candidate. LangAlpha remains an architecture reference and possible external service adapter candidate.
 
@@ -78,8 +80,8 @@ TradingAgents remains an in-process runner adapter candidate. LangAlpha remains 
 
 AlphaTrace is considered commercially reviewable when it has:
 
-1. MySQL-backed AgentRunStore.
-2. MySQL-backed domain stores for core AlphaTrace objects.
+1. MySQL-backed system config/task control and ClickHouse-backed AgentRun analytical projections.
+2. ClickHouse-backed domain stores for core AlphaTrace analytical/business objects.
 3. Stable Agent Runtime status machine and worker model.
 4. Controlled Qwen and TradingAgents runner paths.
 5. ETF / fund / index market data domain independent of legacy crypto runtime.
@@ -97,6 +99,4 @@ Use these files for future execution:
 2. `docs/EXECUTION_PLAN.md` for milestone order.
 3. `docs/IMPLEMENTATION_LOG.md` for current state and decisions.
 4. `docs/VALIDATION.md` for required verification.
-
-
 

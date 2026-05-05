@@ -4884,3 +4884,38 @@ Notes:
 Next:
 - Validate and commit.
 
+
+## 2026-05-05 - M204 Data Center, Agent Skill, and ClickHouse Storage Direction Alignment
+
+Goal:
+- Align AlphaTrace around the corrected architecture decision: Bocha is a backend tool provider, MySQL stores system configuration/task-control data, ClickHouse is the structured business/analytics target, and Data Center + Agent Skill catalogs are explicit control planes for future component integration.
+
+Assumptions:
+- ClickHouse is the target business data store but is not implemented in this milestone.
+- Existing JSON/static seed paths remain fallback.
+- The milestone is read-only/catalog-oriented and does not alter runner execution behavior.
+
+Changes:
+- Added `backend/services/data_center_catalog.py`.
+- Added `backend/services/agent_skill_catalog.py`.
+- Updated Data API catalog, backend module boundaries, external component catalog, integration decision guide, architecture index, and architecture review bundle.
+- Added `/runtime/data-center` and `/runtime/skills` read-only endpoints.
+- Updated frontend runtime API contracts and endpoint constants.
+- Updated smoke scripts and architecture documentation.
+
+Validation:
+- `python -m py_compile backend/services/data_api/catalog.py backend/services/backend_module_boundaries.py backend/services/external_component_catalog.py backend/services/integration_decision_guide.py backend/services/data_center_catalog.py backend/services/agent_skill_catalog.py backend/services/architecture_index.py backend/services/architecture_review_bundle.py backend/api/alpha_trace_agent_runtime_routes.py`: passed.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`: passed. Warning only: existing RequestsDependencyWarning from local Python packages.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_abstraction_endpoints.ps1 -SkipHttp`: passed, 22 endpoint definitions validated.
+- `pnpm --dir frontend build`: passed. Existing Vite chunk/browserslist warnings remain.
+- Documentation check for ClickHouse / Data Center / Agent Skill / Bocha tool wording: passed.
+
+Result:
+- M204 is complete. AlphaTrace now has explicit Data Center and Agent Skill control-plane catalogs, corrected storage boundaries, and frontend/runtime contracts for future diagnostics.
+
+Notes:
+- This milestone establishes the abstraction layer needed before integrating more external components such as TradingAgents/LangAlpha-derived modules or professional market data.
+
+Next:
+- Continue with M205: reusable Data Center and Agent Skill frontend panels, then optionally wire them into the architecture review panel.
+

@@ -114,14 +114,15 @@ def get_integration_decision_guide() -> IntegrationDecisionGuide:
                 proceed_when=(
                     "BOCHA key is configured in backend runtime config",
                     "Search failures fallback to static evidence without failing runs",
-                    "Returned URL/title/summary/source are persisted and visible in evidence detail/artifacts",
+                    "Returned URL/title/summary/source are mapped into EvidenceReference/AgentArtifact and visible in evidence detail/artifacts",
                 ),
                 stop_if=(
                     "API key would need frontend exposure",
                     "Bocha result is treated as professional market data",
+                    "Bocha is treated as a durable business data store instead of a tool provider",
                     "Evidence claims cannot cite a persisted evidenceId",
                 ),
-                alpha_trace_contracts=("EvidenceReference", "AgentRuntimeEvent", "AgentArtifact", "ToolInvocationResult"),
+                alpha_trace_contracts=("EvidenceReference", "AgentRuntimeEvent", "AgentArtifact", "ToolInvocationResult", "ClickHouseEvidenceProjection"),
                 validation_required=("bocha disabled smoke", "bocha configured smoke", "evidence URL/artifact smoke"),
             )
         )
@@ -135,14 +136,14 @@ def get_integration_decision_guide() -> IntegrationDecisionGuide:
                 proceed_when=(
                     "Commercial data rights and redistribution terms are understood",
                     "Normalized quote/snapshot/kline/indicator/fundamental schemas are approved",
-                    "MySQL persistence/cache strategy is defined",
+                    "ClickHouse persistence/cache strategy is defined",
                 ),
                 stop_if=(
                     "Provider terms prohibit product use or citation",
                     "Implementation couples AlphaTrace ETF/fund/index data to legacy crypto services",
                     "No fallback/static seed path exists for demos",
                 ),
-                alpha_trace_contracts=("MarketQuote", "MarketSnapshot", "Kline", "Indicator", "DataSource", "EvidenceReference"),
+                alpha_trace_contracts=("MarketQuote", "MarketSnapshot", "Kline", "Indicator", "DataSource", "EvidenceReference", "ClickHouseMarketDataProjection"),
                 validation_required=("provider disabled smoke", "static fallback smoke", "schema fixture smoke"),
             )
         )
@@ -152,7 +153,7 @@ def get_integration_decision_guide() -> IntegrationDecisionGuide:
         decisions=tuple(decisions),
         policies={
             "default_path": "Prefer adapter or external service bridge over embedding third-party backend internals.",
-            "schema_policy": "All outputs must normalize into AlphaTrace-owned product schemas.",
+            "schema_policy": "All outputs must normalize into AlphaTrace-owned product schemas before ClickHouse business persistence.",
             "validation_policy": "No component can move beyond PoC without disabled/failure/success smoke tests and Qwen/Stub/Native regression.",
         },
     )

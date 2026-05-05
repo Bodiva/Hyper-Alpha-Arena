@@ -44,7 +44,9 @@ from services.agent_runtime_metrics import get_agent_run_metrics_snapshot
 from services.agent_runtime_timeline import get_agent_run_timeline_summary
 from services.architecture_index import get_alphatrace_architecture_index
 from services.architecture_review_bundle import get_architecture_review_bundle
+from services.agent_skill_catalog import get_agent_skill_catalog
 from services.backend_module_boundaries import get_backend_module_boundary_catalog
+from services.data_center_catalog import get_data_center_catalog
 from services.external_component_catalog import get_external_component_catalog
 from services.integration_decision_guide import get_integration_decision_guide
 from services.agent_orchestrator.execution_policy import get_runner_execution_policy
@@ -410,6 +412,22 @@ def get_agent_runtime_integration_decisions_endpoint():
     return {
         **get_integration_decision_guide().to_response(),
         "message": "Integration decisions describe when to proceed or stop while adapting external runtimes, workbenches, tools, and data providers.",
+    }
+
+
+@router.get("/runtime/data-center")
+def get_agent_runtime_data_center_endpoint():
+    return {
+        **get_data_center_catalog().to_response(),
+        "message": "Data Center catalog describes internal/external data onboarding, tool-result ingestion, and target store routing.",
+    }
+
+
+@router.get("/runtime/skills")
+def get_agent_runtime_skills_endpoint():
+    return {
+        **get_agent_skill_catalog().to_response(),
+        "message": "Agent skill catalog describes configurable skills that bind agents to tools, data domains, model requirements, and output contracts.",
     }
 
 

@@ -6563,3 +6563,41 @@ Validation:
 Rollback:
 
 Remove `docs/ARCHITECTURE_OVERVIEW.md`.
+
+## M204 - Data Center, Agent Skill, and ClickHouse Storage Direction Alignment
+
+Status: Completed
+
+Goal:
+
+Align AlphaTrace architecture around Data Center governance, backend tool providers, agent-configurable skills, and the corrected persistence split: MySQL for system configuration/task control and ClickHouse for structured business analytics.
+
+Scope:
+
+1. Add backend Data Center catalog describing internal/external connectors, ingestion modes, target stores, and governance policies.
+2. Add backend Agent Skill catalog describing agent-role skills, tool bindings, data domains, model requirements, and output contracts.
+3. Reclassify Bocha as a backend tool provider, not a business data store.
+4. Reclassify MySQL as config/task-control store and ClickHouse as structured business/analytics target.
+5. Add read-only runtime endpoints for Data Center and Agent Skills.
+6. Extend architecture review bundle and frontend runtime API contracts.
+7. Update canonical architecture docs and smoke scripts.
+
+Acceptance:
+
+1. Data Center catalog includes static seed, Bocha tool ingestion, future professional market data, file upload, and MySQL config connectors.
+2. Agent Skill catalog includes market context, evidence retrieval, bull/bear debate, risk review, final decision, and external workbench bridge skills.
+3. Backend smoke verifies data API providers, module boundaries, Data Center connectors, Agent Skill descriptors, and architecture review bundle.
+4. Frontend build passes after runtime API contract updates.
+5. Docs state Bocha is a tool, MySQL stores config/task state, ClickHouse stores structured business/analytics data.
+
+Validation:
+
+1. `python -m py_compile backend/services/data_api/catalog.py backend/services/backend_module_boundaries.py backend/services/external_component_catalog.py backend/services/integration_decision_guide.py backend/services/data_center_catalog.py backend/services/agent_skill_catalog.py backend/services/architecture_index.py backend/services/architecture_review_bundle.py backend/api/alpha_trace_agent_runtime_routes.py`.
+2. `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`.
+3. `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_abstraction_endpoints.ps1 -SkipHttp`.
+4. `pnpm --dir frontend build`.
+5. `Select-String -Path docs/PROJECT_SPEC.md,docs/ARCHITECTURE.md,docs/ARCHITECTURE_OVERVIEW.md -Pattern "ClickHouse","Data Center","Agent Skill","Bocha is a tool"`.
+
+Rollback:
+
+Remove the Data Center/Agent Skill catalog services, endpoints, frontend types/helpers, smoke additions, and documentation alignment changes.

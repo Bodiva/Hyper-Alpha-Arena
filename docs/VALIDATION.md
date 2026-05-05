@@ -2825,3 +2825,32 @@ Select-String -Path docs/ARCHITECTURE_OVERVIEW.md -Pattern "Overall Architecture
 Expected:
 
 - Overview includes directory structure, overall architecture diagram, runtime data flow, external component decision flow, Data API/evidence flow, review endpoints, and refactor priorities.
+
+### M204 Data Center, Agent Skill, and ClickHouse Storage Direction Alignment
+
+Required backend compile:
+
+```powershell
+python -m py_compile backend/services/data_api/catalog.py backend/services/backend_module_boundaries.py backend/services/external_component_catalog.py backend/services/integration_decision_guide.py backend/services/data_center_catalog.py backend/services/agent_skill_catalog.py backend/services/architecture_index.py backend/services/architecture_review_bundle.py backend/api/alpha_trace_agent_runtime_routes.py
+```
+
+Required regression:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_abstraction_endpoints.ps1 -SkipHttp
+pnpm --dir frontend build
+```
+
+Documentation check:
+
+```powershell
+Select-String -Path docs/PROJECT_SPEC.md,docs/ARCHITECTURE.md,docs/ARCHITECTURE_OVERVIEW.md -Pattern "ClickHouse","Data Center","Agent Skill","Bocha is a tool"
+```
+
+Expected:
+
+- Data Center catalog endpoint and skills endpoint are present in endpoint smoke.
+- Backend abstraction smoke verifies Data Center connectors and Agent Skill descriptors.
+- Architecture review bundle includes `dataCenter` and `skills`.
+- Bocha is represented as a tool provider, MySQL as config/task store, and ClickHouse as business/analytics target.

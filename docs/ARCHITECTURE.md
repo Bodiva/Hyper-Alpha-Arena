@@ -49,7 +49,7 @@ flowchart LR
   Runtime["Agent Runtime\nSubmit Status Events Reports Evidence Decision SSE"]
   Runners["Runner Registry\nStub Qwen AlphaTrace Native TradingAgents LangAlpha"]
   Integrations["Integrations\nQwen DashScope Bocha TradingAgents PoC LangAlpha design"]
-  Store["Stores\nMySQL primary target + JSON fallback + static seed fallback"]
+  Store["Stores\nMySQL config/task + ClickHouse business analytics + JSON/static fallback"]
   Legacy["Legacy Hyper Alpha Arena\nCrypto Hyperliquid Binance AI Trader Program Trader"]
 
   UI --> API
@@ -74,17 +74,17 @@ flowchart LR
 | `backend/services/alpha_trace_agent_runtime_service.py` | Agent runtime orchestration service | Product runtime facade. |
 | `backend/services/agent_runners/` | Runner adapters | Execution engines only. Must map to AlphaTrace schemas. |
 | `backend/services/agent_orchestrator/` | Runner capability / execution policy / flow descriptors / task specs | Declares runner availability, execution boundary, DAG vocabulary, and future scheduler inputs. |
-| `backend/services/agent_runtime_store/` | AgentRun persistence abstraction | MySQL / JSON / memory implementations. |
+| `backend/services/agent_runtime_store/` | AgentRun persistence abstraction | MySQL task/control path, ClickHouse analytics target, JSON/memory fallback. |
 | `backend/services/async_tasks/` | Async task specs, stores, and in-process scheduler boundary | Future worker/cancel/retry/timeout layer; current submit wiring remains guarded. |
 | `backend/services/runtime_config/` | Sanitized runtime config diagnostics | Qwen/Bocha/TradingAgents/LangAlpha readiness without exposing secrets. |
 | `backend/services/integration_adapters/` | Data/model/tool/workbench adapter contracts and wrappers | Entry point for Bocha, Qwen provider, market data, ToolAdapters, and future OSS components. |
 | `backend/services/data_api/` | AlphaTrace data API catalog | Product-owned API/provider/store catalog; separates ETF market data from legacy BTC routes. |
 | `backend/services/agent_artifacts/` | AgentArtifact contract/store/mappers | Product-owned artifacts for future files/tables/charts/web URLs from tools or external workbenches. |
-| `backend/services/domain_store/` | Shared MySQL domain store helpers | Product persistence infrastructure. |
+| `backend/services/domain_store/` | Shared domain store helpers | Transitional product persistence helpers; ClickHouse is the structured business target. |
 | `backend/services/*_store/` | Asset/Evidence/Strategy/Portfolio/Decision/Leaderboard/MarketData stores | Domain-specific read/write services. |
 | `backend/services/evidence_retrieval/` | Evidence retrieval, static seed, Bocha/external search, support scoring | Evidence is a first-class product domain. |
 | `backend/integrations/` | External service clients | Bocha, future providers. API keys backend-only. |
-| `backend/database/` | Existing database/session/model infrastructure | Shared with legacy; AlphaTrace uses it for MySQL direction where implemented. |
+| `backend/database/` | Existing database/session/model infrastructure | Shared with legacy; AlphaTrace uses MySQL here for config/task state where implemented. |
 | `backend/api/*legacy routes*` | Original Hyper Alpha Arena APIs | Legacy unless explicitly routed through AlphaTrace domain boundaries. |
 
 ### 4.2 Backend API Families
@@ -94,7 +94,7 @@ AlphaTrace API family:
 | API | Route file | Purpose |
 |---|---|---|
 | Agent Runtime | `alpha_trace_agent_runtime_routes.py` | submit, demo, detail, events, SSE, reports, evidence, decision, status, capabilities, workers/logs. |
-| Evidence | `alpha_trace_evidence_routes.py` | evidence list/detail/search, static/MySQL/run-scoped fallback. |
+| Evidence | `alpha_trace_evidence_routes.py` | evidence list/detail/search, static/run-scoped fallback, ClickHouse projection target. |
 | Asset | `alpha_trace_asset_routes.py` | asset list/detail/evidence. |
 | Strategy | `alpha_trace_strategy_routes.py` | strategy list/detail/assets/evidence. |
 | Portfolio | `alpha_trace_portfolio_routes.py` | portfolio list/detail/holdings/recommendations/assets/strategies/decisions. |
@@ -168,7 +168,7 @@ Current native flow:
 
 ```mermaid
 flowchart LR
-  E["Evidence Retrieval\nstatic + MySQL + Bocha"] --> M["Market View"]
+  E["Evidence Retrieval\nstatic + run-scoped + Bocha tool"] --> M["Market View"]
   M --> B["Bull View"]
   M --> R["Bear View"]
   B --> K["Risk Review"]
@@ -205,17 +205,18 @@ Structured runtime events are authoritative. Raw process logs are diagnostic onl
 
 Current target:
 
-1. MySQL 8.0+ is the formal product persistence target.
-2. JSON store remains local fallback.
-3. Static seed remains demo fallback for domain objects.
+1. MySQL 8.0+ is the formal store for system configuration, credential metadata, task snapshots, and lightweight run control.
+2. ClickHouse is the formal target for structured business and analytical data: market data, evidence projections, runtime events, reports, decisions, leaderboard facts, portfolio/strategy analytics.
+3. JSON store remains local fallback.
+4. Static seed remains demo fallback for domain objects.
 
 Store types:
 
 | Store | Current role |
 |---|---|
-| `AgentRunStore` | Runtime persistence for runs/events/reports/evidence/decisions. MySQL + JSON + memory implementations exist. |
-| `AssetStore` | Asset domain, static/MySQL seed backed. |
-| `EvidenceStore` | Evidence domain, static/MySQL/run-scoped fallback. |
+| `AgentRunStore` | Runtime persistence for runs/events/reports/evidence/decisions. MySQL task-control and JSON/memory implementations exist; ClickHouse analytics projection is target. |
+| `AssetStore` | Asset domain, static seed backed today; ClickHouse projection target. |
+| `EvidenceStore` | Evidence domain, static/run-scoped fallback today; ClickHouse projection target. |
 | `StrategyStore` | Strategy domain. |
 | `PortfolioStore` | Portfolio domain. |
 | `DecisionStore` | Decision domain and AgentRun-derived projections. |
@@ -223,14 +224,16 @@ Store types:
 | `MarketDataStore` | AlphaTrace static market data v1. |
 | `SystemConfigStore` | Runtime credentials/config, including Qwen/Bocha/DashScope where implemented. |
 
-### 6.2 MySQL Principles
+### 6.2 MySQL and ClickHouse Principles
 
-1. Query-critical fields must be typed columns.
-2. Flexible raw payloads can live in JSON columns.
-3. Runtime events should index by `(run_id, sequence)` and `(run_id, type)`.
-4. Evidence should index by `evidence_id`, `source_type`, `evidence_type`, and asset relation.
-5. API keys must be encrypted or stored through existing backend credential mechanism; frontend never sees raw values after save.
-6. JSON fallback must be switchable for local recovery.
+1. MySQL owns configuration/control-plane data: credentials, provider metadata, task snapshots, lightweight run status, and operational settings.
+2. ClickHouse owns structured business/analytics data: events, reports, decisions, evidence projections, market facts, leaderboard facts, and portfolio/strategy analytics.
+3. Query-critical fields must be typed columns in the target store.
+4. Flexible raw payloads can live in MySQL JSON columns for small control payloads, or ClickHouse JSON/string payload columns for analytical projections.
+5. Runtime events should be queryable by `(run_id, sequence)`, `(run_id, type)`, and time windows in the analytical projection.
+6. Evidence should be queryable by `evidence_id`, `source_type`, `evidence_type`, URL, asset relation, and run usage.
+7. API keys must be encrypted or stored through existing backend credential mechanism; frontend never sees raw values after save.
+8. JSON/static fallback must be switchable for local recovery.
 
 ## 7. Evidence Architecture
 
@@ -239,8 +242,8 @@ Evidence is a first-class domain, not just prompt text.
 Sources:
 
 1. Static evidence seed.
-2. MySQL evidence store.
-3. Bocha external search evidence.
+2. ClickHouse evidence projection target.
+3. Bocha external search tool output mapped into evidence.
 4. AgentRun-scoped evidence refs.
 5. Future file/report/crawler/professional data providers.
 
@@ -249,8 +252,8 @@ Evidence flow:
 ```mermaid
 flowchart LR
   Asset["Asset / Portfolio Context"] --> Retriever["EvidenceRetriever"]
-  Static["Static/MySQL Evidence"] --> Retriever
-  Bocha["Bocha Search"] --> Retriever
+  Static["Static / Run Evidence"] --> Retriever
+  Bocha["Bocha Search Tool"] --> Retriever
   Retriever --> Prompt["Runner Prompt Context"]
   Prompt --> Reports["Reports / Decision"]
   Retriever --> EvidenceRefs["AgentRun EvidenceReference"]
@@ -499,8 +502,9 @@ AlphaTrace data APIs now separate resources from providers.
 Provider classes:
 
 1. `alphatrace_static_seed`: deterministic MVP/demo source.
-2. `mysql_domain_store`: formal product persistence path.
-3. `bocha_web_search`: optional external evidence source.
+2. `mysql_system_config_store`: system configuration, credential metadata, and task-control path.
+3. `clickhouse_business_store`: target structured business and analytics store.
+4. `bocha_web_search`: optional backend tool provider for evidence retrieval.
 4. `future_professional_market_data`: reserved provider boundary for ETF/fund/index/futures commercial data.
 5. `langalpha_external_workbench`: design-only external workbench candidate.
 
@@ -513,7 +517,7 @@ Rules:
 
 1. Future ETF/fund/index/futures data must enter through AlphaTrace data provider adapters.
 2. Legacy BTC/Hyperliquid routes are not AlphaTrace market data boundaries.
-3. Provider credentials are backend-only and should come from MySQL system config or environment.
+3. Provider credentials are backend-only and should come from MySQL system config or environment. Structured tool/provider outputs should be mapped into AlphaTrace schema before ClickHouse persistence.
 
 ### Frontend API Contracts
 
@@ -558,9 +562,9 @@ M189-M201 added a review-oriented control plane on top of the lower-level runtim
 
 1. TradingAgents remains an opt-in runner adapter. It can contribute graph/node events, reports, and decisions only after mapping into AlphaTrace `AgentRuntimeEvent`, `AgentReport`, `EvidenceReference`, `AgentArtifact`, and `AgentDecision`.
 2. LangAlpha remains an external workbench design candidate. It should be integrated through an external service bridge only after worker and artifact contracts are stable.
-3. Bocha remains a backend-only evidence/tool provider. URLs are canonical source artifacts and must not require frontend API keys.
+3. Bocha remains a backend-only tool provider for evidence retrieval. URLs are canonical source artifacts and must not require frontend API keys.
 4. Professional market data providers are future adapters. They must not reuse legacy BTC/Hyperliquid runtime streams as ETF/fund/index data infrastructure.
-5. MySQL is the formal product persistence target. External checkpoints, workbench state, and provider caches are not a substitute for AlphaTrace product stores.
+5. MySQL is the formal system configuration and task-control store. ClickHouse is the formal structured business/analytics store. External checkpoints, workbench state, and provider caches are not a substitute for AlphaTrace product stores.
 
 ### Review Workflow
 
@@ -571,3 +575,18 @@ Before adding or deepening an external component integration:
 3. Confirm preserved frontend/backend contracts in `/runtime/module-boundaries` and `/runtime/architecture-review`.
 4. Implement only through an adapter or external service bridge.
 5. Run disabled/failure/success smoke tests and Qwen/Stub/Native regression before promoting beyond PoC.
+
+
+
+### Data Center and Agent Skill Clarification
+
+The architecture now treats data access and agent capability configuration as separate control planes:
+
+1. **Data Center** owns internal/external data onboarding, connector governance, freshness policy, store routing, and legacy isolation.
+2. **Tools** are callable backend capabilities. Bocha is a tool provider, not the durable business data store.
+3. **Skills** bind agent roles to tools, data domains, model requirements, and output contracts.
+4. **Agent Orchestrator** composes agent roles, skills, tools, and runner adapters into a product-owned multi-agent DAG.
+5. **MySQL** stores system configuration, credential metadata, task snapshots, and lightweight run control state.
+6. **ClickHouse** is the target store for structured business analytics: market data, evidence projections, runtime events, reports, decisions, leaderboard facts, and portfolio/strategy analytics.
+
+This separation is required before integrating more open-source components. TradingAgents and LangAlpha can contribute runtime behavior or workbench patterns, but they should plug into AlphaTrace through runner/workbench adapters and must not own Data Center, Skill, or product persistence contracts.

@@ -133,10 +133,10 @@ def get_external_component_catalog() -> ExternalComponentCatalog:
             ExternalComponentDescriptor(
                 component_id="bocha_web_search",
                 display_name="Bocha Web Search",
-                source_type="external_api_provider",
-                integration_mode="tool_and_evidence_provider",
+                source_type="external_tool_provider",
+                integration_mode="tool_adapter_evidence_retrieval",
                 status="active_optional",
-                product_role="External web evidence retrieval provider for AlphaTrace Evidence Retrieval.",
+                product_role="Backend-only web search tool for AlphaTrace Evidence Retrieval.",
                 viable_capabilities=(
                     "Web evidence retrieval",
                     "URL-backed EvidenceReference",
@@ -145,13 +145,14 @@ def get_external_component_catalog() -> ExternalComponentCatalog:
                 non_goals=(
                     "Do not call from frontend",
                     "Do not treat as professional market data",
+                    "Do not treat Bocha itself as a business data store",
                     "Do not let failures fail the whole run when static fallback exists",
                 ),
                 adapter_boundary="backend/integrations/bocha + backend/services/integration_adapters/bocha_adapter.py",
                 license_policy="Provider API usage follows Bocha terms; no frontend key exposure.",
                 runtime_requirements=("BOCHA_API_KEY or MySQL system config", "BOCHA_BASE_URL", "BOCHA_SEARCH_ENDPOINT"),
                 risk_notes=("Evidence semantic support is not guaranteed by URL retrieval alone.",),
-                next_steps=("Improve evidence preview/artifact handling.", "Add support scoring after structured claims stabilize."),
+                next_steps=("Improve evidence preview/artifact handling.", "Persist mapped evidence/artifact records into ClickHouse after schemas stabilize.", "Add support scoring after structured claims stabilize."),
             ),
             ExternalComponentDescriptor(
                 component_id="professional_market_data_provider",
@@ -166,7 +167,7 @@ def get_external_component_catalog() -> ExternalComponentCatalog:
                 license_policy="Provider-specific license and commercial terms required before live integration.",
                 runtime_requirements=("ALPHATRACE_PRO_MARKET_DATA_ENABLED", "provider-specific API key"),
                 risk_notes=("Data rights and redistribution terms matter for commercial productization.",),
-                next_steps=("Choose provider", "Define normalized ETF/fund/index/futures schemas", "Add MySQL persistence and cache policy"),
+                next_steps=("Choose provider", "Define normalized ETF/fund/index/futures schemas", "Add ClickHouse persistence and cache policy"),
             ),
         ),
         policies={
@@ -174,7 +175,7 @@ def get_external_component_catalog() -> ExternalComponentCatalog:
             "frontend_policy": "Frontend consumes AlphaTrace schemas, not external framework state.",
             "adapter_policy": "External projects integrate through adapters or external service bridges with explicit failure behavior.",
             "secrets_policy": "External provider keys remain backend-only and are never returned in diagnostics.",
-            "persistence_policy": "External runtime checkpoints are not product persistence; AlphaTrace stores AgentRun/events/reports/artifacts/decisions.",
+            "persistence_policy": "External runtime checkpoints are not product persistence; AlphaTrace stores config/control data in MySQL and structured business analytics in ClickHouse.",
         },
     )
 

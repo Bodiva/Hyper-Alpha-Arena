@@ -87,12 +87,58 @@ export interface IntegrationDecisionGuideResponse {
   message?: string;
 }
 
+export interface DataCenterConnector {
+  connector_id: string;
+  display_name: string;
+  connector_type: string;
+  status: string;
+  data_domains: string[];
+  ingestion_mode: string;
+  target_store: string;
+  credential_policy: string;
+  freshness_policy: string;
+  notes?: string;
+}
+
+export interface DataCenterCatalogResponse {
+  version: number;
+  connectors: DataCenterConnector[];
+  total: number;
+  summary: JsonRecord;
+  policies: Record<string, string>;
+  message?: string;
+}
+
+export interface AgentSkillDescriptor {
+  skill_id: string;
+  display_name: string;
+  skill_type: string;
+  status: string;
+  allowed_agents: string[];
+  tool_ids: string[];
+  data_domains: string[];
+  model_requirements: string[];
+  output_contracts: string[];
+  notes?: string;
+}
+
+export interface AgentSkillCatalogResponse {
+  version: number;
+  skills: AgentSkillDescriptor[];
+  total: number;
+  summary: JsonRecord;
+  policies: Record<string, string>;
+  message?: string;
+}
+
 export interface ArchitectureReviewBundleResponse {
   version: number;
   architecture: RuntimeArchitectureIndex;
   moduleBoundaries: BackendModuleBoundaryCatalogResponse;
   externalComponents: ExternalComponentCatalogResponse;
   integrationDecisions: IntegrationDecisionGuideResponse;
+  dataCenter: DataCenterCatalogResponse;
+  skills: AgentSkillCatalogResponse;
   readiness: RuntimeReadinessResponse;
   summary: JsonRecord;
   policies: Record<string, string>;
@@ -300,6 +346,12 @@ export const getRuntimeExternalComponentsAsync = () =>
 
 export const getRuntimeIntegrationDecisionsAsync = () =>
   httpClient.get<IntegrationDecisionGuideResponse>(ENDPOINTS.alphaTraceAgentRuntimeIntegrationDecisions);
+
+export const getRuntimeDataCenterAsync = () =>
+  httpClient.get<DataCenterCatalogResponse>(ENDPOINTS.alphaTraceAgentRuntimeDataCenter);
+
+export const getRuntimeSkillsAsync = () =>
+  httpClient.get<AgentSkillCatalogResponse>(ENDPOINTS.alphaTraceAgentRuntimeSkills);
 
 export const getRuntimeReadinessAsync = () =>
   httpClient.get<RuntimeReadinessResponse>(ENDPOINTS.alphaTraceAgentRuntimeReadiness);

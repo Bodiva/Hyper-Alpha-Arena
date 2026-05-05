@@ -16,7 +16,7 @@ Hyper-Alpha-Arena/
       alpha_trace_agent_runtime_service.py # AgentRun submit/detail/events/reports/evidence/decision orchestration
       agent_runners/                       # Runner adapters: stub, qwen, alphatrace_native, tradingagents, langalpha stub
       agent_orchestrator/                  # Runner-neutral plans, flows, task specs, adapter matrix
-      agent_runtime_store/                 # AgentRun persistence abstraction: MySQL target + JSON fallback
+      agent_runtime_store/                 # AgentRun persistence abstraction: MySQL config/task target + JSON fallback
       async_tasks/                         # Scheduler-neutral async task abstraction and task snapshots
       agent_artifacts/                     # AgentArtifact store, catalog, URL/tool result mappers
       agent_runtime_metrics.py             # Single-run metrics snapshot read model
@@ -27,7 +27,7 @@ Hyper-Alpha-Arena/
       integration_adapters/                # Qwen/Bocha/tool/professional-data/LangAlpha adapter boundary
       data_api/                            # AlphaTrace data API resource/provider catalog
       evidence_retrieval/                  # Static + Bocha evidence retrieval and mapping
-      asset_store/                         # Asset domain store, static seed + MySQL direction
+      asset_store/                         # Asset domain store, static seed today + ClickHouse target
       strategy_store/                      # Strategy domain store
       portfolio_store/                     # Portfolio domain store
       decision_store/                      # Decision extraction/store from AgentRun + static fallback
@@ -39,7 +39,7 @@ Hyper-Alpha-Arena/
       architecture_review_bundle.py        # One-call architecture review bundle
     integrations/
       bocha/                               # Bocha client/schema/mapper, backend-only key usage
-    database/                              # Existing DB/session/model infrastructure; MySQL is target direction
+    database/                              # Existing DB/session/model infrastructure; MySQL config/task direction
     runtime_data/                          # Local fallback JSON/runtime artifacts; not production persistence
   frontend/
     app/
@@ -74,7 +74,7 @@ Hyper-Alpha-Arena/
 | Boundary | Current Role | Refactor Rule |
 |---|---|---|
 | AlphaTrace API Layer | Owns frontend-facing REST/SSE product contracts. | Frontend consumes AlphaTrace schemas only. |
-| Domain Stores | Asset/Evidence/Strategy/Portfolio/Decision/Leaderboard product data. | Static seed is fallback; MySQL is target persistence. |
+| Domain Stores | Asset/Evidence/Strategy/Portfolio/Decision/Leaderboard product data. | Static seed is fallback; ClickHouse is target structured business persistence. |
 | Agent Runtime | Submit, background execution, events, SSE, reports, evidence, decision, artifacts. | Product persistence remains AlphaTrace-owned. |
 | Runner Adapters | Stub/Qwen/Native/TradingAgents/LangAlpha runner boundary. | Runners execute and map back to AlphaTrace schema; they do not own product models. |
 | Integration Adapters | Qwen/Bocha/tools/professional data/LangAlpha external bridge. | Secrets are backend-only; diagnostics are sanitized. |
@@ -113,12 +113,15 @@ flowchart LR
     Native["AlphaTrace Native Runner"]
     TG["TradingAgents Adapter (opt-in PoC)"]
     LangAlpha["LangAlpha External Workbench (design)"]
-    Bocha["Bocha Evidence Search"]
+    Bocha["Bocha Search Tool"]
     ProData["Future Professional Market Data"]
+    Skills["Agent Skill Catalog"]
+    DataCenter["Data Center Connectors"]
   end
 
   subgraph Persistence["Persistence"]
-    MySQL[("MySQL target")]
+    MySQL[("MySQL config/task target")]
+    ClickHouse[("ClickHouse business analytics target")]
     JSON[("JSON fallback")]
   end
 
@@ -140,8 +143,12 @@ flowchart LR
   Orchestrator --> Bocha
   Domains --> Bocha
   Domains --> ProData
+  DataCenter --> Bocha
+  DataCenter --> ProData
+  Skills --> Orchestrator
+  Orchestrator --> Skills
   Runtime --> MySQL
-  Domains --> MySQL
+  Domains --> ClickHouse
   Config --> MySQL
   Runtime --> JSON
 ```
@@ -207,8 +214,9 @@ flowchart LR
   Asset["Asset / Portfolio / Strategy Context"]
   DataCatalog["Data API Catalog"]
   Static["Static Seed"]
-  MySQL["MySQL Domain Store"]
-  Bocha["Bocha Search"]
+  MySQL["MySQL System Config Store"]
+  ClickHouse["ClickHouse Business Analytics Store"]
+  Bocha["Bocha Search Tool"]
   Pro["Future Professional Data"]
   Evidence["EvidenceReference"]
   Artifact["AgentArtifact: web_url/json/text/table"]
@@ -221,13 +229,14 @@ flowchart LR
   DataCatalog --> Bocha
   DataCatalog --> Pro
   Static --> Evidence
-  MySQL --> Evidence
   Bocha --> Evidence
   Pro --> Evidence
   Evidence --> Artifact
   Evidence --> Prompt
   Prompt --> Report
   Report --> Artifact
+  Evidence --> ClickHouse
+  Report --> ClickHouse
 ```
 
 ## 7. Current Review Endpoints
@@ -239,6 +248,8 @@ flowchart LR
 | `/api/alpha-trace/agent-runs/runtime/module-boundaries` | Backend module boundary catalog. |
 | `/api/alpha-trace/agent-runs/runtime/external-components` | External component catalog. |
 | `/api/alpha-trace/agent-runs/runtime/integration-decisions` | Proceed/stop decision guide. |
+| `/api/alpha-trace/agent-runs/runtime/data-center` | Data Center connector/governance/store-routing catalog. |
+| `/api/alpha-trace/agent-runs/runtime/skills` | Agent skill catalog for agent-configurable tool/data/model/output bindings. |
 | `/api/alpha-trace/agent-runs/runtime/readiness` | Runtime readiness summary. |
 | `/api/alpha-trace/data-sources/api-catalog` | Data API resource/provider catalog. |
 | `/api/alpha-trace/agent-runs/runtime/artifacts/catalog` | AgentArtifact preview/source policy catalog. |
@@ -251,4 +262,28 @@ flowchart LR
 4. Stabilize AlphaTrace Native runner as product path.
 5. Continue TradingAgents PoC only through `TradingAgentsRunnerAdapter` and with clear disabled/import/failure states.
 6. Treat LangAlpha as external service/design reference until worker/artifact contracts are stable.
-7. Move remaining product-owned runtime/domain/system config persistence to MySQL, with JSON fallback preserved for local development.
+7. Move system config/task control to MySQL and structured runtime/domain analytics to ClickHouse, with JSON/static fallback preserved for local development.
+
+
+
+## 9. Data Center, Tool, Skill, and Multi-Agent Control Planes
+
+```mermaid
+flowchart TD
+  DataCenter["Data Center\nconnectors + governance + store routing"]
+  Tools["Tool Registry\nBocha, market context, evidence retrieve, model calls"]
+  Skills["Skill Catalog\nagent-configurable capabilities"]
+  Orchestrator["Agent Orchestrator\nDAG + roles + task specs"]
+  Agents["Agents\nMarket / Bull / Bear / Risk / PM"]
+  Stores["Stores\nMySQL config/task + ClickHouse business analytics"]
+
+  DataCenter --> Tools
+  Tools --> Skills
+  Skills --> Agents
+  Orchestrator --> Agents
+  Orchestrator --> Skills
+  Agents --> Stores
+  DataCenter --> Stores
+```
+
+Rule: Bocha is a tool input to Evidence Retrieval. It is not the durable business data layer. Structured business outputs go to ClickHouse after mapping into AlphaTrace schemas; runtime/config/control state goes to MySQL.
