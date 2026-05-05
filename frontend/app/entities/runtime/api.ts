@@ -131,6 +131,28 @@ export interface AgentSkillCatalogResponse {
   message?: string;
 }
 
+export interface AgentRoleSkillBinding {
+  role_id: string;
+  display_name: string;
+  team: string;
+  status: string;
+  depends_on: string[];
+  default_skills: string[];
+  optional_skills: string[];
+  tool_ids: string[];
+  output_contracts: string[];
+  notes?: string;
+}
+
+export interface AgentSkillBindingCatalogResponse {
+  version: number;
+  bindings: AgentRoleSkillBinding[];
+  total: number;
+  summary: JsonRecord;
+  policies: Record<string, string>;
+  message?: string;
+}
+
 export interface ArchitectureReviewBundleResponse {
   version: number;
   architecture: RuntimeArchitectureIndex;
@@ -139,6 +161,7 @@ export interface ArchitectureReviewBundleResponse {
   integrationDecisions: IntegrationDecisionGuideResponse;
   dataCenter: DataCenterCatalogResponse;
   skills: AgentSkillCatalogResponse;
+  agentSkillBindings: AgentSkillBindingCatalogResponse;
   readiness: RuntimeReadinessResponse;
   summary: JsonRecord;
   policies: Record<string, string>;
@@ -352,6 +375,9 @@ export const getRuntimeDataCenterAsync = () =>
 
 export const getRuntimeSkillsAsync = () =>
   httpClient.get<AgentSkillCatalogResponse>(ENDPOINTS.alphaTraceAgentRuntimeSkills);
+
+export const getRuntimeAgentSkillBindingsAsync = () =>
+  httpClient.get<AgentSkillBindingCatalogResponse>(ENDPOINTS.alphaTraceAgentRuntimeAgentSkillBindings);
 
 export const getRuntimeReadinessAsync = () =>
   httpClient.get<RuntimeReadinessResponse>(ENDPOINTS.alphaTraceAgentRuntimeReadiness);

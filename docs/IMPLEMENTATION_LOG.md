@@ -4941,3 +4941,28 @@ Notes:
 
 Next:
 - Continue with M206: decide whether to wire ArchitectureReviewPanel into a diagnostics surface or continue backend abstraction hardening.
+
+## 2026-05-05 - M206 Agent Role Skill Binding Matrix
+
+Goal:
+- Add a product-owned agent-role to skill/tool/output-contract binding matrix for future configurable multi-agent orchestration.
+
+Changes:
+- Added `backend/services/agent_skill_bindings.py`.
+- Added `/api/alpha-trace/agent-runs/runtime/agent-skill-bindings`.
+- Updated architecture index, architecture review bundle, frontend runtime API contracts, smoke scripts, and architecture overview docs.
+
+Validation:
+- python -m py_compile backend/services/agent_skill_bindings.py backend/services/architecture_index.py backend/services/architecture_review_bundle.py backend/api/alpha_trace_agent_runtime_routes.py: passed.
+- powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1: passed. Warning only: existing RequestsDependencyWarning from local Python packages.
+- powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_abstraction_endpoints.ps1 -SkipHttp: passed, 23 endpoint definitions validated.
+- pnpm --dir frontend build: passed. Existing Vite chunk/browserslist warnings remain.
+
+Result:
+- M206 is complete. AlphaTrace now has a read-only agent role to skill/tool/output-contract binding matrix for future configurable orchestration.
+
+Notes:
+- This is a read-only control-plane contract. It does not change Qwen/Native/TradingAgents execution behavior.
+
+Next:
+- Continue with M207: render agent-skill bindings in a reusable frontend panel or connect the binding matrix into flow/DAG diagnostics.

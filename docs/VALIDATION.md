@@ -2869,3 +2869,25 @@ Expected:
 - `frontend/app/shared/ui/AgentSkillPanel.tsx` compiles.
 - `ArchitectureReviewPanel` renders review bundle `dataCenter` and `skills` sections.
 - No new dependencies are introduced.
+
+### M206 Agent Role Skill Binding Matrix
+
+Required backend compile:
+
+```powershell
+python -m py_compile backend/services/agent_skill_bindings.py backend/services/architecture_index.py backend/services/architecture_review_bundle.py backend/api/alpha_trace_agent_runtime_routes.py
+```
+
+Required regression:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_abstraction_endpoints.ps1 -SkipHttp
+pnpm --dir frontend build
+```
+
+Expected:
+
+- Binding catalog includes evidence, analyst, research, risk, and portfolio roles.
+- Architecture review bundle includes `agentSkillBindings`.
+- Endpoint smoke includes `/runtime/agent-skill-bindings`.

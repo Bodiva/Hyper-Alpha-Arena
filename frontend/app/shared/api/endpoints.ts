@@ -51,6 +51,7 @@ export const ENDPOINTS = {
   alphaTraceAgentRuntimeIntegrationDecisions: "/alpha-trace/agent-runs/runtime/integration-decisions",
   alphaTraceAgentRuntimeDataCenter: "/alpha-trace/agent-runs/runtime/data-center",
   alphaTraceAgentRuntimeSkills: "/alpha-trace/agent-runs/runtime/skills",
+  alphaTraceAgentRuntimeAgentSkillBindings: "/alpha-trace/agent-runs/runtime/agent-skill-bindings",
   alphaTraceAgentRuntimeReadiness: "/alpha-trace/agent-runs/runtime/readiness",
   alphaTraceAgentRuntimeConfig: "/alpha-trace/agent-runs/runtime/config",
   alphaTraceAgentRuntimeModelProviders: "/alpha-trace/agent-runs/runtime/model-providers",
@@ -145,6 +146,7 @@ export const ALPHA_TRACE_AGENT_RUNTIME_EXTERNAL_COMPONENTS = ENDPOINTS.alphaTrac
 export const ALPHA_TRACE_AGENT_RUNTIME_INTEGRATION_DECISIONS = ENDPOINTS.alphaTraceAgentRuntimeIntegrationDecisions;
 export const ALPHA_TRACE_AGENT_RUNTIME_DATA_CENTER = ENDPOINTS.alphaTraceAgentRuntimeDataCenter;
 export const ALPHA_TRACE_AGENT_RUNTIME_SKILLS = ENDPOINTS.alphaTraceAgentRuntimeSkills;
+export const ALPHA_TRACE_AGENT_RUNTIME_AGENT_SKILL_BINDINGS = ENDPOINTS.alphaTraceAgentRuntimeAgentSkillBindings;
 export const ALPHA_TRACE_AGENT_RUNTIME_READINESS = ENDPOINTS.alphaTraceAgentRuntimeReadiness;
 export const ALPHA_TRACE_AGENT_RUNTIME_CONFIG = ENDPOINTS.alphaTraceAgentRuntimeConfig;
 export const ALPHA_TRACE_AGENT_RUNTIME_MODEL_PROVIDERS = ENDPOINTS.alphaTraceAgentRuntimeModelProviders;

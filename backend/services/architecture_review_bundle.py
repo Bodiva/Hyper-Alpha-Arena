@@ -5,6 +5,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from services.architecture_index import get_alphatrace_architecture_index
+from services.agent_skill_bindings import get_agent_skill_binding_catalog
 from services.agent_skill_catalog import get_agent_skill_catalog
 from services.backend_module_boundaries import get_backend_module_boundary_catalog
 from services.data_center_catalog import get_data_center_catalog
@@ -27,6 +28,7 @@ def get_architecture_review_bundle(db: Session | None = None) -> dict[str, Any]:
     integration_decisions = get_integration_decision_guide().to_response()
     data_center = get_data_center_catalog().to_response()
     skills = get_agent_skill_catalog().to_response()
+    agent_skill_bindings = get_agent_skill_binding_catalog().to_response()
     readiness = get_runtime_readiness_summary(db)
 
     return {
@@ -37,6 +39,7 @@ def get_architecture_review_bundle(db: Session | None = None) -> dict[str, Any]:
         "integrationDecisions": integration_decisions,
         "dataCenter": data_center,
         "skills": skills,
+        "agentSkillBindings": agent_skill_bindings,
         "readiness": readiness,
         "summary": {
             "layers": len(architecture.get("layers", [])),
@@ -45,6 +48,7 @@ def get_architecture_review_bundle(db: Session | None = None) -> dict[str, Any]:
             "integrationDecisions": integration_decisions.get("total", 0),
             "dataCenterConnectors": data_center.get("total", 0),
             "skills": skills.get("total", 0),
+            "agentSkillBindings": agent_skill_bindings.get("total", 0),
             "readiness": readiness.get("overallStatus", "unknown"),
         },
         "policies": {

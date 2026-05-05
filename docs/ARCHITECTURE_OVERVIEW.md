@@ -250,6 +250,7 @@ flowchart LR
 | `/api/alpha-trace/agent-runs/runtime/integration-decisions` | Proceed/stop decision guide. |
 | `/api/alpha-trace/agent-runs/runtime/data-center` | Data Center connector/governance/store-routing catalog. |
 | `/api/alpha-trace/agent-runs/runtime/skills` | Agent skill catalog for agent-configurable tool/data/model/output bindings. |
+| `/api/alpha-trace/agent-runs/runtime/agent-skill-bindings` | Agent-role to skill/tool/output-contract binding matrix. |
 | `/api/alpha-trace/agent-runs/runtime/readiness` | Runtime readiness summary. |
 | `/api/alpha-trace/data-sources/api-catalog` | Data API resource/provider catalog. |
 | `/api/alpha-trace/agent-runs/runtime/artifacts/catalog` | AgentArtifact preview/source policy catalog. |

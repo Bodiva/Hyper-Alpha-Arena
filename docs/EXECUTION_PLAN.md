@@ -6631,3 +6631,38 @@ Validation:
 Rollback:
 
 Remove `DataCenterPanel`, `AgentSkillPanel`, and the ArchitectureReviewPanel additions.
+
+## M206 - Agent Role Skill Binding Matrix
+
+Status: Completed
+
+Goal:
+
+Define a backend read model for default agent-role to skill/tool/output-contract bindings so AlphaTrace can evolve from logical DAG display into configurable multi-agent orchestration without exposing TradingAgents or LangAlpha internals.
+
+Scope:
+
+1. Add `backend/services/agent_skill_bindings.py`.
+2. Add `GET /api/alpha-trace/agent-runs/runtime/agent-skill-bindings`.
+3. Include role bindings in the architecture index and architecture review bundle.
+4. Add typed frontend runtime API contract and endpoint helper.
+5. Extend smoke scripts and architecture overview docs.
+6. Do not change runner execution behavior.
+
+Acceptance:
+
+1. Binding catalog includes Evidence Retriever, Market Analyst, Bull Researcher, Bear Researcher, Research Manager, Risk Analyst, and Portfolio Manager.
+2. Each binding declares dependencies, default skills, optional skills, tool IDs, and output contracts.
+3. Architecture review bundle includes `agentSkillBindings`.
+4. Backend py_compile, abstraction smoke, endpoint smoke, and frontend build pass.
+
+Validation:
+
+1. `python -m py_compile backend/services/agent_skill_bindings.py backend/services/architecture_index.py backend/services/architecture_review_bundle.py backend/api/alpha_trace_agent_runtime_routes.py`.
+2. `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`.
+3. `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_abstraction_endpoints.ps1 -SkipHttp`.
+4. `pnpm --dir frontend build`.
+
+Rollback:
+
+Remove the agent skill binding service, endpoint, frontend types/helper, smoke additions, and docs additions.

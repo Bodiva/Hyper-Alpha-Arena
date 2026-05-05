@@ -44,6 +44,7 @@ from services.agent_runtime_metrics import get_agent_run_metrics_snapshot
 from services.agent_runtime_timeline import get_agent_run_timeline_summary
 from services.architecture_index import get_alphatrace_architecture_index
 from services.architecture_review_bundle import get_architecture_review_bundle
+from services.agent_skill_bindings import get_agent_skill_binding_catalog
 from services.agent_skill_catalog import get_agent_skill_catalog
 from services.backend_module_boundaries import get_backend_module_boundary_catalog
 from services.data_center_catalog import get_data_center_catalog
@@ -428,6 +429,14 @@ def get_agent_runtime_skills_endpoint():
     return {
         **get_agent_skill_catalog().to_response(),
         "message": "Agent skill catalog describes configurable skills that bind agents to tools, data domains, model requirements, and output contracts.",
+    }
+
+
+@router.get("/runtime/agent-skill-bindings")
+def get_agent_runtime_agent_skill_bindings_endpoint():
+    return {
+        **get_agent_skill_binding_catalog().to_response(),
+        "message": "Agent skill bindings describe default role-to-skill, role-to-tool, and role-to-output-contract mappings for the AlphaTrace multi-agent DAG.",
     }
 
 

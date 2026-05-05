@@ -9,6 +9,7 @@ from services.agent_orchestrator.flow_catalog import get_agent_flow_catalog
 from services.agent_orchestrator.orchestrator_catalog import list_orchestrator_descriptors
 from services.agent_orchestrator.task_spec_catalog import list_task_spec_contracts
 from services.agent_artifacts import get_agent_artifact_catalog
+from services.agent_skill_bindings import get_agent_skill_binding_catalog
 from services.agent_skill_catalog import get_agent_skill_catalog
 from services.agent_tool_registry import list_agent_tool_contracts
 from services.backend_module_boundaries import get_backend_module_boundary_catalog
@@ -43,6 +44,7 @@ def get_alphatrace_architecture_index(db: Session | None = None) -> dict[str, An
     integration_decisions = get_integration_decision_guide().to_response()
     data_center = get_data_center_catalog().to_response()
     skills = get_agent_skill_catalog().to_response()
+    agent_skill_bindings = get_agent_skill_binding_catalog().to_response()
 
     return {
         "version": 1,
@@ -102,7 +104,10 @@ def get_alphatrace_architecture_index(db: Session | None = None) -> dict[str, An
                 "layerId": "agent_skills",
                 "displayName": "Agent Skill Catalog",
                 "status": "active",
-                "contracts": ("/api/alpha-trace/agent-runs/runtime/skills",),
+                "contracts": (
+                    "/api/alpha-trace/agent-runs/runtime/skills",
+                    "/api/alpha-trace/agent-runs/runtime/agent-skill-bindings",
+                ),
             },
             {
                 "layerId": "model_providers",
@@ -147,6 +152,10 @@ def get_alphatrace_architecture_index(db: Session | None = None) -> dict[str, An
             "dataApis": {"total": data_api.get("total", 0), "providerTotal": data_api.get("providerTotal", 0)},
             "dataCenter": {"total": data_center.get("total", 0), "summary": data_center.get("summary", {})},
             "skills": {"total": skills.get("total", 0), "summary": skills.get("summary", {})},
+            "agentSkillBindings": {
+                "total": agent_skill_bindings.get("total", 0),
+                "summary": agent_skill_bindings.get("summary", {}),
+            },
             "runnerAdapters": {"total": adapter_matrix.get("total", 0)},
             "runnerFlows": {"total": len(flow_items)},
             "tools": {"total": len(tools)},
@@ -181,6 +190,7 @@ def get_alphatrace_architecture_index(db: Session | None = None) -> dict[str, An
             "dataApiCatalog": "/api/alpha-trace/data-sources/api-catalog",
             "dataCenter": "/api/alpha-trace/agent-runs/runtime/data-center",
             "skills": "/api/alpha-trace/agent-runs/runtime/skills",
+            "agentSkillBindings": "/api/alpha-trace/agent-runs/runtime/agent-skill-bindings",
             "adapterMatrix": "/api/alpha-trace/agent-runs/runners/adapter-matrix",
             "flowCatalog": "/api/alpha-trace/agent-runs/runners/flows",
             "toolContracts": "/api/alpha-trace/agent-runs/runtime/tools",
