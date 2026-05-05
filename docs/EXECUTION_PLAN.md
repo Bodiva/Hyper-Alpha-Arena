@@ -6814,3 +6814,36 @@ Validation:
 Rollback:
 
 Revert the overview document additions.
+
+## M212 - Live Runtime Catalog Endpoint Smoke
+
+Status: Completed
+
+Goal:
+
+Validate the runtime catalog/control-plane endpoints through the running Docker backend and Vite proxy path, not only static route definitions.
+
+Scope:
+
+1. Restart the Docker `app` service if newly mounted backend route files are not loaded.
+2. Validate abstraction endpoints through direct backend `8802` and browser/Vite proxy chain `8805`.
+3. Record any transient startup/proxy behavior without changing business code.
+4. Do not modify Docker, package files, or legacy BTC/Hyperliquid runtime.
+
+Acceptance:
+
+1. `/api/health` passes on `8802` and `8805`.
+2. `smoke_abstraction_endpoints.ps1` passes against `http://127.0.0.1:8802/api`.
+3. `smoke_abstraction_endpoints.ps1` passes against `http://127.0.0.1:8805/api`.
+4. No route returns 404/500 after backend restart has stabilized.
+
+Validation:
+
+1. `Invoke-RestMethod http://127.0.0.1:8802/api/health`.
+2. `Invoke-RestMethod http://127.0.0.1:8805/api/health`.
+3. `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_abstraction_endpoints.ps1 -BaseUrl http://127.0.0.1:8802/api`.
+4. `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_abstraction_endpoints.ps1 -BaseUrl http://127.0.0.1:8805/api`.
+
+Rollback:
+
+Documentation-only milestone. If live smoke fails, keep previous static route smoke and record the backend/proxy blocker in `docs/IMPLEMENTATION_LOG.md`.

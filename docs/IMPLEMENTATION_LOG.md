@@ -5073,3 +5073,30 @@ Notes:
 
 Next:
 - Continue with M212: decide whether to add live API smoke for the new runtime catalog endpoints or start ClickHouse migration design.
+
+## 2026-05-05 - M212 Live Runtime Catalog Endpoint Smoke
+
+Goal:
+- Validate the new AlphaTrace runtime catalog endpoints against the live Docker backend and current browser/Vite proxy path.
+
+Actions:
+- Restarted Docker `app` after initial 404s showed the running backend had not loaded newly mounted route files.
+- Observed a short transient 500 window immediately after restart while backend/proxy stabilized.
+- Re-ran smoke against direct backend `8802` and Vite proxy `8805`.
+
+Validation:
+- `Invoke-RestMethod http://127.0.0.1:8802/api/health`: passed.
+- `Invoke-RestMethod http://127.0.0.1:8805/api/health`: passed.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_abstraction_endpoints.ps1 -BaseUrl http://127.0.0.1:8802/api`: passed, 24 endpoints.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_abstraction_endpoints.ps1 -BaseUrl http://127.0.0.1:8805/api`: passed, 24 endpoints.
+
+Result:
+- M212 is complete. Runtime catalog/control-plane endpoints are live through both the backend port and browser proxy chain.
+
+Notes:
+- Initial 404s were caused by the already-running Docker backend not yet loading newly added route code.
+- Initial 500s after restart were transient during backend/proxy stabilization; rerun passed.
+- Legacy BTC/Hyperliquid startup logs still appear and remain intentionally out of scope.
+
+Next:
+- Continue with M213: choose the next implementation slice, likely a ClickHouse projection writer design/smoke or a Data Center UI integration pass.

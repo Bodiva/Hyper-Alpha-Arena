@@ -2968,3 +2968,20 @@ Expected:
 
 - Architecture overview lists the new backend catalogs and frontend panels.
 - Diagram mentions Data Center, role/skill bindings, and ClickHouse routing.
+
+### M212 Live Runtime Catalog Endpoint Smoke
+
+Live API checks:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8802/api/health
+Invoke-RestMethod http://127.0.0.1:8805/api/health
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_abstraction_endpoints.ps1 -BaseUrl http://127.0.0.1:8802/api
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_abstraction_endpoints.ps1 -BaseUrl http://127.0.0.1:8805/api
+```
+
+Expected:
+
+- Health checks return `status=healthy`.
+- All runtime catalog and runner diagnostic endpoints return 2xx.
+- If Docker was running before route files were mounted, restart `app` and rerun after startup stabilizes.
