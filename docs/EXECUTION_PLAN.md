@@ -5979,3 +5979,31 @@ Validation:
 Rollback:
 
 Remove provider descriptors and smoke additions.
+
+## M184 - Frontend Data API Catalog Contract
+
+Status: Completed
+
+Goal:
+
+Expose Data API resource and provider catalog to frontend API clients.
+
+Scope:
+
+1. Add `alphaTraceDataApiCatalog` endpoint constant.
+2. Add Data API resource/provider catalog types.
+3. Add `getDataApiCatalogAsync()`.
+4. Do not wire existing pages in this milestone.
+
+Acceptance:
+
+1. Frontend build passes.
+2. Data API catalog helper compiles without new dependencies.
+
+Validation:
+
+1. `pnpm --dir frontend build`.
+
+Rollback:
+
+Remove the endpoint constant, types, and helper.

@@ -4486,3 +4486,22 @@ Notes:
 
 Next:
 - Continue with frontend typing for Data API provider catalog or professional data adapter planning.
+
+## 2026-05-05 - M184 Frontend Data API Catalog Contract
+
+Goal:
+- Expose Data API resource/provider catalog to frontend API clients.
+
+Changes:
+- Updated `frontend/app/shared/api/endpoints.ts`.
+- Updated `frontend/app/entities/data-source/api.ts`.
+
+Validation:
+- `pnpm --dir frontend build`: passed.
+
+Notes:
+- This milestone only adds typed API access.
+- Future Data Sources UI can show static seed, MySQL, Bocha, planned professional market data, and LangAlpha boundaries.
+
+Next:
+- Continue with a professional market data adapter interface or consolidated endpoint smoke pack.

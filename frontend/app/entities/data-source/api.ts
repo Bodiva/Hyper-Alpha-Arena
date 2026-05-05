@@ -22,6 +22,40 @@ interface BackendDataSourceListResponse {
   offset?: number;
 }
 
+export interface DataApiResource {
+  resource_id: string;
+  domain: string;
+  display_name: string;
+  path: string;
+  operations: string[];
+  provider_id: string;
+  store_type: string;
+  status: string;
+  notes?: string;
+}
+
+export interface DataApiProvider {
+  provider_id: string;
+  display_name: string;
+  provider_type: string;
+  status: string;
+  domains: string[];
+  requires_secret: boolean;
+  credential_source: string;
+  operations: string[];
+  notes?: string;
+}
+
+export interface DataApiCatalogResponse {
+  catalogId: string;
+  resources: DataApiResource[];
+  providers: DataApiProvider[];
+  total: number;
+  providerTotal: number;
+  policies?: Record<string, unknown>;
+  message?: string;
+}
+
 const normalize = (value: string): string => value.trim().toLowerCase();
 
 const realModeNotImplemented = (operation: string): never => {
@@ -84,6 +118,9 @@ export const getDataSourceTasksAsync = (sourceId: string, delayMs?: number): Pro
   shouldUseMockData()
     ? mockDelay(getDataSourceTasks(sourceId), delayMs)
     : httpClient.get<DataSourceTask[]>(ENDPOINTS.alphaTraceDataSourceTasks(sourceId));
+
+export const getDataApiCatalogAsync = (): Promise<DataApiCatalogResponse> =>
+  httpClient.get<DataApiCatalogResponse>(ENDPOINTS.alphaTraceDataApiCatalog);
 
 const listRealDataSources = async (params: ListDataSourcesParams = {}): Promise<DataSource[]> => {
   const response = await httpClient.get<BackendDataSourceListResponse>(ENDPOINTS.alphaTraceDataSources, {

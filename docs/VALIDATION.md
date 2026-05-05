@@ -2514,3 +2514,18 @@ Expected:
 
 - Data API catalog includes provider descriptors for static seed, MySQL, Bocha, future professional market data, and LangAlpha.
 - Catalog policies clarify credential, fallback, professional data, and legacy BTC/Hyperliquid boundaries.
+
+### M184 Frontend Data API Catalog Contract
+
+Required frontend build:
+
+```powershell
+pnpm --dir frontend build
+```
+
+Expected:
+
+- Build succeeds.
+- `frontend/app/shared/api/endpoints.ts` exports the Data API catalog endpoint.
+- `frontend/app/entities/data-source/api.ts` exports Data API catalog types and `getDataApiCatalogAsync`.
+- No existing page wiring is changed in this milestone.

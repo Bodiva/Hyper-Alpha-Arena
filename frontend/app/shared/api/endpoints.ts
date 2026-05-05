@@ -82,6 +82,7 @@ export const ENDPOINTS = {
   alphaTraceDecisionEvidence: (decisionId = ":decisionId") => `/alpha-trace/decisions/${decisionId}/evidence`,
   alphaTraceDecisionAgentRun: (decisionId = ":decisionId") => `/alpha-trace/decisions/${decisionId}/agent-run`,
   alphaTraceDataSources: "/alpha-trace/data-sources",
+  alphaTraceDataApiCatalog: "/alpha-trace/data-sources/api-catalog",
   alphaTraceDataSourceDetail: (sourceId = ":sourceId") => `/alpha-trace/data-sources/${sourceId}`,
   alphaTraceDataSourceTasks: (sourceId = ":sourceId") => `/alpha-trace/data-sources/${sourceId}/tasks`,
 } as const;
@@ -169,5 +170,6 @@ export const ALPHA_TRACE_DECISION_DETAIL = ENDPOINTS.alphaTraceDecisionDetail;
 export const ALPHA_TRACE_DECISION_EVIDENCE = ENDPOINTS.alphaTraceDecisionEvidence;
 export const ALPHA_TRACE_DECISION_AGENT_RUN = ENDPOINTS.alphaTraceDecisionAgentRun;
 export const ALPHA_TRACE_DATA_SOURCES = ENDPOINTS.alphaTraceDataSources;
+export const ALPHA_TRACE_DATA_API_CATALOG = ENDPOINTS.alphaTraceDataApiCatalog;
 export const ALPHA_TRACE_DATA_SOURCE_DETAIL = ENDPOINTS.alphaTraceDataSourceDetail;
 export const ALPHA_TRACE_DATA_SOURCE_TASKS = ENDPOINTS.alphaTraceDataSourceTasks;
