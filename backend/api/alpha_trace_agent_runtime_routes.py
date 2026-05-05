@@ -69,7 +69,26 @@ def _resolve_runtime_log_path() -> Path:
     if raw_path:
         candidate = Path(raw_path)
         return candidate if candidate.is_absolute() else (_project_root() / candidate).resolve()
-    return (_project_root() / "backend-tg-local.log").resolve()
+    candidates = _runtime_log_candidates()
+    for candidate in candidates:
+        if candidate.exists() and candidate.is_file():
+            return candidate
+    return candidates[0]
+
+
+def _runtime_log_candidates() -> list[Path]:
+    raw_path = os.getenv("ALPHATRACE_BACKEND_LOG_PATH", "").strip()
+    if raw_path:
+        candidate = Path(raw_path)
+        return [candidate if candidate.is_absolute() else (_project_root() / candidate).resolve()]
+
+    root = _project_root()
+    return [
+        (root / "backend-alphatrace-local.log").resolve(),
+        (root / "backend-tg-local.log").resolve(),
+        (root / "logs" / "backend-runtime.log").resolve(),
+        (root / "backend-current-8813.out.log").resolve(),
+    ]
 
 
 def _resolve_worker_root_path() -> Path:
@@ -305,14 +324,20 @@ def get_agent_runner_capabilities_endpoint(
 @router.get("/runtime/logs")
 def get_agent_runtime_logs_endpoint(limit: int = Query(400, ge=1, le=2000)):
     log_path = _resolve_runtime_log_path()
+    candidates = [str(path) for path in _runtime_log_candidates()]
     if not log_path.exists() or not log_path.is_file():
         return {
             "path": str(log_path),
+            "source": "file",
             "exists": False,
             "limit": limit,
             "truncated": False,
             "lines": [],
-            "message": "Backend runtime log file is not available. Set ALPHATRACE_BACKEND_LOG_PATH for local PoC log viewing.",
+            "candidates": candidates,
+            "message": (
+                "Backend runtime log file is not available. Docker deployments usually write logs to stdout instead of a file; "
+                "use `docker logs hyper-arena-app` for full process logs, or set ALPHATRACE_BACKEND_LOG_PATH to a readable file path for local PoC log viewing."
+            ),
         }
 
     lines: deque[str] = deque(maxlen=limit)
@@ -322,10 +347,12 @@ def get_agent_runtime_logs_endpoint(limit: int = Query(400, ge=1, le=2000)):
 
     return {
         "path": str(log_path),
+        "source": "file",
         "exists": True,
         "limit": limit,
         "truncated": len(lines) >= limit,
         "lines": list(lines),
+        "candidates": candidates,
     }
 
 

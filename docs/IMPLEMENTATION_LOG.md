@@ -3271,3 +3271,28 @@ Notes:
 
 Next:
 - Continue with runtime log availability / backend log path hardening, or proceed to evidence preview UX depending on demo priority.
+
+## 2026-05-05 - M113 Backend Runtime Log Availability Diagnostics
+
+Goal:
+- Make AgentRunDetail backend log availability understandable when the configured file log is missing, especially in Docker/stdout deployments.
+
+Changes:
+- Updated `backend/api/alpha_trace_agent_runtime_routes.py`.
+- Runtime log endpoint now resolves known local AlphaTrace log candidates when `ALPHATRACE_BACKEND_LOG_PATH` is not set.
+- Runtime log endpoint returns `source` and `candidates` metadata.
+- Missing-log message now explains that Docker deployments usually write process logs to stdout and suggests `docker logs hyper-arena-app` or `ALPHATRACE_BACKEND_LOG_PATH`.
+- Updated `frontend/app/entities/agent/api.ts` and `frontend/app/pages/AgentRunDetailPage.tsx` to display log source and checked candidates.
+
+Validation:
+- `python -m py_compile backend/api/alpha_trace_agent_runtime_routes.py`: passed.
+- `pnpm --dir frontend build`: passed.
+- `GET http://127.0.0.1:8805/api/alpha-trace/agent-runs/runtime/logs?limit=5`: returned available `/app/logs/backend-runtime.log` from the running backend.
+- Direct local route import smoke was skipped because the host Python environment is missing `psycopg2`; py_compile and running API smoke covered this change.
+
+Notes:
+- This does not attempt to read Docker stdout from inside FastAPI. Runtime Event Stream remains the canonical per-run execution source.
+- Existing unrelated Settings/layout changes remain uncommitted and were not included in this milestone.
+
+Next:
+- Continue with AgentRunDetail visual consistency cleanup or Native runner/token metric persistence review.

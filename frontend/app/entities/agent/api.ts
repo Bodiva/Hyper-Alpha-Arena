@@ -137,10 +137,12 @@ export interface AgentRunnerCapabilitiesResponse {
 
 export interface AgentRuntimeLogResponse {
   path: string;
+  source?: string;
   exists: boolean;
   limit: number;
   truncated: boolean;
   lines: string[];
+  candidates?: string[];
   message?: string;
 }
 

@@ -2067,6 +2067,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
             <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant={backendLogs.exists ? "default" : "outline"}>{backendLogs.exists ? "available" : "missing"}</Badge>
+                {backendLogs.source ? <Badge variant="outline">source: {backendLogs.source}</Badge> : null}
                 <span className="truncate text-muted-foreground">Path: {backendLogs.path}</span>
                 <span className="text-muted-foreground">Raw Lines: {backendLogs.lines.length}</span>
                 <span className="text-muted-foreground">Visible: {filteredBackendLogLines.length}</span>
@@ -2091,6 +2092,18 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
                 ))}
               </div>
               {backendLogs.message ? <p className="text-muted-foreground">{backendLogs.message}</p> : null}
+              {!backendLogs.exists && backendLogs.candidates?.length ? (
+                <details className="rounded border bg-muted/20 p-2 text-muted-foreground">
+                  <summary className="cursor-pointer font-medium text-foreground">Checked log file candidates</summary>
+                  <ul className="mt-2 list-disc space-y-1 pl-5">
+                    {backendLogs.candidates.map((candidate) => (
+                      <li key={candidate} className="break-all font-mono text-[11px]">
+                        {candidate}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              ) : null}
               {backendLogFilter === "all" ? (
                 <p className="text-muted-foreground">
                   当前显示全局原始日志，可能包含 legacy BTC fetch、Hyperliquid strategy refresh、Binance collector 等非当前 Agent Run 信息。
