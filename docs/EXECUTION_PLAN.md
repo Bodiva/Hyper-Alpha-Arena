@@ -5035,3 +5035,32 @@ Validation:
 Rollback:
 
 Remove `task_spec_factory.py`. Current runtime behavior remains unaffected.
+
+## M152 - Optional AgentRun Submit Task Snapshot Recording
+
+Status: Completed
+
+Goal:
+
+Add a default-off bridge from current AgentRun submit flow to `AsyncTaskStore` diagnostics.
+
+Scope:
+
+1. Build `AsyncTaskSpec` after runner submit returns a `runId`.
+2. When `ALPHATRACE_RECORD_ASYNC_TASKS=true` and async task store is MySQL, persist a task snapshot.
+3. Never fail submit if task diagnostics are unavailable.
+4. Keep default runtime behavior unchanged.
+
+Acceptance:
+
+1. Backend py_compile passes.
+2. Default behavior is unchanged when `ALPHATRACE_RECORD_ASYNC_TASKS` is unset.
+3. Diagnostic write failures are swallowed so runner submit remains authoritative.
+
+Validation:
+
+1. `python -m py_compile backend/services/alpha_trace_agent_runtime_service.py backend/services/agent_orchestrator/task_spec_factory.py backend/services/async_tasks/mysql_store.py`.
+
+Rollback:
+
+Remove `_record_async_task_snapshot_if_enabled` and the call after runner submit.

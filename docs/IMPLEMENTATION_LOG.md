@@ -3823,3 +3823,22 @@ Notes:
 
 Next:
 - M152 should define the concrete migration point in `alpha_trace_agent_runtime_service.submit_agent_run`: create task spec, persist pending task, then let existing runner submit continue until scheduler cutover is explicitly enabled.
+
+## 2026-05-05 - M152 Optional AgentRun Submit Task Snapshot Recording
+
+Goal:
+- Add a default-off bridge from current AgentRun submit flow to `AsyncTaskStore` diagnostics.
+
+Changes:
+- Updated `backend/services/alpha_trace_agent_runtime_service.py`.
+- After runner submit returns a response, `_record_async_task_snapshot_if_enabled` can persist `AsyncTaskSpec` to MySQL when `ALPHATRACE_RECORD_ASYNC_TASKS=true`.
+
+Validation:
+- `python -m py_compile backend/services/alpha_trace_agent_runtime_service.py backend/services/agent_orchestrator/task_spec_factory.py backend/services/async_tasks/mysql_store.py`: passed.
+
+Notes:
+- Default behavior is unchanged because the feature flag is off.
+- Task diagnostics never fail submit; errors are swallowed intentionally until scheduler migration is explicit.
+
+Next:
+- M153 should add a runtime-safe API smoke once the backend is restarted/reloaded, or continue with backend data API management abstractions that do not require a restart.

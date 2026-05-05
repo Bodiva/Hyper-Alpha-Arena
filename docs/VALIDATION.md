@@ -2017,3 +2017,17 @@ Required local smoke:
 - Build an `AsyncTaskSpec` from `SubmitAgentRunRequest`.
 - Verify runner/task tags.
 - Verify accidental key-like `extraParams` are redacted in task payload.
+
+### M152 Optional AgentRun Submit Task Snapshot Recording
+
+Required backend compile:
+
+```powershell
+python -m py_compile backend/services/alpha_trace_agent_runtime_service.py backend/services/agent_orchestrator/task_spec_factory.py backend/services/async_tasks/mysql_store.py
+```
+
+Runtime smoke when safe:
+
+- Set `ALPHATRACE_RECORD_ASYNC_TASKS=true`.
+- Submit stub/native run.
+- Verify `/api/alpha-trace/agent-runs/runtime/tasks` returns a task snapshot.

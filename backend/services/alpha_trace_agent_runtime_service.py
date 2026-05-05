@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import os
 from typing import Dict, List, Optional
 
 from sqlalchemy.orm import Session
@@ -21,6 +22,7 @@ from schemas.alpha_trace_agent_runtime import (
 )
 from services.agent_runtime_status_machine import can_transition_status, is_terminal_status
 from services.agent_runtime_store.registry import get_agent_run_store
+from services.agent_orchestrator.task_spec_factory import build_agent_run_task_spec
 from services.agent_orchestrator.subprocess_orchestrator import cancel_subprocess_worker
 from services.agent_runners.base import AgentRunnerContext
 from services.agent_runners.langalpha_adapter import LangAlphaAdapter
@@ -29,6 +31,7 @@ from services.agent_runners.registry import AgentRunnerRegistry
 from services.agent_runners.qwen_runner import QwenRunnerAdapter
 from services.agent_runners.stub_runner import StubAgentRunnerAdapter
 from services.agent_runners.tradingagents_adapter import TradingAgentsAdapter
+from services.async_tasks import get_async_task_store_type, get_mysql_async_task_store
 
 DEMO_RUN_ID = "demo-run-001"
 
@@ -459,4 +462,28 @@ def submit_agent_run(request: SubmitAgentRunRequest, db: Optional[Session] = Non
         update_run_status=_update_agent_run_status,
         update_run_outputs=_update_agent_run_outputs,
     )
-    return _RUNNER_REGISTRY.submit(request, context)
+    response = _RUNNER_REGISTRY.submit(request, context)
+    _record_async_task_snapshot_if_enabled(request, response)
+    return response
+
+
+def _record_async_task_snapshot_if_enabled(request: SubmitAgentRunRequest, response: SubmitAgentRunResponse) -> None:
+    """Optionally mirror AgentRun submit into AsyncTaskStore diagnostics.
+
+    This is default-off to avoid changing current runner semantics. It gives the
+    MySQL async task table real submit-shaped data during controlled migration.
+    """
+
+    if os.getenv("ALPHATRACE_RECORD_ASYNC_TASKS", "").strip().lower() != "true":
+        return
+    if get_async_task_store_type() != "mysql":
+        return
+    try:
+        spec = build_agent_run_task_spec(request, run_id=response.runId, task_id=f"task_{response.runId}")
+        status = str(response.status or "pending").lower()
+        if status not in {"pending", "running", "completed", "failed", "cancelled", "timed_out"}:
+            status = "pending"
+        get_mysql_async_task_store().save_spec(spec, status=status)  # type: ignore[arg-type]
+    except Exception:
+        # Submit must not fail because additive diagnostics are unavailable.
+        return
