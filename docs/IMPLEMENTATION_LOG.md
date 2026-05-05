@@ -3991,3 +3991,19 @@ Notes:
 
 Next:
 - M160 should update abstraction smoke scripts to include artifact mapper/store checks.
+
+## 2026-05-05 - M160 Backend Abstraction Smoke Coverage Expansion
+
+Goal:
+- Expand the repeatable backend abstraction smoke script to cover newly added runtime config, scheduler, data API, flow, matrix, and artifact boundaries.
+
+Changes:
+- Updated `scripts/alphatrace/smoke_backend_abstractions.ps1`.
+
+Validation:
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`: passed.
+- Script now compiles and smoke-tests integration adapters, tool executor, runtime config, adapter matrix, flow catalog, data API catalog, in-process scheduler, artifact memory store, and evidence URL mapper.
+- Local Python emitted an existing `requests` dependency warning; unrelated to abstraction behavior.
+
+Next:
+- M161 should update architecture docs with the new abstraction modules and then choose the next code slice: frontend API client wiring or controlled backend reload/runtime endpoint smoke.

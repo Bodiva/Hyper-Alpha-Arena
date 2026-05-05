@@ -2125,3 +2125,11 @@ Runtime smoke when safe:
 - Set `ALPHATRACE_CREATE_EVIDENCE_URL_ARTIFACTS=true`.
 - Submit a run with Bocha/static evidence URL.
 - Verify `/agent-runs/{runId}/artifacts` returns web_url artifacts.
+
+### M160 Backend Abstraction Smoke Coverage Expansion
+
+Required script run:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1
+```

@@ -5272,3 +5272,30 @@ Validation:
 Rollback:
 
 Remove `_create_evidence_url_artifacts_if_enabled` and its call from `_update_agent_run_outputs`.
+
+## M160 - Backend Abstraction Smoke Coverage Expansion
+
+Status: Completed
+
+Goal:
+
+Expand the repeatable backend abstraction smoke script to cover newly added runtime config, scheduler, data API, flow, matrix, and artifact boundaries.
+
+Scope:
+
+1. Update `scripts/alphatrace/smoke_backend_abstractions.ps1` compile list.
+2. Add local smoke assertions for runtime config, adapter matrix, flow catalog, data API catalog, in-process scheduler, artifact store, and evidence URL mapper.
+
+Acceptance:
+
+1. Script passes locally.
+2. New abstraction files are included in py_compile list.
+3. Smoke remains network-free and does not require provider keys.
+
+Validation:
+
+1. `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`.
+
+Rollback:
+
+Revert script changes. Code modules remain unaffected.
