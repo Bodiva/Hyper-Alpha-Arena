@@ -192,8 +192,25 @@ export interface TaskSpecContractsResponse {
   message?: string;
 }
 
+export interface RuntimeReadinessActionItem {
+  area: string;
+  severity: string;
+  message: string;
+}
+
+export interface RuntimeReadinessResponse {
+  version: number;
+  overallStatus: "ready" | "degraded" | "action_required" | "unknown" | string;
+  sections: Record<string, JsonRecord>;
+  actionItems: RuntimeReadinessActionItem[];
+  message?: string;
+}
+
 export const getRuntimeArchitectureAsync = () =>
   httpClient.get<RuntimeArchitectureIndex>(ENDPOINTS.alphaTraceAgentRuntimeArchitecture);
+
+export const getRuntimeReadinessAsync = () =>
+  httpClient.get<RuntimeReadinessResponse>(ENDPOINTS.alphaTraceAgentRuntimeReadiness);
 
 export const getRuntimeConfigAsync = () =>
   httpClient.get<RuntimeConfigResponse>(ENDPOINTS.alphaTraceAgentRuntimeConfig);

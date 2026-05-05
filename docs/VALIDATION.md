@@ -2480,3 +2480,18 @@ Expected:
 - `/runtime/readiness` response contains runtimeConfig, modelProviders, orchestrators, taskSpecs, and artifacts sections.
 - Response includes action items for missing optional/blocking configuration.
 - No raw credentials are returned.
+
+### M182 Frontend Runtime Readiness API Contract
+
+Required frontend build:
+
+```powershell
+pnpm --dir frontend build
+```
+
+Expected:
+
+- Build succeeds.
+- `frontend/app/shared/api/endpoints.ts` exports the readiness endpoint.
+- `frontend/app/entities/runtime/api.ts` exports readiness types and `getRuntimeReadinessAsync`.
+- No existing page wiring is changed in this milestone.

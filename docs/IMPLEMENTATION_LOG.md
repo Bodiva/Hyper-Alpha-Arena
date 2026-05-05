@@ -4446,3 +4446,22 @@ Notes:
 
 Next:
 - Continue with frontend API typing for runtime readiness or a backend endpoint smoke pack.
+
+## 2026-05-05 - M182 Frontend Runtime Readiness API Contract
+
+Goal:
+- Expose backend runtime readiness summary to frontend API clients.
+
+Changes:
+- Updated `frontend/app/shared/api/endpoints.ts`.
+- Updated `frontend/app/entities/runtime/api.ts`.
+
+Validation:
+- `pnpm --dir frontend build`: passed.
+
+Notes:
+- This is API typing only; no existing page UI was changed.
+- Future Settings/Agent Lab views can consume one consolidated readiness response instead of stitching multiple diagnostics.
+
+Next:
+- Continue with endpoint smoke documentation or a minimal backend self-check endpoint that does not require restarting the stale Docker backend.

@@ -5921,3 +5921,31 @@ Validation:
 Rollback:
 
 Remove the readiness service, route, architecture link, and smoke additions.
+
+## M182 - Frontend Runtime Readiness API Contract
+
+Status: Completed
+
+Goal:
+
+Expose runtime readiness summary to frontend API clients.
+
+Scope:
+
+1. Add `alphaTraceAgentRuntimeReadiness` endpoint constant.
+2. Add readiness response and action item types.
+3. Add `getRuntimeReadinessAsync()`.
+4. Do not wire existing pages in this milestone.
+
+Acceptance:
+
+1. Frontend build passes.
+2. Readiness helper compiles without new dependencies.
+
+Validation:
+
+1. `pnpm --dir frontend build`.
+
+Rollback:
+
+Remove the endpoint constant, types, and helper.
