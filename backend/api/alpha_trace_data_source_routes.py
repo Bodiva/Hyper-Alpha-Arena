@@ -5,6 +5,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 
 from schemas.alpha_trace_data_source import AlphaTraceDataSourceItem, AlphaTraceDataSourceTask, DataSourceListResponse
+from services.data_api import get_data_api_catalog
 from services.data_source_store import get_data_source_store
 
 
@@ -29,6 +30,11 @@ def list_alpha_trace_data_sources(
         offset=offset,
     )
     return DataSourceListResponse(items=items, total=len(items), limit=limit, offset=offset)
+
+
+@router.get("/api-catalog")
+def get_alpha_trace_data_api_catalog():
+    return get_data_api_catalog().to_response()
 
 
 @router.get("/{source_id}", response_model=AlphaTraceDataSourceItem)

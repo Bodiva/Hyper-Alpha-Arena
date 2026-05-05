@@ -2031,3 +2031,16 @@ Runtime smoke when safe:
 - Set `ALPHATRACE_RECORD_ASYNC_TASKS=true`.
 - Submit stub/native run.
 - Verify `/api/alpha-trace/agent-runs/runtime/tasks` returns a task snapshot.
+
+### M153 AlphaTrace Data API Catalog
+
+Required backend compile:
+
+```powershell
+python -m py_compile backend/services/data_api/catalog.py backend/services/data_api/__init__.py backend/api/alpha_trace_data_source_routes.py
+```
+
+Required local smoke:
+
+- `get_data_api_catalog().to_response()` includes market data and agent runtime resources.
+- Response contains no key/credential values.

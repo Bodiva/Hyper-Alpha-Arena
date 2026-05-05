@@ -3842,3 +3842,24 @@ Notes:
 
 Next:
 - M153 should add a runtime-safe API smoke once the backend is restarted/reloaded, or continue with backend data API management abstractions that do not require a restart.
+
+## 2026-05-05 - M153 AlphaTrace Data API Catalog
+
+Goal:
+- Create a product-owned catalog for AlphaTrace data API boundaries before adding more external data providers.
+
+Changes:
+- Added `backend/services/data_api/catalog.py` and package exports.
+- Added `GET /api/alpha-trace/data-sources/api-catalog`.
+
+Validation:
+- `python -m py_compile backend/services/data_api/catalog.py backend/services/data_api/__init__.py backend/api/alpha_trace_data_source_routes.py`: passed.
+- Local catalog smoke passed with 8 resources including `market_data.static_v1` and `agent_runtime`.
+- Smoke verified no obvious key/secret/bearer markers in the catalog response.
+
+Notes:
+- This catalog is a management/diagnostic boundary. It does not add a real ETF data provider yet.
+- Legacy BTC/Hyperliquid APIs remain outside the AlphaTrace market-data boundary.
+
+Next:
+- M154 should define the Adapter Composition Matrix for Native / TradingAgents / LangAlpha / future ETF providers, then identify which pieces are implemented vs design-only.

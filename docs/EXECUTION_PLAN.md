@@ -5064,3 +5064,33 @@ Validation:
 Rollback:
 
 Remove `_record_async_task_snapshot_if_enabled` and the call after runner submit.
+
+## M153 - AlphaTrace Data API Catalog
+
+Status: Completed
+
+Goal:
+
+Create a product-owned catalog for AlphaTrace data API boundaries before adding more external data providers.
+
+Scope:
+
+1. Add `AlphaTraceDataApiCatalog`.
+2. Add `GET /api/alpha-trace/data-sources/api-catalog`.
+3. Document canonical domains, paths, operations, provider IDs, and store types.
+4. Keep legacy BTC/Hyperliquid routes outside the AlphaTrace market-data boundary.
+
+Acceptance:
+
+1. Backend py_compile passes.
+2. Local smoke verifies catalog resources include market data and agent runtime.
+3. Catalog response contains no key/credential values.
+
+Validation:
+
+1. `python -m py_compile backend/services/data_api/catalog.py backend/services/data_api/__init__.py backend/api/alpha_trace_data_source_routes.py`.
+2. Local Python smoke for `get_data_api_catalog().to_response()`.
+
+Rollback:
+
+Remove the catalog module and `/api-catalog` route. Existing data source APIs remain unaffected.
