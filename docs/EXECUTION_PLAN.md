@@ -7320,3 +7320,36 @@ Validation:
 Rollback:
 
 Revert only the M226 documentation entries. No runtime code changes are required.
+
+## M227 - AgentRun ClickHouse Projection Contract Validation
+
+Status: Completed
+
+Goal:
+
+Validate the side-effect-free AgentRun to ClickHouse analytical projection contract before enabling any write path.
+
+Scope:
+
+1. Validate projection rows for runtime events.
+2. Validate projection rows for agent reports.
+3. Validate projection rows for evidence references.
+4. Validate projection rows for decisions.
+5. Keep projection endpoint preview-only; do not write ClickHouse runtime data yet.
+
+Acceptance:
+
+1. Projection builder emits normalized rows for `alpha_trace_runtime_events`.
+2. Projection builder emits normalized rows for `alpha_trace_agent_reports`.
+3. Projection builder emits normalized rows for `alpha_trace_evidence_refs`.
+4. Projection builder emits normalized rows for `alpha_trace_decisions`.
+5. Projection remains side-effect free and reviewable before enabling writes.
+
+Validation:
+
+1. `python -m py_compile backend/services/clickhouse_agent_run_projection.py backend/api/alpha_trace_agent_runtime_routes.py backend/schemas/alpha_trace_agent_runtime.py`
+2. Direct smoke constructs a minimal AgentRun/events/reports/evidence/decision and validates projection table row counts and key fields.
+
+Rollback:
+
+Revert only the M227 documentation entries. No runtime code changes are required.

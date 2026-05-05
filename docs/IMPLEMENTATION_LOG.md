@@ -5488,3 +5488,25 @@ Notes:
 
 Result:
 - M226 is complete.
+
+## 2026-05-05 - M227 AgentRun ClickHouse Projection Contract Validation
+
+Goal:
+- Validate the AgentRun analytical projection contract before enabling ClickHouse runtime writes.
+
+Validation:
+- `python -m py_compile backend/services/clickhouse_agent_run_projection.py backend/api/alpha_trace_agent_runtime_routes.py backend/schemas/alpha_trace_agent_runtime.py`: passed.
+- Direct projection smoke without Docker/DB/ClickHouse writes: passed.
+  - `alpha_trace_runtime_events`: 1 row.
+  - `alpha_trace_agent_reports`: 1 row.
+  - `alpha_trace_evidence_refs`: 1 row.
+  - `alpha_trace_decisions`: 1 row.
+  - `step_id` was derived from event payload.
+
+Notes:
+- The existing endpoint remains preview-only: `GET /api/alpha-trace/agent-runs/{runId}/clickhouse-projection/preview`.
+- This milestone does not enable runtime writes into ClickHouse.
+- The projection is intentionally replayable from AlphaTrace schemas.
+
+Result:
+- M227 is complete.

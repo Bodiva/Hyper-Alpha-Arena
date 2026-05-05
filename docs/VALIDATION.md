@@ -3297,3 +3297,38 @@ Expected:
 - Bocha appears as tool-result ingestion, not the durable store.
 - MySQL and ClickHouse roles are explicit.
 - Legacy BTC/Hyperliquid is excluded from the AlphaTrace market data boundary.
+
+## M227 Validation - AgentRun ClickHouse Projection Contract Validation
+
+Required checks:
+
+```powershell
+python -m py_compile backend/services/clickhouse_agent_run_projection.py backend/api/alpha_trace_agent_runtime_routes.py backend/schemas/alpha_trace_agent_runtime.py
+```
+
+Direct smoke:
+
+```powershell
+$env:PYTHONPATH="backend"
+python - <<'PY'
+from schemas.alpha_trace_agent_runtime import AgentDecision, AgentReport, AgentRun, AgentRuntimeEvent, EvidenceReference
+from services.clickhouse_agent_run_projection import build_agent_run_clickhouse_projection
+
+now = "2026-05-05T12:00:00+00:00"
+decision = AgentDecision(action="hold", horizon="medium_term", confidence=0.66, thesis="Projection smoke thesis.", risks=["risk one"], evidenceIds=["ev_projection_smoke"])
+run = AgentRun(runId="run_projection_smoke", name="Projection Smoke", target="asset_etf_510300", taskType="single_asset_analysis", riskLevel="medium", status="completed", assetIds=["asset_etf_510300"], triggeredBy="alphatrace_native", modelName="qwen-plus", startedAt=now, updatedAt=now, completedAt=now, finalDecision=decision)
+events = [AgentRuntimeEvent(eventId="evt_1", runId=run.runId, type="tool.called", timestamp=now, sequence=1, agentName="Market Analyst", team="Analyst Team", payload={"toolName":"market.context.load","stepId":"market_view"})]
+reports = [AgentReport(reportId="rep_1", runId=run.runId, agentName="Market Analyst", title="Market View", summary="Market report", createdAt=now)]
+evidence = [EvidenceReference(evidenceId="ev_projection_smoke", title="Evidence", evidenceType="market_snapshot", sourceName="Static", qualityScore=80, summary="Evidence summary", url="https://example.com", collectedAt=now, relatedAssetIds=["asset_etf_510300"])]
+projection = build_agent_run_clickhouse_projection(run=run, events=events, reports=reports, evidence=evidence, decision=decision).to_response(sample_limit=2)
+assert projection["summary"]["alpha_trace_runtime_events"] == 1
+assert projection["summary"]["alpha_trace_agent_reports"] == 1
+assert projection["summary"]["alpha_trace_evidence_refs"] == 1
+assert projection["summary"]["alpha_trace_decisions"] == 1
+PY
+```
+
+Expected:
+
+- Projection emits normalized rows for runtime events, reports, evidence refs, and decisions.
+- Projection does not write to ClickHouse.
