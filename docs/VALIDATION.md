@@ -3223,3 +3223,44 @@ Expected:
 - Catalog routes can be imported and executed without DB or runner startup.
 - Unknown tool/role returns 404.
 - Tool/skill/role contracts are read-only and do not invoke external services.
+
+## M225 Validation - Native Orchestrator Blueprint Contract Validation
+
+Required checks:
+
+```powershell
+python -m py_compile backend/api/alpha_trace_agent_runtime_routes.py backend/services/agent_orchestrator/capability_matrix.py backend/services/agent_orchestrator/flow_catalog.py backend/services/agent_orchestrator/native_plan.py backend/services/agent_orchestrator/task_spec_catalog.py backend/services/agent_orchestrator/adapter_matrix.py
+```
+
+Direct smoke:
+
+```powershell
+$env:PYTHONPATH="backend"
+python - <<'PY'
+from services.agent_orchestrator.capability_matrix import list_runner_capabilities, resolve_recommended_runner
+from services.agent_orchestrator.flow_catalog import get_agent_flow_catalog
+from services.agent_orchestrator.native_plan import build_alphatrace_native_plan
+from services.agent_orchestrator.task_spec_catalog import list_task_spec_contracts
+from services.agent_orchestrator.adapter_matrix import get_adapter_composition_matrix
+
+capabilities = [item.to_dict() for item in list_runner_capabilities()]
+flows = [flow.to_dict() for flow in get_agent_flow_catalog().list_flows()]
+native_plan = build_alphatrace_native_plan(task_type="single_asset_analysis")
+task_specs = list_task_spec_contracts()
+adapter_matrix = get_adapter_composition_matrix().to_response()
+recommended = resolve_recommended_runner("single_asset_analysis", None)
+
+assert any(item["runner_type"] == "alphatrace_native" for item in capabilities)
+assert any(flow["runnerType"] == "tradingagents" for flow in flows)
+assert len(native_plan.steps) >= 5
+assert any(contract["runner_type"] == "tradingagents" for contract in task_specs["contracts"])
+assert adapter_matrix["total"] >= 4
+assert recommended["recommendedRunnerType"] == "alphatrace_native"
+PY
+```
+
+Expected:
+
+- Blueprint services work without DB, Docker, TradingAgents import, or API keys.
+- AlphaTrace Native is the default recommended product runner.
+- TradingAgents and LangAlpha are visible only as adapter/reference boundaries.

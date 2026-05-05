@@ -5441,3 +5441,26 @@ Notes:
 
 Result:
 - M224 is complete.
+
+## 2026-05-05 - M225 Native Orchestrator Blueprint Contract Validation
+
+Goal:
+- Validate that the current AlphaTrace orchestration blueprint is already available as product-owned contracts before deeper Native Multi-Agent extraction.
+
+Validation:
+- `python -m py_compile backend/api/alpha_trace_agent_runtime_routes.py backend/services/agent_orchestrator/capability_matrix.py backend/services/agent_orchestrator/flow_catalog.py backend/services/agent_orchestrator/native_plan.py backend/services/agent_orchestrator/task_spec_catalog.py backend/services/agent_orchestrator/adapter_matrix.py`: passed.
+- Direct smoke without Docker/DB/external keys: passed.
+  - Runner capabilities: 5.
+  - Runner flows: 5.
+  - AlphaTrace Native plan steps: 7.
+  - Task spec contracts: 5.
+  - Adapter composition entries: 5.
+  - Recommended runner for `single_asset_analysis` without explicit override: `alphatrace_native`.
+
+Notes:
+- This milestone intentionally does not change runtime behavior.
+- TradingAgents remains an opt-in adapter/reference boundary.
+- LangAlpha remains an external workbench reference/service-adapter candidate.
+
+Result:
+- M225 is complete.

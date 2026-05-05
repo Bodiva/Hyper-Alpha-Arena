@@ -7256,3 +7256,35 @@ Validation:
 Rollback:
 
 Remove `alpha_trace_tool_skill_routes.py` and unregister the router from `backend/main.py`.
+
+## M225 - Native Orchestrator Blueprint Contract Validation
+
+Status: Completed
+
+Goal:
+
+Validate and document the existing AlphaTrace Orchestrator blueprint contracts so Native Multi-Agent, TradingAgents PoC, and LangAlpha external-service boundaries remain product-owned and inspectable.
+
+Scope:
+
+1. Validate runner capability descriptors.
+2. Validate runner flow descriptors for stub, qwen, alphatrace_native, tradingagents, and langalpha.
+3. Validate AlphaTrace Native logical DAG plan.
+4. Validate task spec contracts and adapter composition matrix.
+5. Do not add new orchestration behavior, run TradingAgents, or expose external internal state.
+
+Acceptance:
+
+1. `alphatrace_native` remains the recommended runner for single asset analysis without explicit runner override.
+2. Native plan has a multi-step DAG with evidence, market, bull/bear, risk, and portfolio decision roles.
+3. TradingAgents and LangAlpha appear as adapter/reference boundaries, not product schema owners.
+4. The blueprint can be generated without DB, Docker, or external keys.
+
+Validation:
+
+1. `python -m py_compile backend/api/alpha_trace_agent_runtime_routes.py backend/services/agent_orchestrator/capability_matrix.py backend/services/agent_orchestrator/flow_catalog.py backend/services/agent_orchestrator/native_plan.py backend/services/agent_orchestrator/task_spec_catalog.py backend/services/agent_orchestrator/adapter_matrix.py`
+2. Direct smoke imports blueprint services and asserts capabilities, flows, native plan, task specs, adapter matrix, and recommended runner.
+
+Rollback:
+
+Revert only the M225 documentation entries. No runtime code changes are required.
