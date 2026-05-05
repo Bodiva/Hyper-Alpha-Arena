@@ -1,6 +1,3 @@
-from services.integration_adapters.bocha_adapter import BochaDataProviderAdapter
-from services.integration_adapters.market_data_adapter import StaticMarketDataProviderAdapter
-from services.integration_adapters.qwen_model_adapter import QwenModelProviderAdapter
 from services.integration_adapters.base import (
     DataProviderAdapter,
     DataQueryRequest,
@@ -18,6 +15,10 @@ from services.integration_adapters.base import (
     ToolInvocationRequest,
     ToolInvocationResult,
 )
+from services.integration_adapters.bocha_adapter import BochaDataProviderAdapter
+from services.integration_adapters.market_data_adapter import StaticMarketDataProviderAdapter
+from services.integration_adapters.qwen_model_adapter import QwenModelProviderAdapter
+from services.integration_adapters.registry import IntegrationAdapterRegistry, build_default_integration_registry
 
 __all__ = [
     "DataProviderAdapter",
@@ -38,7 +39,6 @@ __all__ = [
     "BochaDataProviderAdapter",
     "StaticMarketDataProviderAdapter",
     "QwenModelProviderAdapter",
+    "IntegrationAdapterRegistry",
+    "build_default_integration_registry",
 ]
-
-
-

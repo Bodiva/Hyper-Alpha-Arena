@@ -1881,3 +1881,15 @@ Run:
 ```powershell
 python -m py_compile backend/services/agent_tool_registry.py backend/services/agent_runners/tradingagents_adapter.py
 ```
+
+### M137 IntegrationAdapterRegistry
+
+Run:
+
+```powershell
+python -m py_compile backend/services/integration_adapters/registry.py backend/services/integration_adapters/__init__.py backend/api/alpha_trace_agent_runtime_routes.py
+```
+
+### M138 Integration Registry Local Smoke
+
+Run a local Python smoke with `PYTHONPATH=backend` to instantiate `build_default_integration_registry()`, list diagnostics, and fail if obvious secret markers such as `sk-`, `Bearer`, or `api_key` appear in the output.

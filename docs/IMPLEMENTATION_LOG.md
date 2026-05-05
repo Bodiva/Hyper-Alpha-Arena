@@ -3582,3 +3582,33 @@ Validation:
 
 Notes:
 - No TradingAgents execution behavior changed.
+
+## 2026-05-05 - M137 IntegrationAdapterRegistry
+
+Goal:
+- Centralize integration adapter construction and diagnostics outside the API route.
+
+Changes:
+- Added `backend/services/integration_adapters/registry.py`.
+- Updated `backend/services/integration_adapters/__init__.py` exports.
+- Updated runtime integrations endpoint to use `build_default_integration_registry()`.
+
+Validation:
+- Pending py_compile.
+
+## 2026-05-05 - M138 Integration Registry Local Smoke
+
+Goal:
+- Verify default integration registry diagnostics locally without server reload.
+
+Validation:
+- First attempt used bash heredoc syntax and failed under PowerShell; command issue only.
+- PowerShell pipe smoke passed and printed three integrations:
+  - `bocha_web_search data_provider missing_config environment_or_mysql_system_config`
+  - `alphatrace_static_market_data data_provider ready static_market_data_seed`
+  - `qwen_openai_compatible model_provider missing_config missing`
+- No obvious `sk-`, `Bearer`, or `api_key` secret markers were present in diagnostics.
+- Local Python emitted a requests dependency warning unrelated to this code path.
+
+Notes:
+- Qwen reports missing in local host smoke because local Python environment does not share the running Docker/MySQL runtime config. The backend route should use runtime configuration when the app reloads.

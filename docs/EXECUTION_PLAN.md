@@ -4675,3 +4675,48 @@ Acceptance:
 Validation:
 
 1. `python -m py_compile backend/services/agent_tool_registry.py backend/services/agent_runners/tradingagents_adapter.py`.
+
+## M137 - IntegrationAdapterRegistry
+
+Status: Completed
+
+Goal:
+
+Move integration diagnostics from API-local adapter construction into a reusable registry boundary.
+
+Scope:
+
+1. Add `IntegrationAdapterRegistry` and default registry builder.
+2. Update runtime integrations endpoint to use the registry.
+3. Do not change provider invocation behavior.
+
+Acceptance:
+
+1. API layer no longer needs to know every adapter class directly.
+2. Registry diagnostics fail per-adapter instead of failing the whole endpoint.
+
+Validation:
+
+1. `python -m py_compile backend/services/integration_adapters/registry.py backend/services/integration_adapters/__init__.py backend/api/alpha_trace_agent_runtime_routes.py`.
+
+## M138 - Integration Registry Local Smoke
+
+Status: Completed
+
+Goal:
+
+Validate the default integration registry without requiring a running FastAPI server.
+
+Scope:
+
+1. Instantiate default registry through local Python with `PYTHONPATH=backend`.
+2. Confirm Bocha, static market data, and Qwen adapters are listed.
+3. Confirm diagnostics do not include obvious secret markers.
+
+Acceptance:
+
+1. Smoke prints three integrations and exits successfully.
+
+Validation:
+
+1. Local Python smoke passed.
