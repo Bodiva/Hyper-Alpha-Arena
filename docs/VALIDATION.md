@@ -2562,3 +2562,15 @@ Expected:
 
 - Endpoint list includes runtime readiness, task specs, and artifact catalog.
 - `-SkipHttp` passes even when the running Docker backend is stale.
+
+### M187 Architecture Document Alignment for Runtime Read Models
+
+Documentation-only check:
+
+```powershell
+Select-String -Path docs/ARCHITECTURE.md -Pattern "Runtime Observability and Artifact Contract Additions"
+```
+
+Expected:
+
+- Architecture document includes runtime read model, artifact contract, data provider boundary, and frontend API contract notes.

@@ -4545,3 +4545,21 @@ Notes:
 
 Next:
 - Continue with architecture documentation alignment or targeted UI wiring after isolating dirty page changes.
+
+## 2026-05-05 - M187 Architecture Document Alignment for Runtime Read Models
+
+Goal:
+- Update the canonical architecture document with runtime read model, artifact, data provider, and frontend API contract boundaries.
+
+Changes:
+- Updated `docs/ARCHITECTURE.md`.
+
+Validation:
+- `Select-String -Path docs/ARCHITECTURE.md -Pattern "Runtime Observability and Artifact Contract Additions"`: passed.
+
+Notes:
+- Documentation-only milestone.
+- No business code, backend code, frontend code, Docker, or package files changed.
+
+Next:
+- Continue with a batch review/status checkpoint, then continue backend/front-end abstraction work.

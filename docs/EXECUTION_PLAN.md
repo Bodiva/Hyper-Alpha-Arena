@@ -6066,3 +6066,29 @@ Validation:
 Rollback:
 
 Remove the added endpoints from the smoke script.
+
+## M187 - Architecture Document Alignment for Runtime Read Models
+
+Status: Completed
+
+Goal:
+
+Update the canonical architecture document with newly added runtime read models, artifact contract, data provider boundary, and frontend API contracts.
+
+Scope:
+
+1. Update `docs/ARCHITECTURE.md`.
+2. Do not modify business code.
+
+Acceptance:
+
+1. Architecture document mentions metrics snapshot, timeline summary, readiness, task specs, artifact catalog, and data provider boundary.
+2. No build required because this is documentation-only.
+
+Validation:
+
+1. Confirm `docs/ARCHITECTURE.md` contains section `Runtime Observability and Artifact Contract Additions`.
+
+Rollback:
+
+Remove the added architecture section.

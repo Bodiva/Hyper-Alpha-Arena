@@ -455,3 +455,76 @@ Architectural rule:
 3. No external framework owns AlphaTrace frontend schema, MySQL product persistence, or evidence/decision contracts.
 4. `tradingagents` and `langalpha` flows exposed to the UI are AlphaTrace-owned descriptors, not raw internal state.
 5. Evidence URLs can be mapped into `AgentArtifact` web_url records; backend does not fetch or embed external pages.
+
+## 17. Runtime Observability and Artifact Contract Additions
+
+M171-M186 extended the abstraction baseline from "adapters exist" to "adapters have frontend-safe read models and validation surfaces".
+
+### Runtime Read Models
+
+| Contract | Endpoint / Path | Purpose |
+|---|---|---|
+| Run metrics snapshot | `/api/alpha-trace/agent-runs/{runId}/metrics` | Single-run token/tool/report/event counters without forcing UI to scan every metric event. |
+| Timeline summary | `/api/alpha-trace/agent-runs/{runId}/timeline-summary` | Readable timeline that compacts adjacent `reasoning.chunk` and `metric.updated` events. Raw `/events` and SSE remain lossless. |
+| Runtime readiness | `/api/alpha-trace/agent-runs/runtime/readiness` | Sanitized aggregate status for config, model providers, orchestrators, task specs, and artifacts. |
+| Task spec catalog | `/api/alpha-trace/agent-runs/runtime/task-specs` | Runner-neutral execution contract for timeout, retry, payload, and secret scrub policies. |
+
+Design rule:
+
+1. Runtime read models are additive and must not mutate or replace raw events.
+2. UI should use read models for high-level observability and raw events for audit/replay.
+3. Token and metric deltas are diagnostics; the task-level metrics snapshot is the primary status view.
+
+### Artifact Contract
+
+`AgentArtifact` is the product-owned boundary for URLs, files, JSON payloads, tables, charts, screenshots, and external workbench outputs.
+
+| Contract | Endpoint / Path | Purpose |
+|---|---|---|
+| Artifact store | `/api/alpha-trace/agent-runs/{runId}/artifacts` | Run-scoped artifacts from evidence/tool/model/external workbench outputs. |
+| Artifact catalog | `/api/alpha-trace/agent-runs/runtime/artifacts/catalog` | Frontend-safe preview policy and canonical source rules per artifact type. |
+| Preview card | `frontend/app/shared/ui/AgentArtifactPreviewCard.tsx` | Reusable UI primitive. Not yet wired into pages by default. |
+
+Rules:
+
+1. External evidence URLs, especially Bocha URLs, must keep `source_url` as canonical source.
+2. iframe/webpage embedding is optional best-effort; it must not replace direct URL access.
+3. HTML artifacts default to source link or sanitized summary; no dangerous HTML injection.
+4. TradingAgents and LangAlpha outputs must be mapped into AlphaTrace artifacts before frontend rendering.
+
+### Data Provider Boundary
+
+AlphaTrace data APIs now separate resources from providers.
+
+Provider classes:
+
+1. `alphatrace_static_seed`: deterministic MVP/demo source.
+2. `mysql_domain_store`: formal product persistence path.
+3. `bocha_web_search`: optional external evidence source.
+4. `future_professional_market_data`: reserved provider boundary for ETF/fund/index/futures commercial data.
+5. `langalpha_external_workbench`: design-only external workbench candidate.
+
+Adapter classes:
+
+1. `StaticMarketDataProviderAdapter`: current static market data provider.
+2. `ProfessionalMarketDataProviderAdapter`: disabled-by-default design boundary; it does not call external providers in this phase.
+
+Rules:
+
+1. Future ETF/fund/index/futures data must enter through AlphaTrace data provider adapters.
+2. Legacy BTC/Hyperliquid routes are not AlphaTrace market data boundaries.
+3. Provider credentials are backend-only and should come from MySQL system config or environment.
+
+### Frontend API Contracts
+
+The frontend has typed helpers for the new contracts under:
+
+1. `frontend/app/entities/runtime/api.ts`
+2. `frontend/app/entities/data-source/api.ts`
+3. `frontend/app/shared/api/endpoints.ts`
+
+Current status:
+
+1. API contracts and reusable components exist.
+2. Existing page wiring is intentionally deferred until current unrelated frontend dirty state is isolated.
+3. This keeps backend abstraction progress reviewable and avoids mixing architectural contracts with UI layout changes.
