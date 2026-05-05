@@ -3725,3 +3725,27 @@ Validation:
 
 Notes:
 - Existing detailed static/Bocha retrieval events remain the default path. The adapter path is for controlled migration testing.
+
+## 2026-05-05 - M146 Backend Abstraction Smoke Script
+
+Goal:
+- Add a repeatable validation script for integration adapters, tool adapters, async task contracts, orchestrator contracts, and artifacts.
+
+Changes:
+- Added `scripts/alphatrace/smoke_backend_abstractions.ps1`.
+
+Validation:
+- Pending script run.
+
+## 2026-05-05 - M146 Backend Abstraction Smoke Script Validation
+
+Validation:
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`: passed.
+- Script compiled backend abstraction files and ran local registry/tool adapter smoke:
+  - integrations: 5
+  - evidence adapter: completed, 2 evidence IDs
+  - market tool through ToolExecutor: completed, `market.context.load`
+- Local Python emitted the same requests dependency warning; unrelated to script result.
+
+Next:
+- M147 should start documenting/implementing the next safe extraction slice: Qwen model invocation adapter migration behind feature flag, or integration diagnostics UI when frontend changes are safe.

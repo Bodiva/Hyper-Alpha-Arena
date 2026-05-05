@@ -1957,3 +1957,11 @@ python -m py_compile backend/services/agent_runners/qwen_runner.py backend/servi
 ```
 
 Runtime smoke with `ALPHATRACE_USE_TOOL_ADAPTERS=true` is optional and should only be run in a safe backend reload window.
+
+### M146 Backend Abstraction Smoke Script
+
+Run:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1
+```

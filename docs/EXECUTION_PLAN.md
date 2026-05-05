@@ -4879,3 +4879,25 @@ Acceptance:
 Validation:
 
 1. `python -m py_compile backend/services/agent_runners/qwen_runner.py backend/services/integration_adapters/tool_adapters.py backend/services/agent_orchestrator/tool_executor.py`.
+
+## M146 - Backend Abstraction Smoke Script
+
+Status: Completed
+
+Goal:
+
+Create a repeatable validation script for the new integration/orchestration/task/artifact abstraction layer.
+
+Scope:
+
+1. Add `scripts/alphatrace/smoke_backend_abstractions.ps1`.
+2. Script runs py_compile and local registry/tool adapter smoke.
+3. Script does not start services or mutate runtime data.
+
+Acceptance:
+
+1. Script passes locally.
+
+Validation:
+
+1. `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`.
