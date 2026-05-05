@@ -2282,3 +2282,17 @@ Expected:
 
 - `docs/engineering/70_langalpha_reuse_backlog.md` exists.
 - Document states LangAlpha should be adapter/reference, not AlphaTrace main backend.
+
+### M170 LangAlpha External Workbench Adapter Boundary
+
+Required backend compile:
+
+```powershell
+python -m py_compile backend/services/integration_adapters/langalpha_workbench_adapter.py backend/services/integration_adapters/registry.py backend/services/integration_adapters/__init__.py
+```
+
+Required local smoke:
+
+- `LangAlphaExternalWorkbenchAdapter().health()` returns disabled/missing/degraded.
+- Default integration registry includes `langalpha_external_workbench`.
+- `scripts/alphatrace/smoke_backend_abstractions.ps1` passes.

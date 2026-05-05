@@ -4195,3 +4195,26 @@ Notes:
 
 Next:
 - M170 should define a design-only LangAlpha adapter boundary in AlphaTrace code or continue strengthening data/tool artifact contracts.
+
+## 2026-05-05 - M170 LangAlpha External Workbench Adapter Boundary
+
+Goal:
+- Add a design-only LangAlpha external workbench adapter to the backend integration registry.
+
+Changes:
+- Added `backend/services/integration_adapters/langalpha_workbench_adapter.py`.
+- Updated `backend/services/integration_adapters/registry.py`.
+- Updated `backend/services/integration_adapters/__init__.py`.
+- Updated `scripts/alphatrace/smoke_backend_abstractions.ps1`.
+
+Validation:
+- `python -m py_compile backend/services/integration_adapters/langalpha_workbench_adapter.py backend/services/integration_adapters/registry.py backend/services/integration_adapters/__init__.py`: passed.
+- Local smoke for adapter health and registry diagnostics: passed.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`: passed.
+
+Notes:
+- LangAlpha is not imported or executed.
+- `submit_task` and `fetch_task` return skipped design-only results.
+
+Next:
+- M171 should define a stricter tool result/artifact contract so Bocha URLs, market data snapshots, and future PTC outputs can all become traceable AgentArtifacts.

@@ -5569,3 +5569,34 @@ Validation:
 Rollback:
 
 Remove `docs/engineering/70_langalpha_reuse_backlog.md`.
+
+## M170 - LangAlpha External Workbench Adapter Boundary
+
+Status: Completed
+
+Goal:
+
+Add a design-only LangAlpha external workbench adapter to integration diagnostics without importing or executing LangAlpha.
+
+Scope:
+
+1. Add `LangAlphaExternalWorkbenchAdapter`.
+2. Register it in the integration adapter registry.
+3. Return disabled/missing/degraded health states.
+4. `submit_task` and `fetch_task` return skipped design-only results.
+
+Acceptance:
+
+1. Backend py_compile passes.
+2. Integration registry diagnostics include `langalpha_external_workbench`.
+3. Backend abstraction smoke passes.
+
+Validation:
+
+1. `python -m py_compile backend/services/integration_adapters/langalpha_workbench_adapter.py backend/services/integration_adapters/registry.py backend/services/integration_adapters/__init__.py`.
+2. Local smoke for adapter health and registry diagnostics.
+3. `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`.
+
+Rollback:
+
+Remove the adapter and registry export. LangAlpha runner stub remains unaffected.

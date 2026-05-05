@@ -5,6 +5,7 @@ from typing import Any, Iterable
 
 from services.integration_adapters.base import IntegrationAdapter
 from services.integration_adapters.bocha_adapter import BochaDataProviderAdapter
+from services.integration_adapters.langalpha_workbench_adapter import LangAlphaExternalWorkbenchAdapter
 from services.integration_adapters.market_data_adapter import StaticMarketDataProviderAdapter
 from services.integration_adapters.qwen_model_adapter import QwenModelProviderAdapter
 from services.integration_adapters.tool_adapters import EvidenceRetrieveToolAdapter, MarketContextToolAdapter
@@ -56,6 +57,7 @@ def build_default_integration_registry() -> IntegrationAdapterRegistry:
     registry.register(QwenModelProviderAdapter())
     registry.register(EvidenceRetrieveToolAdapter())
     registry.register(MarketContextToolAdapter())
+    registry.register(LangAlphaExternalWorkbenchAdapter())
     return registry
 
 
