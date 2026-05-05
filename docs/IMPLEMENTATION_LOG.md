@@ -4218,3 +4218,25 @@ Notes:
 
 Next:
 - M171 should define a stricter tool result/artifact contract so Bocha URLs, market data snapshots, and future PTC outputs can all become traceable AgentArtifacts.
+
+## 2026-05-05 - M171 ToolResult to AgentArtifact Mapper
+
+Goal:
+- Add a pure mapper from tool outputs to product-owned AgentArtifacts for Bocha URLs, structured payloads, and text outputs.
+
+Changes:
+- Added `backend/services/agent_artifacts/tool_result_mapper.py`.
+- Updated `backend/services/agent_artifacts/__init__.py`.
+- Updated `scripts/alphatrace/smoke_backend_abstractions.ps1`.
+
+Validation:
+- `python -m py_compile backend/services/agent_artifacts/tool_result_mapper.py backend/services/agent_artifacts/__init__.py`: passed.
+- Local mapper smoke: passed.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`: passed.
+
+Notes:
+- Mapper is not yet wired to runner persistence.
+- It is intended for future Bocha/tool/PTC/LangAlpha artifact capture.
+
+Next:
+- M172 should add a default-off tool-result artifact persistence path or expose artifact mapping in ToolExecutor records.

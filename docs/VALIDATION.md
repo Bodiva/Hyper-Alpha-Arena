@@ -2296,3 +2296,16 @@ Required local smoke:
 - `LangAlphaExternalWorkbenchAdapter().health()` returns disabled/missing/degraded.
 - Default integration registry includes `langalpha_external_workbench`.
 - `scripts/alphatrace/smoke_backend_abstractions.ps1` passes.
+
+### M171 ToolResult to AgentArtifact Mapper
+
+Required backend compile:
+
+```powershell
+python -m py_compile backend/services/agent_artifacts/tool_result_mapper.py backend/services/agent_artifacts/__init__.py
+```
+
+Required local smoke:
+
+- Bocha-like `ToolInvocationResult` maps to `web_url`, `json`, and `text` artifacts.
+- `scripts/alphatrace/smoke_backend_abstractions.ps1` passes.

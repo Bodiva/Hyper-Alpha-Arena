@@ -3,6 +3,7 @@ from services.agent_artifacts.evidence_mapper import evidence_list_to_web_artifa
 from services.agent_artifacts.memory_store import MemoryAgentArtifactStore
 from services.agent_artifacts.mysql_store import MysqlAgentArtifactStore, get_agent_artifact_store_type
 from services.agent_artifacts.registry import get_agent_artifact_store
+from services.agent_artifacts.tool_result_mapper import tool_result_to_artifacts
 
 __all__ = [
     "AgentArtifact",
@@ -15,4 +16,5 @@ __all__ = [
     "MysqlAgentArtifactStore",
     "get_agent_artifact_store",
     "get_agent_artifact_store_type",
+    "tool_result_to_artifacts",
 ]

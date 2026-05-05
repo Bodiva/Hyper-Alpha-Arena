@@ -5600,3 +5600,34 @@ Validation:
 Rollback:
 
 Remove the adapter and registry export. LangAlpha runner stub remains unaffected.
+
+## M171 - ToolResult to AgentArtifact Mapper
+
+Status: Completed
+
+Goal:
+
+Define a pure mapping boundary from backend tool results to product-owned AgentArtifacts.
+
+Scope:
+
+1. Map web result payloads to `web_url` artifacts.
+2. Map structured payloads to `json` artifacts.
+3. Map long text outputs to `text` artifacts.
+4. Do not write artifacts to store in this milestone.
+
+Acceptance:
+
+1. Backend py_compile passes.
+2. Local smoke maps Bocha-like tool output to web/json/text artifacts.
+3. Backend abstraction smoke script includes the mapper.
+
+Validation:
+
+1. `python -m py_compile backend/services/agent_artifacts/tool_result_mapper.py backend/services/agent_artifacts/__init__.py`.
+2. Local smoke for `tool_result_to_artifacts`.
+3. `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`.
+
+Rollback:
+
+Remove the mapper and exports. Artifact store and evidence mapper remain unaffected.
