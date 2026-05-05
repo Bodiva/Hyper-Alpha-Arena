@@ -4919,3 +4919,25 @@ Notes:
 Next:
 - Continue with M205: reusable Data Center and Agent Skill frontend panels, then optionally wire them into the architecture review panel.
 
+
+## 2026-05-05 - M205 Reusable Data Center and Agent Skill Panels
+
+Goal:
+- Add reusable frontend panels for the Data Center and Agent Skill control planes and include them in the consolidated Architecture Review panel.
+
+Changes:
+- Added `frontend/app/shared/ui/DataCenterPanel.tsx`.
+- Added `frontend/app/shared/ui/AgentSkillPanel.tsx`.
+- Updated `frontend/app/shared/ui/ArchitectureReviewPanel.tsx` to render Data Center and Agent Skill sections.
+
+Validation:
+- pnpm --dir frontend build: passed. Existing Vite chunk/browserslist warnings remain.
+
+Result:
+- M205 is complete. Architecture Review can now render Data Center and Agent Skill control-plane sections from the backend review bundle.
+
+Notes:
+- This milestone is frontend-only and does not alter runtime behavior.
+
+Next:
+- Continue with M206: decide whether to wire ArchitectureReviewPanel into a diagnostics surface or continue backend abstraction hardening.

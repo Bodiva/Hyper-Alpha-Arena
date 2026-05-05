@@ -6601,3 +6601,33 @@ Validation:
 Rollback:
 
 Remove the Data Center/Agent Skill catalog services, endpoints, frontend types/helpers, smoke additions, and documentation alignment changes.
+
+## M205 - Reusable Data Center and Agent Skill Panels
+
+Status: Completed
+
+Goal:
+
+Expose the new Data Center and Agent Skill catalogs through reusable frontend UI panels and include them in the consolidated Architecture Review panel.
+
+Scope:
+
+1. Add `DataCenterPanel` for connector governance, ingestion mode, credential policy, freshness, and target store routing.
+2. Add `AgentSkillPanel` for agent-configurable skills, allowed agents, tool bindings, data domains, model requirements, and output contracts.
+3. Extend `ArchitectureReviewPanel` summary and layout to include Data Center and Skills from the existing review bundle.
+4. Do not wire legacy pages or change runner behavior.
+
+Acceptance:
+
+1. Frontend build passes.
+2. Architecture Review panel can render Data Center and Agent Skill sections from one backend bundle.
+3. Components support loading, error, empty, compact, and full modes.
+4. No new dependencies are introduced.
+
+Validation:
+
+1. `pnpm --dir frontend build`.
+
+Rollback:
+
+Remove `DataCenterPanel`, `AgentSkillPanel`, and the ArchitectureReviewPanel additions.

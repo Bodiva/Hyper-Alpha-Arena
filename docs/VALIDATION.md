@@ -2854,3 +2854,18 @@ Expected:
 - Backend abstraction smoke verifies Data Center connectors and Agent Skill descriptors.
 - Architecture review bundle includes `dataCenter` and `skills`.
 - Bocha is represented as a tool provider, MySQL as config/task store, and ClickHouse as business/analytics target.
+
+### M205 Reusable Data Center and Agent Skill Panels
+
+Required frontend build:
+
+```powershell
+pnpm --dir frontend build
+```
+
+Expected:
+
+- `frontend/app/shared/ui/DataCenterPanel.tsx` compiles.
+- `frontend/app/shared/ui/AgentSkillPanel.tsx` compiles.
+- `ArchitectureReviewPanel` renders review bundle `dataCenter` and `skills` sections.
+- No new dependencies are introduced.

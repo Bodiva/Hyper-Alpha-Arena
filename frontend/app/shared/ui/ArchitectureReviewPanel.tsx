@@ -1,4 +1,6 @@
 import type { ArchitectureReviewBundleResponse } from "@/entities/runtime/api";
+import AgentSkillPanel from "./AgentSkillPanel";
+import DataCenterPanel from "./DataCenterPanel";
 import ExternalComponentPanel from "./ExternalComponentPanel";
 import IntegrationDecisionPanel from "./IntegrationDecisionPanel";
 import ModuleBoundaryPanel from "./ModuleBoundaryPanel";
@@ -46,6 +48,8 @@ export const ArchitectureReviewPanel = ({ review, loading = false, error = null,
     ["Modules", review.summary?.modules],
     ["External", review.summary?.externalComponents],
     ["Decisions", review.summary?.integrationDecisions],
+    ["Data Center", review.summary?.dataCenterConnectors],
+    ["Skills", review.summary?.skills],
     ["Readiness", review.summary?.readiness],
   ];
 
@@ -62,7 +66,7 @@ export const ArchitectureReviewPanel = ({ review, loading = false, error = null,
           <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600">v{review.version}</span>
         </div>
 
-        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-7">
           {summaryCards.map(([label, value]) => (
             <div key={String(label)} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
               <div className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</div>
@@ -87,6 +91,8 @@ export const ArchitectureReviewPanel = ({ review, loading = false, error = null,
 
       <RuntimeReadinessPanel readiness={review.readiness} compact={compact} />
       <ModuleBoundaryPanel catalog={review.moduleBoundaries} compact={compact} />
+      <DataCenterPanel catalog={review.dataCenter} compact={compact} />
+      <AgentSkillPanel catalog={review.skills} compact={compact} />
       <ExternalComponentPanel catalog={review.externalComponents} compact={compact} />
       <IntegrationDecisionPanel guide={review.integrationDecisions} compact={compact} />
     </section>
