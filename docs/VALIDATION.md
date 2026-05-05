@@ -3015,3 +3015,18 @@ Expected:
 - Dry-run returns preview rows without writing to ClickHouse.
 - Write smoke returns `dryRun=false`, `recordsSucceeded=2`, and table `alpha_trace.etf_file_imports`.
 - ClickHouse count query for the returned `importId` returns 2.
+
+### M214 AgentRun ClickHouse Projection Preview
+
+Backend checks:
+
+```powershell
+python -m py_compile backend/services/clickhouse_agent_run_projection.py backend/api/alpha_trace_agent_runtime_routes.py
+Invoke-RestMethod "http://127.0.0.1:8802/api/alpha-trace/agent-runs/demo-run-001/clickhouse-projection/preview?sampleLimit=1"
+Invoke-RestMethod "http://127.0.0.1:8805/api/alpha-trace/agent-runs/demo-run-001/clickhouse-projection/preview?sampleLimit=1"
+```
+
+Expected:
+
+- Response contains `alpha_trace_runtime_events`, `alpha_trace_agent_reports`, `alpha_trace_evidence_refs`, and `alpha_trace_decisions` summaries.
+- Rows are preview only and are not written to ClickHouse.

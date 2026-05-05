@@ -48,6 +48,7 @@ from services.agent_skill_bindings import get_agent_skill_binding_catalog
 from services.agent_skill_catalog import get_agent_skill_catalog
 from services.backend_module_boundaries import get_backend_module_boundary_catalog
 from services.clickhouse_schema_catalog import get_clickhouse_schema_catalog
+from services.clickhouse_agent_run_projection import build_agent_run_clickhouse_projection
 from services.data_center_catalog import get_data_center_catalog
 from services.external_component_catalog import get_external_component_catalog
 from services.integration_decision_guide import get_integration_decision_guide
@@ -722,6 +723,24 @@ def get_agent_run_timeline_summary_endpoint(run_id: str, limit: int = Query(120,
     if not summary:
         raise _not_found(run_id)
     return summary
+
+
+@router.get("/{run_id}/clickhouse-projection/preview")
+def get_agent_run_clickhouse_projection_preview_endpoint(
+    run_id: str,
+    sampleLimit: int = Query(3, ge=0, le=20),
+):
+    run = get_agent_run(run_id)
+    if not run:
+        raise _not_found(run_id)
+    projection = build_agent_run_clickhouse_projection(
+        run=run,
+        events=get_agent_run_events(run_id),
+        reports=get_agent_run_reports(run_id),
+        evidence=get_agent_run_evidence(run_id),
+        decision=get_agent_run_decision(run_id),
+    )
+    return projection.to_response(sample_limit=sampleLimit)
 
 
 @router.get("", response_model=AgentRunListResponse)

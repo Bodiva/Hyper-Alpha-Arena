@@ -6883,3 +6883,36 @@ Validation:
 Rollback:
 
 Remove the ClickHouse business store helper, ETF file import service, data source import schemas/routes, ClickHouse docker/env additions, and endpoint constants if frontend import UI is later committed.
+
+## M214 - AgentRun ClickHouse Projection Preview
+
+Status: Completed
+
+Goal:
+
+Add a side-effect-free projection preview that maps AlphaTrace AgentRun runtime data into planned ClickHouse analytical table rows before enabling durable ClickHouse writes for runtime events/reports/evidence/decisions.
+
+Scope:
+
+1. Add `backend/services/clickhouse_agent_run_projection.py`.
+2. Add `GET /api/alpha-trace/agent-runs/{runId}/clickhouse-projection/preview`.
+3. Map AgentRuntimeEvent, AgentReport, EvidenceReference, and AgentDecision into ClickHouse-shaped rows.
+4. Return row counts, sample rows, and JSONEachRow previews without writing to ClickHouse.
+5. Keep existing MySQL/JSON AgentRunStore behavior unchanged.
+
+Acceptance:
+
+1. Backend py_compile passes for projection service and runtime routes.
+2. Projection preview returns rows for runtime events, reports, evidence refs, and decisions for `demo-run-001`.
+3. Endpoint works through direct backend `8802` and Vite proxy `8805`.
+4. Endpoint does not mutate MySQL, JSON store, or ClickHouse.
+
+Validation:
+
+1. `python -m py_compile backend/services/clickhouse_agent_run_projection.py backend/api/alpha_trace_agent_runtime_routes.py`.
+2. `GET http://127.0.0.1:8802/api/alpha-trace/agent-runs/demo-run-001/clickhouse-projection/preview?sampleLimit=1`.
+3. `GET http://127.0.0.1:8805/api/alpha-trace/agent-runs/demo-run-001/clickhouse-projection/preview?sampleLimit=1`.
+
+Rollback:
+
+Remove the projection service, runtime route import, and projection preview endpoint.

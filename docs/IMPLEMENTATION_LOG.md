@@ -5129,3 +5129,29 @@ Notes:
 
 Next:
 - Continue with M214: either commit the Data Import UI route/page cleanly, or design the ClickHouse projection writer for AgentRun events/reports/evidence/decision.
+
+## 2026-05-05 - M214 AgentRun ClickHouse Projection Preview
+
+Goal:
+- Add a no-write projection preview that maps AlphaTrace AgentRun data into planned ClickHouse analytical rows.
+
+Changes:
+- Added `backend/services/clickhouse_agent_run_projection.py`.
+- Added `GET /api/alpha-trace/agent-runs/{runId}/clickhouse-projection/preview`.
+- Projection covers runtime events, reports, evidence refs, and decisions.
+
+Validation:
+- `python -m py_compile backend/services/clickhouse_agent_run_projection.py backend/api/alpha_trace_agent_runtime_routes.py`: passed.
+- `GET http://127.0.0.1:8802/api/alpha-trace/agent-runs/demo-run-001/clickhouse-projection/preview?sampleLimit=1`: passed; summary returned runtime events=10, reports=1, evidence refs=2, decisions=1.
+- `GET http://127.0.0.1:8805/api/alpha-trace/agent-runs/demo-run-001/clickhouse-projection/preview?sampleLimit=1`: passed through browser proxy chain.
+
+Result:
+- M214 is complete. Runtime data can now be reviewed as ClickHouse analytical projection rows before enabling writes.
+
+Notes:
+- This endpoint is intentionally side-effect free.
+- Docker backend needed a restart before the new route became available.
+- During restart, the legacy service briefly reported connection refused; after startup, health and preview checks passed.
+
+Next:
+- Continue with M215: decide between committing the Data Import frontend UI cleanly or adding a controlled projection writer endpoint behind an explicit dry-run/write flag.
