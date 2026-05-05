@@ -29,6 +29,26 @@ class QwenModelProviderAdapter:
 
     adapter_id = "qwen_openai_compatible"
 
+    @staticmethod
+    def _resolve_config() -> dict[str, str | None]:
+        api_key = os.getenv("DASHSCOPE_API_KEY") or os.getenv("QWEN_API_KEY")
+        model = os.getenv("QWEN_MODEL")
+        base_url = os.getenv("QWEN_BASE_URL")
+        source = "environment" if api_key else "missing"
+        if not api_key:
+            try:
+                from services.system_config_store import get_mysql_system_config_store
+
+                config = get_mysql_system_config_store().get_llm_config()
+                if config.get("api_key_available"):
+                    api_key = config.get("api_key")
+                    model = model or config.get("model")
+                    base_url = base_url or config.get("base_url")
+                    source = config.get("source") or "mysql_system_config"
+            except Exception:
+                source = "missing"
+        return {"api_key": api_key, "model": model, "base_url": base_url, "source": source}
+
     def capability(self) -> IntegrationCapability:
         return IntegrationCapability(
             adapter_id=self.adapter_id,
@@ -42,25 +62,27 @@ class QwenModelProviderAdapter:
         )
 
     def health(self) -> IntegrationHealth:
-        api_key = os.getenv("DASHSCOPE_API_KEY") or os.getenv("QWEN_API_KEY")
+        config = self._resolve_config()
+        api_key = config.get("api_key")
         if not api_key:
             return IntegrationHealth(
                 adapter_id=self.adapter_id,
                 status="missing_config",
-                source="environment_or_mysql_system_config",
+                source=config.get("source") or "missing",
                 message="Qwen/DashScope API key is not configured for this provider adapter.",
                 checked_at=datetime.now(timezone.utc).isoformat(),
             )
         return IntegrationHealth(
             adapter_id=self.adapter_id,
             status="ready",
-            source="environment",
-            message="Qwen/DashScope API key is configured in environment. Network health is checked during invocation.",
+            source=config.get("source") or "environment_or_mysql_system_config",
+            message="Qwen/DashScope API key is configured. Network health is checked during invocation.",
             checked_at=datetime.now(timezone.utc).isoformat(),
         )
 
     def invoke(self, request: ModelInvocationRequest) -> ModelInvocationResult:
-        api_key = os.getenv("DASHSCOPE_API_KEY") or os.getenv("QWEN_API_KEY")
+        config = self._resolve_config()
+        api_key = config.get("api_key")
         if not api_key:
             return ModelInvocationResult(
                 status="failed",
@@ -69,8 +91,8 @@ class QwenModelProviderAdapter:
                 message="Qwen/DashScope API key is not configured.",
             )
 
-        model_name = request.model_name or os.getenv("QWEN_MODEL") or QWEN_DEFAULT_MODEL
-        base_url = str(request.context.get("baseUrl") or os.getenv("QWEN_BASE_URL") or QWEN_DEFAULT_BASE_URL).rstrip("/")
+        model_name = request.model_name or config.get("model") or QWEN_DEFAULT_MODEL
+        base_url = str(request.context.get("baseUrl") or config.get("base_url") or QWEN_DEFAULT_BASE_URL).rstrip("/")
         timeout_seconds = int(request.timeout_seconds or request.context.get("timeoutSeconds") or 120)
         payload = {
             "model": model_name,

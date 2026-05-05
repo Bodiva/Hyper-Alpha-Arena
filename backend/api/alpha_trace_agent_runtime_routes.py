@@ -46,6 +46,11 @@ from services.agent_orchestrator.subprocess_orchestrator import get_subprocess_w
 from services.agent_runners.registry import AgentRunnerConfigurationError, AgentRunnerExecutionError, AgentRunnerNotImplementedError
 from services.agent_runtime_store.registry import get_agent_run_store
 from services.agent_tool_registry import list_agent_tool_contracts
+from services.integration_adapters import (
+    BochaDataProviderAdapter,
+    QwenModelProviderAdapter,
+    StaticMarketDataProviderAdapter,
+)
 from services.system_config_store import get_mysql_system_config_store
 
 router = APIRouter(prefix="/api/alpha-trace/agent-runs", tags=["AlphaTrace Agent Runtime"])
@@ -338,6 +343,37 @@ def get_agent_runtime_tool_contracts_endpoint():
     return {
         "tools": [item.to_payload() for item in list_agent_tool_contracts()],
         "message": "Tool contracts describe backend actions that may appear in AgentRuntimeEvent tool.called/tool.result payloads.",
+    }
+
+
+@router.get("/runtime/integrations")
+def get_agent_runtime_integrations_endpoint():
+    adapters = [
+        BochaDataProviderAdapter(),
+        StaticMarketDataProviderAdapter(),
+        QwenModelProviderAdapter(),
+    ]
+    integrations: list[dict[str, Any]] = []
+    for adapter in adapters:
+        try:
+            capability = adapter.capability()
+            health = adapter.health()
+            integrations.append({"capability": capability.__dict__, "health": health.__dict__})
+        except Exception as exc:  # noqa: BLE001 - diagnostics must not fail the route.
+            integrations.append(
+                {
+                    "capability": {"adapterId": getattr(adapter, "adapter_id", "unknown")},
+                    "health": {
+                        "adapter_id": getattr(adapter, "adapter_id", "unknown"),
+                        "status": "error",
+                        "source": "diagnostics",
+                        "message": f"Failed to inspect adapter: {exc}",
+                    },
+                }
+            )
+    return {
+        "integrations": integrations,
+        "message": "Integration diagnostics are metadata and readiness checks only; no provider secrets are returned.",
     }
 
 

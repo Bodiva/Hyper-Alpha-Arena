@@ -3549,3 +3549,36 @@ Unrelated dirty files intentionally excluded:
 Next:
 - Commit only the M117-M134 scoped files.
 - Continue with M135: begin a small runtime-safe migration by making provider/tool metadata queryable from status diagnostics, or M136: extract market/evidence tool execution helpers from `qwen_runner.py` without changing outputs.
+
+## 2026-05-05 - M135 Runtime Integration Diagnostics Endpoint
+
+Goal:
+- Surface adapter capability/health for Bocha, static market data, and Qwen provider boundaries.
+
+Changes:
+- Updated `backend/api/alpha_trace_agent_runtime_routes.py`.
+- Added `GET /api/alpha-trace/agent-runs/runtime/integrations`.
+- Updated `QwenModelProviderAdapter` health/invoke config resolution to read MySQL system config in addition to environment variables.
+
+Validation:
+- Pending py_compile.
+- Runtime smoke is pending backend reload/restart.
+
+Notes:
+- No raw API keys are returned.
+- Existing runner behavior is unchanged.
+
+## 2026-05-05 - M136 Tool Contract Enrichment for TradingAgents Events
+
+Goal:
+- Make TradingAgents PoC tool events consume the same backend tool contract metadata as Qwen/Native tool events.
+
+Changes:
+- Updated `backend/services/agent_tool_registry.py` with `tradingagents.subprocess_worker` and `tradingagents.graph.run` contracts.
+- Updated `backend/services/agent_runners/tradingagents_adapter.py` to attach `toolContract` payload metadata for known `toolName` values.
+
+Validation:
+- Pending py_compile.
+
+Notes:
+- No TradingAgents execution behavior changed.

@@ -1857,3 +1857,27 @@ Run:
 ```powershell
 python -m py_compile backend/services/agent_artifacts/base.py backend/services/agent_artifacts/__init__.py
 ```
+
+### M135 Runtime Integration Diagnostics Endpoint
+
+Run:
+
+```powershell
+python -m py_compile backend/api/alpha_trace_agent_runtime_routes.py backend/services/integration_adapters/qwen_model_adapter.py
+```
+
+After backend reload/restart, smoke:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8805/api/alpha-trace/agent-runs/runtime/integrations
+```
+
+Confirm response does not include raw API keys.
+
+### M136 Tool Contract Enrichment for TradingAgents Events
+
+Run:
+
+```powershell
+python -m py_compile backend/services/agent_tool_registry.py backend/services/agent_runners/tradingagents_adapter.py
+```

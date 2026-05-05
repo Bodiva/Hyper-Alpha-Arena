@@ -23,6 +23,7 @@ from schemas.alpha_trace_agent_runtime import (
 from services.agent_runners.base import AgentRunnerContext
 from services.agent_runners.registry import AgentRunnerConfigurationError, AgentRunnerExecutionError
 from services.asset_store.asset_store import get_static_asset_store
+from services.agent_tool_registry import get_agent_tool_contract
 from services.agent_orchestrator.subprocess_orchestrator import (
     SubprocessOrchestrator,
     SubprocessWorkerArtifacts,
@@ -1577,6 +1578,10 @@ class TradingAgentsRunnerAdapter:
         agent_name: Optional[str] = None,
         team: Optional[str] = None,
     ) -> None:
+        if payload.get("toolName") and "toolContract" not in payload:
+            tool_contract = get_agent_tool_contract(str(payload.get("toolName") or ""))
+            if tool_contract:
+                payload = {**payload, "toolContract": tool_contract.to_payload()}
         with self._event_lock:
             sequence = len(self._get_existing_events(context, run_id)) + 1
             event = AgentRuntimeEvent(

@@ -4628,3 +4628,50 @@ Validation:
 
 1. py_compile passed for scoped backend files.
 2. `git diff --check` passed with only CRLF normalization warnings.
+
+## M135 - Runtime Integration Diagnostics Endpoint
+
+Status: Completed
+
+Goal:
+
+Expose current integration adapter capability and health metadata for Bocha, static market data, and Qwen provider boundaries.
+
+Scope:
+
+1. Add `GET /api/alpha-trace/agent-runs/runtime/integrations`.
+2. Improve Qwen provider adapter health to read MySQL system config as well as environment variables.
+3. Do not expose raw secrets.
+4. Do not change runner execution.
+
+Acceptance:
+
+1. Endpoint reports provider capability and readiness metadata.
+2. Qwen health source can reflect `mysql_system_config` when configured there.
+
+Validation:
+
+1. `python -m py_compile backend/api/alpha_trace_agent_runtime_routes.py backend/services/integration_adapters/qwen_model_adapter.py`.
+2. Runtime API smoke after backend reload/restart window.
+
+## M136 - Tool Contract Enrichment for TradingAgents Events
+
+Status: Completed
+
+Goal:
+
+Ensure TradingAgents PoC tool events carry the same backend tool contract metadata used by Qwen/Native events.
+
+Scope:
+
+1. Add TradingAgents worker/graph tool contracts to `agent_tool_registry.py`.
+2. Enrich TradingAgents adapter events with `toolContract` when `toolName` is known.
+3. Do not change TradingAgents execution behavior.
+
+Acceptance:
+
+1. TradingAgents `tool.called` / `tool.result` payloads can be interpreted by the same Tool Calls Timeline contract display.
+
+Validation:
+
+1. `python -m py_compile backend/services/agent_tool_registry.py backend/services/agent_runners/tradingagents_adapter.py`.

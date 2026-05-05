@@ -129,6 +129,26 @@ _TOOL_CONTRACTS: Dict[str, AgentToolContract] = {
         output_class="agent_decision",
         description="Generates normalized final action, confidence, thesis, risks, watch indicators, and evidence IDs.",
     ),
+    "tradingagents.subprocess_worker": AgentToolContract(
+        tool_name="tradingagents.subprocess_worker",
+        display_name="TradingAgents Subprocess Worker",
+        category="runner_worker",
+        source="alphatrace_orchestrator",
+        auth_mode="server_side_runtime_config",
+        timeout_policy="bounded_worker_timeout",
+        output_class="runtime_events_and_result",
+        description="Launches the optional TradingAgents PoC runtime behind an isolated subprocess boundary.",
+    ),
+    "tradingagents.graph.run": AgentToolContract(
+        tool_name="tradingagents.graph.run",
+        display_name="TradingAgents LangGraph Run",
+        category="external_runner",
+        source="tradingagents_langgraph",
+        auth_mode="server_side_runtime_config",
+        timeout_policy="bounded_worker_timeout",
+        output_class="tradingagents_final_state",
+        description="Executes TradingAgentsGraph and maps its final state into AlphaTrace reports, evidence, and decision.",
+    ),
 }
 
 
