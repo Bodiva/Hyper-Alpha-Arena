@@ -6325,3 +6325,35 @@ Validation:
 Rollback:
 
 Remove `frontend/app/shared/ui/ExternalComponentPanel.tsx`.
+
+## M196 - Integration Decision Guide
+
+Status: Completed
+
+Goal:
+
+Expose decision gates for adapting external runtimes, workbenches, tools, and data providers.
+
+Scope:
+
+1. Add `backend/services/integration_decision_guide.py`.
+2. Add `GET /api/alpha-trace/agent-runs/runtime/integration-decisions`.
+3. Include decision-guide summaries in the architecture index.
+4. Add checks to backend abstraction smoke and endpoint smoke.
+
+Acceptance:
+
+1. Backend py_compile passes.
+2. Backend abstraction smoke passes.
+3. Endpoint smoke script syntax includes integration decisions.
+4. Decision guide defines proceed/stop conditions for TradingAgents, LangAlpha, Bocha, and future professional market data.
+
+Validation:
+
+1. `python -m py_compile backend/services/integration_decision_guide.py backend/services/external_component_catalog.py backend/services/architecture_index.py backend/api/alpha_trace_agent_runtime_routes.py`.
+2. `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`.
+3. `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_abstraction_endpoints.ps1 -SkipHttp`.
+
+Rollback:
+
+Remove the integration decision guide service, endpoint, architecture-index additions, and smoke additions.

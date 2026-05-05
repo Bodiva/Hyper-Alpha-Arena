@@ -13,6 +13,7 @@ from services.agent_tool_registry import list_agent_tool_contracts
 from services.backend_module_boundaries import get_backend_module_boundary_catalog
 from services.data_api import get_data_api_catalog
 from services.external_component_catalog import get_external_component_catalog
+from services.integration_decision_guide import get_integration_decision_guide
 from services.model_providers import list_model_provider_descriptors
 from services.runtime_config import get_runtime_config_facade
 
@@ -37,6 +38,7 @@ def get_alphatrace_architecture_index(db: Session | None = None) -> dict[str, An
     artifact_catalog = get_agent_artifact_catalog()
     module_boundaries = get_backend_module_boundary_catalog().to_response()
     external_components = get_external_component_catalog().to_response()
+    integration_decisions = get_integration_decision_guide().to_response()
 
     return {
         "version": 1,
@@ -73,6 +75,12 @@ def get_alphatrace_architecture_index(db: Session | None = None) -> dict[str, An
                 "displayName": "External Component Integration Catalog",
                 "status": "active",
                 "contracts": ("/api/alpha-trace/agent-runs/runtime/external-components",),
+            },
+            {
+                "layerId": "integration_decisions",
+                "displayName": "External Integration Decision Guide",
+                "status": "active",
+                "contracts": ("/api/alpha-trace/agent-runs/runtime/integration-decisions",),
             },
             {
                 "layerId": "data_api",
@@ -133,6 +141,7 @@ def get_alphatrace_architecture_index(db: Session | None = None) -> dict[str, An
                 "total": external_components.get("total", 0),
                 "summary": external_components.get("summary", {}),
             },
+            "integrationDecisions": {"total": integration_decisions.get("total", 0)},
         },
         "boundaries": {
             "externalFrameworkPolicy": (
@@ -147,6 +156,7 @@ def get_alphatrace_architecture_index(db: Session | None = None) -> dict[str, An
             "runtimeReadiness": "/api/alpha-trace/agent-runs/runtime/readiness",
             "moduleBoundaries": "/api/alpha-trace/agent-runs/runtime/module-boundaries",
             "externalComponents": "/api/alpha-trace/agent-runs/runtime/external-components",
+            "integrationDecisions": "/api/alpha-trace/agent-runs/runtime/integration-decisions",
             "modelProviders": "/api/alpha-trace/agent-runs/runtime/model-providers",
             "orchestrators": "/api/alpha-trace/agent-runs/runtime/orchestrators",
             "taskSpecs": "/api/alpha-trace/agent-runs/runtime/task-specs",

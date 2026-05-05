@@ -2702,3 +2702,24 @@ Expected:
 - Build succeeds.
 - `frontend/app/shared/ui/ExternalComponentPanel.tsx` compiles without new dependencies.
 - No existing page wiring is changed.
+
+### M196 Integration Decision Guide
+
+Required backend compile:
+
+```powershell
+python -m py_compile backend/services/integration_decision_guide.py backend/services/external_component_catalog.py backend/services/architecture_index.py backend/api/alpha_trace_agent_runtime_routes.py
+```
+
+Required regression:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_abstraction_endpoints.ps1 -SkipHttp
+```
+
+Expected:
+
+- Integration decision guide includes proceed/stop criteria for TradingAgents, LangAlpha, Bocha, and future professional market data.
+- Architecture index links `/api/alpha-trace/agent-runs/runtime/integration-decisions`.
+- No external project is imported or executed.

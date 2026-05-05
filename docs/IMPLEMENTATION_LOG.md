@@ -4723,3 +4723,28 @@ Notes:
 
 Next:
 - Validate build and commit.
+
+## 2026-05-05 - M196 Integration Decision Guide
+
+Goal:
+- Add backend decision gates for when to proceed or stop with external component integrations.
+
+Changes:
+- Added `backend/services/integration_decision_guide.py`.
+- Updated `backend/api/alpha_trace_agent_runtime_routes.py`.
+- Updated `backend/services/architecture_index.py`.
+- Updated `scripts/alphatrace/smoke_backend_abstractions.ps1`.
+- Updated `scripts/alphatrace/smoke_abstraction_endpoints.ps1`.
+
+Validation:
+- `python -m py_compile backend/services/integration_decision_guide.py backend/services/external_component_catalog.py backend/services/architecture_index.py backend/api/alpha_trace_agent_runtime_routes.py`: passed.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`: passed.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_abstraction_endpoints.ps1 -SkipHttp`: passed.
+
+Notes:
+- The guide makes integration gating explicit: when to proceed, when to stop, which AlphaTrace contracts must be preserved, and what validation is required.
+- This supports the long-term goal of composing useful open-source components without replacing the AlphaTrace backend.
+
+Next:
+- Validate and commit the guide.
+
