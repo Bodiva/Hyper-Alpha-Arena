@@ -2111,3 +2111,17 @@ Required local smoke:
 
 - Map an evidence reference with `https://` URL to `web_url` artifact.
 - Verify placeholder URL does not create an artifact.
+
+### M159 Optional Evidence URL Artifact Creation
+
+Required backend compile:
+
+```powershell
+python -m py_compile backend/services/alpha_trace_agent_runtime_service.py backend/services/agent_artifacts/evidence_mapper.py backend/services/agent_artifacts/registry.py
+```
+
+Runtime smoke when safe:
+
+- Set `ALPHATRACE_CREATE_EVIDENCE_URL_ARTIFACTS=true`.
+- Submit a run with Bocha/static evidence URL.
+- Verify `/agent-runs/{runId}/artifacts` returns web_url artifacts.

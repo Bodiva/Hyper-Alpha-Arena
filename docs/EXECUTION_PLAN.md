@@ -5243,3 +5243,32 @@ Validation:
 Rollback:
 
 Remove evidence mapper exports. Artifact store remains unaffected.
+
+## M159 - Optional Evidence URL Artifact Creation
+
+Status: Completed
+
+Goal:
+
+Optionally create `web_url` AgentArtifacts from run evidence with canonical URLs after run outputs are persisted.
+
+Scope:
+
+1. Add default-off `ALPHATRACE_CREATE_EVIDENCE_URL_ARTIFACTS=true` path.
+2. Create artifacts after `_STORE.save_evidence` and before decision persistence.
+3. Never fail report/evidence/decision persistence if artifact creation fails.
+4. Do not fetch external pages.
+
+Acceptance:
+
+1. Backend py_compile passes.
+2. Default behavior remains unchanged when the feature flag is unset.
+3. Artifact creation failures are isolated.
+
+Validation:
+
+1. `python -m py_compile backend/services/alpha_trace_agent_runtime_service.py backend/services/agent_artifacts/evidence_mapper.py backend/services/agent_artifacts/registry.py`.
+
+Rollback:
+
+Remove `_create_evidence_url_artifacts_if_enabled` and its call from `_update_agent_run_outputs`.

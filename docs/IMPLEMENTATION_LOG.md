@@ -3971,3 +3971,23 @@ Notes:
 
 Next:
 - M159 should decide whether run evidence persistence should optionally create web_url artifacts behind a feature flag.
+
+## 2026-05-05 - M159 Optional Evidence URL Artifact Creation
+
+Goal:
+- Optionally create `web_url` AgentArtifacts from run evidence with canonical URLs after run outputs are persisted.
+
+Changes:
+- Updated `backend/services/alpha_trace_agent_runtime_service.py`.
+- Added default-off `ALPHATRACE_CREATE_EVIDENCE_URL_ARTIFACTS=true` path.
+
+Validation:
+- `python -m py_compile backend/services/alpha_trace_agent_runtime_service.py backend/services/agent_artifacts/evidence_mapper.py backend/services/agent_artifacts/registry.py`: passed.
+
+Notes:
+- Default behavior is unchanged.
+- Artifact creation failures are intentionally isolated from report/evidence/decision persistence.
+- The backend does not fetch external pages; source URL remains canonical.
+
+Next:
+- M160 should update abstraction smoke scripts to include artifact mapper/store checks.

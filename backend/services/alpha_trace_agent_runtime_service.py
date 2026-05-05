@@ -22,6 +22,7 @@ from schemas.alpha_trace_agent_runtime import (
 )
 from services.agent_runtime_status_machine import can_transition_status, is_terminal_status
 from services.agent_runtime_store.registry import get_agent_run_store
+from services.agent_artifacts import evidence_list_to_web_artifacts, get_agent_artifact_store
 from services.agent_orchestrator.task_spec_factory import build_agent_run_task_spec
 from services.agent_orchestrator.subprocess_orchestrator import cancel_subprocess_worker
 from services.agent_runners.base import AgentRunnerContext
@@ -272,7 +273,20 @@ def _update_agent_run_outputs(
 ) -> None:
     _STORE.save_reports(run_id, reports, llm_calls)
     _STORE.save_evidence(run_id, evidence)
+    _create_evidence_url_artifacts_if_enabled(run_id, evidence)
     _STORE.save_decision(run_id, decision)
+
+
+def _create_evidence_url_artifacts_if_enabled(run_id: str, evidence: List[EvidenceReference]) -> None:
+    if os.getenv("ALPHATRACE_CREATE_EVIDENCE_URL_ARTIFACTS", "").strip().lower() != "true":
+        return
+    try:
+        artifact_store = get_agent_artifact_store()
+        for artifact in evidence_list_to_web_artifacts(run_id, evidence):
+            artifact_store.save_artifact(artifact)
+    except Exception:
+        # Artifact creation must not affect report/evidence/decision persistence.
+        return
 
 
 def list_agent_runs(
