@@ -508,8 +508,8 @@ const buildDecisionTimelineItems = (events: AgentRuntimeEvent[], legacyEvents: A
       const stepId = typeof payload.stepId === "string" ? payload.stepId : "";
       const isStreamingChunk =
         (event.type === "reasoning.chunk" || event.type === "debate.message") &&
-        payload.streaming === true &&
-        typeof payload.content === "string";
+        typeof payload.content === "string" &&
+        payload.content.trim().length > 0;
 
       if (isStreamingChunk) {
         const key = `${stepId || "general"}:${event.agentName ?? "System"}:${event.type}`;

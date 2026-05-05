@@ -7158,3 +7158,34 @@ Validation:
 Rollback:
 
 Revert the evidence route query parameter handling and frontend evidence API timeout/signature changes.
+
+## M222 - Agent Timeline Chunk Compaction
+
+Status: Completed
+
+Goal:
+
+Reduce AgentRunDetail timeline noise by grouping `reasoning.chunk`, `debate.message`, and `metric.updated` events into readable summaries.
+
+Scope:
+
+1. Compact any `reasoning.chunk` / `debate.message` with text content, not only events with `payload.streaming=true`.
+2. Compact `metric.updated` events in Agent Run Progress recent events.
+3. Keep raw runtime events and SSE behavior unchanged.
+4. Do not modify backend event generation or runner behavior.
+5. Do not modify old business pages.
+
+Acceptance:
+
+1. Agent Run Progress recent events show aggregated live output and metrics summaries instead of many one-line chunks.
+2. Agent Timeline still shows key events and aggregated live output summaries.
+3. Raw Runtime Event Stream remains available.
+4. Frontend build passes.
+
+Validation:
+
+1. `pnpm --dir frontend build`
+
+Rollback:
+
+Revert `runtime-step-mapper.ts` and the AgentRunDetail timeline grouping condition.

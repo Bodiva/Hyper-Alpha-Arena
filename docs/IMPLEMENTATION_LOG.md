@@ -5353,3 +5353,23 @@ Notes:
 
 Result:
 - M221 is complete. Run-scoped Bocha evidence is now directly resolvable from Evidence Center when AgentRunDetail passes `runId`.
+
+## 2026-05-05 - M222 Agent Timeline Chunk Compaction
+
+Goal:
+- Fix AgentRunDetail readability where `reasoning.chunk` and `metric.updated` events appear as many small one-line cards.
+
+Changes:
+- Updated `runtime-step-mapper.ts` so recent events compact any `reasoning.chunk` / `debate.message` with content, not only `payload.streaming=true` events.
+- Updated `runtime-step-mapper.ts` to aggregate `metric.updated` events into `metric.updated.summary` items for Agent Run Progress recent events.
+- Updated `AgentRunDetailPage.tsx` bottom Agent Timeline grouping condition to aggregate content chunks even when `payload.streaming` is absent.
+
+Validation:
+- `pnpm --dir frontend build`: passed after fixing a local syntax error in `runtime-step-mapper.ts`; existing chunk/browserslist warnings remain.
+
+Notes:
+- Raw Runtime Event Stream remains unchanged and still exposes the lossless event list.
+- Backend event generation, SSE, Qwen, Native, TradingAgents, and Stub behavior are unchanged.
+
+Result:
+- M222 is complete. Agent Run Progress recent events and Agent Timeline now compact chunk/metric noise more aggressively while keeping raw events available.

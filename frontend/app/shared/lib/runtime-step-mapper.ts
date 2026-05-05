@@ -139,7 +139,7 @@ const buildLiveOutputsByStep = (events: AgentRuntimeEvent[]): Map<AgentRunStepId
   [...events].sort((a, b) => a.sequence - b.sequence).forEach((event) => {
     if (event.type !== "reasoning.chunk") return;
     const payload = payloadRecord(event);
-    if (payload.streaming !== true || typeof payload.content !== "string") return;
+    if (typeof payload.content !== "string") return;
     const stepId = stepIdFromEvent(event);
     if (!stepId) return;
     outputs.set(stepId, `${outputs.get(stepId) ?? ""}${payload.content}`);
@@ -150,7 +150,7 @@ const buildLiveOutputsByStep = (events: AgentRuntimeEvent[]): Map<AgentRunStepId
 const isStreamingChunkEvent = (event: AgentRuntimeEvent): boolean => {
   if (event.type !== "reasoning.chunk" && event.type !== "debate.message") return false;
   const payload = payloadRecord(event);
-  return payload.streaming === true && typeof payload.content === "string";
+  return typeof payload.content === "string" && payload.content.trim().length > 0;
 };
 
 const buildTimelineFromEvents = (events: AgentRuntimeEvent[]): AgentRuntimeTimelineItem[] => {
@@ -164,28 +164,49 @@ const buildTimelineFromEvents = (events: AgentRuntimeEvent[]): AgentRuntimeTimel
       tail: string;
     }
   >();
+  const metricGroups = new Map<
+    string,
+    {
+      event: AgentRuntimeEvent;
+      count: number;
+    }
+  >();
 
   [...events]
     .sort((a, b) => a.sequence - b.sequence)
     .forEach((event) => {
-      if (!isStreamingChunkEvent(event)) return;
-      const payload = payloadRecord(event);
-      const stepId = stepIdFromEvent(event) ?? "unknown";
-      const key = `${stepId}:${event.agentName ?? "System"}:${event.type}`;
-      const content = String(payload.content ?? "");
-      const current = streamingGroups.get(key);
-      if (current) {
-        current.event = event;
-        current.count += 1;
-        current.contentLength += content.length;
-        current.tail = `${current.tail}${content}`.slice(-260);
-      } else {
-        streamingGroups.set(key, {
-          event,
-          count: 1,
-          contentLength: content.length,
-          tail: content.slice(-260),
-        });
+      if (isStreamingChunkEvent(event)) {
+        const payload = payloadRecord(event);
+        const stepId = stepIdFromEvent(event) ?? "unknown";
+        const key = `${stepId}:${event.agentName ?? "System"}:${event.type}`;
+        const content = String(payload.content ?? "");
+        const current = streamingGroups.get(key);
+        if (current) {
+          current.event = event;
+          current.count += 1;
+          current.contentLength += content.length;
+          current.tail = `${current.tail}${content}`.slice(-260);
+        } else {
+          streamingGroups.set(key, {
+            event,
+            count: 1,
+            contentLength: content.length,
+            tail: content.slice(-260),
+          });
+        }
+        return;
+      }
+
+      if (event.type === "metric.updated") {
+        const stepId = stepIdFromEvent(event) ?? "unknown";
+        const key = `${stepId}:${event.agentName ?? "System"}`;
+        const current = metricGroups.get(key);
+        if (current) {
+          current.event = event;
+          current.count += 1;
+        } else {
+          metricGroups.set(key, { event, count: 1 });
+        }
       }
     });
 
@@ -193,6 +214,7 @@ const buildTimelineFromEvents = (events: AgentRuntimeEvent[]): AgentRuntimeTimel
     .sort((a, b) => a.sequence - b.sequence)
     .forEach((event) => {
       if (isStreamingChunkEvent(event)) return;
+      if (event.type === "metric.updated") return;
       const payload = payloadRecord(event);
       const summary =
         typeof payload.summary === "string"
@@ -224,6 +246,18 @@ const buildTimelineFromEvents = (events: AgentRuntimeEvent[]): AgentRuntimeTimel
       timestamp: group.event.timestamp,
       agentName: group.event.agentName,
       summary: `${stepLabel ? `${stepLabel}: ` : ""}Live output streamed ${group.count} chunks / ${group.contentLength} chars.${compactTail ? ` Latest: ${compactTail}` : ""}`,
+    });
+  });
+
+  metricGroups.forEach((group, key) => {
+    const stepId = stepIdFromEvent(group.event);
+    const stepLabel = stepId ? STEP_DEFINITIONS.find((step) => step.stepId === stepId)?.label : undefined;
+    items.push({
+      eventId: `metrics-${key}`,
+      type: "metric.updated.summary",
+      timestamp: group.event.timestamp,
+      agentName: group.event.agentName,
+      summary: `${stepLabel ? `${stepLabel}: ` : ""}Runtime metrics aggregated ${group.count} updates.`,
     });
   });
 

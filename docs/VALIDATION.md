@@ -3142,3 +3142,18 @@ Expected:
 - Run-scoped evidence detail returns the item from the requested AgentRun.
 - Bocha evidence includes `url`, `sourceName`, `summary`, `extractedFields`, and metadata describing external-search provenance.
 - Frontend build passes.
+
+## M222 Validation - Agent Timeline Chunk Compaction
+
+Required check:
+
+```powershell
+pnpm --dir frontend build
+```
+
+Expected:
+
+- Build passes.
+- Agent Run Progress recent events can use compacted `live.output` and `metric.updated.summary` items.
+- Agent Timeline groups `reasoning.chunk` / `debate.message` content even when `payload.streaming` is not present.
+- Raw Runtime Event Stream remains unchanged.
