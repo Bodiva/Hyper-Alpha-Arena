@@ -4382,3 +4382,26 @@ Notes:
 
 Next:
 - Continue with a runtime diagnostics read model or a minimal UI-safe page integration once existing frontend dirty state is isolated.
+
+## 2026-05-05 - M179 Agent Runtime Task Spec Catalog
+
+Goal:
+- Expose scheduler-neutral task spec contracts for runner execution boundaries.
+
+Changes:
+- Added `backend/services/agent_orchestrator/task_spec_catalog.py`.
+- Added `GET /api/alpha-trace/agent-runs/runtime/task-specs`.
+- Updated `backend/services/architecture_index.py`.
+- Updated `scripts/alphatrace/smoke_backend_abstractions.ps1`.
+
+Validation:
+- `python -m py_compile backend/services/agent_orchestrator/task_spec_catalog.py backend/services/architecture_index.py backend/api/alpha_trace_agent_runtime_routes.py`: passed.
+- `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`: passed.
+
+Notes:
+- This catalog describes timeout, retry, secret scrub, and execution boundary policy.
+- It clarifies that TradingAgents and LangAlpha have different execution boundaries from AlphaTrace Native.
+- No runner execution path was changed.
+
+Next:
+- Continue with frontend API typing for task spec diagnostics or a deeper runner/orchestrator split.

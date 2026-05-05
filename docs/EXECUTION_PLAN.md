@@ -5833,3 +5833,33 @@ Validation:
 Rollback:
 
 Remove the endpoint constant, types, and helper.
+
+## M179 - Agent Runtime Task Spec Catalog
+
+Status: Completed
+
+Goal:
+
+Expose scheduler-neutral task spec contracts for runner execution boundaries.
+
+Scope:
+
+1. Add `agent_orchestrator.task_spec_catalog`.
+2. Add `GET /api/alpha-trace/agent-runs/runtime/task-specs`.
+3. Include task spec contracts in the architecture index.
+4. Update backend abstraction smoke.
+
+Acceptance:
+
+1. Backend py_compile passes.
+2. Backend abstraction smoke verifies runner task contracts.
+3. No runner execution path changes.
+
+Validation:
+
+1. `python -m py_compile backend/services/agent_orchestrator/task_spec_catalog.py backend/services/architecture_index.py backend/api/alpha_trace_agent_runtime_routes.py`.
+2. `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1`.
+
+Rollback:
+
+Remove the catalog service, route, architecture index entry, and smoke additions.

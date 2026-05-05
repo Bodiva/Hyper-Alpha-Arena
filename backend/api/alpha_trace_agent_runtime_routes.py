@@ -50,6 +50,7 @@ from services.agent_orchestrator.adapter_matrix import get_adapter_composition_m
 from services.agent_orchestrator.flow_catalog import get_agent_flow_catalog
 from services.agent_orchestrator.orchestrator_catalog import list_orchestrator_descriptors
 from services.agent_orchestrator.subprocess_orchestrator import get_subprocess_worker_registry_snapshot
+from services.agent_orchestrator.task_spec_catalog import list_task_spec_contracts
 from services.agent_runners.registry import AgentRunnerConfigurationError, AgentRunnerExecutionError, AgentRunnerNotImplementedError
 from services.agent_runtime_store.registry import get_agent_run_store
 from services.agent_tool_registry import list_agent_tool_contracts
@@ -391,6 +392,14 @@ def get_agent_runtime_orchestrators_endpoint():
     return {
         **list_orchestrator_descriptors(),
         "message": "Orchestrator diagnostics describe execution boundaries. They do not expose external runner internal state.",
+    }
+
+
+@router.get("/runtime/task-specs")
+def get_agent_runtime_task_spec_contracts_endpoint():
+    return {
+        **list_task_spec_contracts(),
+        "message": "Task spec contracts describe how SubmitAgentRunRequest becomes scheduler-neutral execution metadata.",
     }
 
 

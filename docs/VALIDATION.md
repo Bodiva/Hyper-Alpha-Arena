@@ -2425,3 +2425,23 @@ Expected:
 - `frontend/app/shared/api/endpoints.ts` exports the artifact catalog endpoint.
 - `frontend/app/entities/runtime/api.ts` exports artifact catalog types and `getAgentArtifactCatalogAsync`.
 - No existing page wiring is changed in this milestone.
+
+### M179 Agent Runtime Task Spec Catalog
+
+Required backend compile:
+
+```powershell
+python -m py_compile backend/services/agent_orchestrator/task_spec_catalog.py backend/services/architecture_index.py backend/api/alpha_trace_agent_runtime_routes.py
+```
+
+Required regression:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/alphatrace/smoke_backend_abstractions.ps1
+```
+
+Expected:
+
+- Task spec catalog includes qwen, alphatrace_native, tradingagents, and langalpha runner contracts.
+- Secret-scrub and timeout policies are documented in the response.
+- Runtime architecture index links to `/runtime/task-specs`.
