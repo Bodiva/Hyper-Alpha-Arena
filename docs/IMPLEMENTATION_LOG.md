@@ -5407,3 +5407,37 @@ Notes:
 Result:
 - M223 is complete at code/build/service-validation level.
 - Docker/API runtime validation should be rerun when Docker Desktop is available.
+
+## 2026-05-05 - M224 AlphaTrace Tool and Skill Catalog API
+
+Goal:
+- Make Tools and Skills first-class backend contracts so Native Multi-Agent orchestration can bind agent roles to tools/data/model/output contracts without exposing Qwen, TradingAgents, or LangAlpha internals.
+
+Changes:
+- Added `backend/api/alpha_trace_tool_skill_routes.py`.
+- Registered the router in `backend/main.py`.
+- Exposed:
+  - `GET /api/alpha-trace/tools`
+  - `GET /api/alpha-trace/tools/{toolName}`
+  - `GET /api/alpha-trace/skills`
+  - `GET /api/alpha-trace/skills/bindings`
+  - `GET /api/alpha-trace/skills/roles/{roleId}`
+- Reused existing service catalogs:
+  - `agent_tool_registry.py`
+  - `agent_skill_catalog.py`
+  - `agent_skill_bindings.py`
+
+Validation:
+- `python -m py_compile backend/api/alpha_trace_tool_skill_routes.py backend/main.py backend/services/agent_tool_registry.py backend/services/agent_skill_catalog.py backend/services/agent_skill_bindings.py`: passed.
+- Direct route smoke without Docker: passed.
+  - Catalog returned 12 tools, 6 skills, and 7 role bindings.
+  - `bocha.search` resolves with server-side API key auth.
+  - `market_analyst` role binding resolves.
+  - Missing tool returns HTTP 404.
+
+Notes:
+- Bocha is represented as `bocha.search`, a backend tool with server-side API key auth.
+- This does not invoke external services and does not change runner behavior.
+
+Result:
+- M224 is complete.

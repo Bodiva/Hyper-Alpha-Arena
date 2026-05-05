@@ -7223,3 +7223,36 @@ Validation:
 Rollback:
 
 Revert data-source route/schema/import-service changes and DataImportPage mapping UI changes.
+
+## M224 - AlphaTrace Tool and Skill Catalog API
+
+Status: Completed
+
+Goal:
+
+Expose AlphaTrace backend tool, skill, and role-binding catalogs as product-level read APIs so agent orchestration can be configured and audited without exposing runner internals.
+
+Scope:
+
+1. Add read-only `/api/alpha-trace/tools` and `/api/alpha-trace/tools/{toolName}`.
+2. Add read-only `/api/alpha-trace/skills`.
+3. Add read-only `/api/alpha-trace/skills/bindings` and `/api/alpha-trace/skills/roles/{roleId}`.
+4. Use existing `agent_tool_registry`, `agent_skill_catalog`, and `agent_skill_bindings` services.
+5. Keep Bocha as a backend tool contract, not a durable business store.
+6. Do not change Qwen, Native, TradingAgents, LangAlpha, persistence, or frontend behavior.
+
+Acceptance:
+
+1. Tool catalog includes Bocha, evidence retrieval, market context, Qwen model-call tools, and TradingAgents PoC tools.
+2. Skill catalog includes evidence retrieval, market context, bull/bear debate, risk review, final decision, and external workbench design-only skill.
+3. Role bindings expose Evidence Retriever, Market Analyst, Bull/Bear, Research Manager, Risk Analyst, and Portfolio Manager dependencies.
+4. Unknown tool/role returns a clear 404.
+
+Validation:
+
+1. `python -m py_compile backend/api/alpha_trace_tool_skill_routes.py backend/main.py backend/services/agent_tool_registry.py backend/services/agent_skill_catalog.py backend/services/agent_skill_bindings.py`
+2. Direct route smoke for tools, skills, bindings, and one 404 path.
+
+Rollback:
+
+Remove `alpha_trace_tool_skill_routes.py` and unregister the router from `backend/main.py`.

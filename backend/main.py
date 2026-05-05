@@ -787,6 +787,7 @@ from api.alpha_trace_decision_routes import router as alpha_trace_decision_route
 from api.alpha_trace_leaderboard_routes import router as alpha_trace_leaderboard_router
 from api.alpha_trace_market_data_routes import router as alpha_trace_market_data_router
 from api.alpha_trace_data_source_routes import router as alpha_trace_data_source_router
+from api.alpha_trace_tool_skill_routes import router as alpha_trace_tool_skill_router
 from routes.program_routes import router as program_router
 # Removed: AI account routes merged into account_routes (unified AI trader accounts)
 
@@ -830,6 +831,7 @@ app.include_router(alpha_trace_decision_router)
 app.include_router(alpha_trace_leaderboard_router)
 app.include_router(alpha_trace_market_data_router)
 app.include_router(alpha_trace_data_source_router)
+app.include_router(alpha_trace_tool_skill_router)
 # app.include_router(ai_account_router, prefix="/api")  # Removed - merged into account_router
 
 # Strategy route aliases for frontend compatibility

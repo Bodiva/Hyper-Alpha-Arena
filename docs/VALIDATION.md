@@ -3181,3 +3181,45 @@ Expected:
 - Response includes the supplied/effective `fieldMapping`.
 - Preview row payload contains mapped wide-table metrics.
 - No ClickHouse write occurs in dry-run mode.
+
+## M224 Validation - AlphaTrace Tool and Skill Catalog API
+
+Required checks:
+
+```powershell
+python -m py_compile backend/api/alpha_trace_tool_skill_routes.py backend/main.py backend/services/agent_tool_registry.py backend/services/agent_skill_catalog.py backend/services/agent_skill_bindings.py
+```
+
+Route smoke without Docker:
+
+```powershell
+$env:PYTHONPATH="backend"
+python - <<'PY'
+from fastapi import HTTPException
+from api.alpha_trace_tool_skill_routes import (
+    get_alpha_trace_role_skill_binding,
+    get_alpha_trace_tool,
+    list_alpha_trace_skill_bindings,
+    list_alpha_trace_skills,
+    list_alpha_trace_tools,
+)
+
+assert list_alpha_trace_tools()["total"] >= 1
+assert get_alpha_trace_tool("bocha.search")["authMode"] == "server_side_api_key"
+assert list_alpha_trace_skills()["total"] >= 1
+assert list_alpha_trace_skill_bindings()["total"] >= 1
+assert get_alpha_trace_role_skill_binding("market_analyst")["display_name"] == "Market Analyst"
+try:
+    get_alpha_trace_tool("missing.tool")
+except HTTPException as exc:
+    assert exc.status_code == 404
+else:
+    raise AssertionError("missing.tool should 404")
+PY
+```
+
+Expected:
+
+- Catalog routes can be imported and executed without DB or runner startup.
+- Unknown tool/role returns 404.
+- Tool/skill/role contracts are read-only and do not invoke external services.
