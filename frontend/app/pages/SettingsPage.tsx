@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,6 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import {
   Bot,
   Database,
+  Download,
   History,
   KeyRound,
   MonitorCog,
@@ -18,7 +19,7 @@ import {
   Upload,
 } from "lucide-react";
 import { listAssets } from "@/entities/asset/api";
-import { listDataSources } from "@/entities/data-source/api";
+import { getClickHouseOverviewAsync, listDataSources } from "@/entities/data-source/api";
 import { listStrategies } from "@/entities/strategy/api";
 import {
   ASSET_TYPE_OPTIONS,
@@ -44,11 +45,13 @@ import {
   type DecisionDefaultStatus,
   type EvidenceQualityThreshold,
   type LeaderboardSortMetric,
+  type SettingsMock,
   type SettingsModulePresetKey,
   type SettingsModulePresetPayload,
   type WorkspaceDefaultPresetPayload,
 } from "@/entities/settings/api";
 import { API_BASE_URL } from "@/shared/api/api-config";
+import { getHideAutomationTradingOps, setHideAutomationTradingOps } from "@/shared/lib/menu-preferences";
 import { navigateTo } from "@/shared/lib/navigation";
 import ResearchWorkspaceNav from "@/shared/ui/ResearchWorkspaceNav";
 
@@ -121,6 +124,61 @@ interface NamedSettingsPreset extends SettingsModulePresetPayload<Record<string,
   description: string;
   source: "database";
 }
+
+interface SettingsSnapshot extends SettingsMock {
+  savedAt: string;
+  activeWorkspacePresetId: string;
+}
+
+interface SettingsHistoryItem {
+  id: string;
+  action: string;
+  at: string;
+  summary: string;
+}
+
+const LOCAL_SETTINGS_STORAGE_KEY = "alphatrace.settings.snapshot";
+const LOCAL_SETTINGS_HISTORY_KEY = "alphatrace.settings.history";
+
+const isBrowser = () => typeof window !== "undefined";
+
+const readSettingsHistory = (): SettingsHistoryItem[] => {
+  if (!isBrowser()) return [];
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(LOCAL_SETTINGS_HISTORY_KEY) || "[]");
+    return Array.isArray(parsed) ? parsed.slice(0, 20) : [];
+  } catch {
+    return [];
+  }
+};
+
+const appendSettingsHistory = (item: Omit<SettingsHistoryItem, "id" | "at">) => {
+  if (!isBrowser()) return;
+  const nextItem: SettingsHistoryItem = {
+    ...item,
+    id: `settings_history_${Date.now()}`,
+    at: new Date().toISOString(),
+  };
+  window.localStorage.setItem(LOCAL_SETTINGS_HISTORY_KEY, JSON.stringify([nextItem, ...readSettingsHistory()].slice(0, 20)));
+};
+
+const readLocalSettingsSnapshot = (fallback: SettingsMock): Partial<SettingsSnapshot> | null => {
+  if (!isBrowser()) return null;
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(LOCAL_SETTINGS_STORAGE_KEY) || "null");
+    if (!parsed || typeof parsed !== "object") return null;
+    return {
+      ...fallback,
+      ...parsed,
+      riskThresholds: { ...fallback.riskThresholds, ...(parsed.riskThresholds || {}) },
+      modelConfig: { ...fallback.modelConfig, ...(parsed.modelConfig || {}) },
+      dataSourcePolicy: { ...fallback.dataSourcePolicy, ...(parsed.dataSourcePolicy || {}) },
+      pagePreferences: { ...fallback.pagePreferences, ...(parsed.pagePreferences || {}) },
+    };
+  } catch {
+    return null;
+  }
+};
 
 const SETTINGS_NAV = [
   { id: "runtime", label: "运行时接入", icon: KeyRound },
@@ -357,7 +415,39 @@ const NamedPresetPanel = ({
 );
 
 export default function SettingsPage() {
-  const settings = useMemo(() => getSettings(), []);
+  const baseSettings = useMemo(() => getSettings(), []);
+  const localSettingsSnapshot = useMemo(() => readLocalSettingsSnapshot(baseSettings), [baseSettings]);
+  const settings = useMemo<SettingsMock>(
+    () => ({
+      ...baseSettings,
+      ...(localSettingsSnapshot || {}),
+      riskThresholds: {
+        ...baseSettings.riskThresholds,
+        ...(localSettingsSnapshot?.riskThresholds || {}),
+      },
+      modelConfig: {
+        ...baseSettings.modelConfig,
+        ...(localSettingsSnapshot?.modelConfig || {}),
+      },
+      dataSourcePolicy: {
+        ...baseSettings.dataSourcePolicy,
+        ...(localSettingsSnapshot?.dataSourcePolicy || {}),
+      },
+      pagePreferences: {
+        ...baseSettings.pagePreferences,
+        ...(localSettingsSnapshot?.pagePreferences || {}),
+      },
+    }),
+    [baseSettings, localSettingsSnapshot],
+  );
+  const importFileInputRef = useRef<HTMLInputElement | null>(null);
+  const initialPagePreferences = useMemo(
+    () => ({
+      ...settings.pagePreferences,
+      hideAutomationTradingOps: getHideAutomationTradingOps(),
+    }),
+    [settings.pagePreferences],
+  );
   const assets = useMemo(() => {
     try {
       return listAssets();
@@ -393,8 +483,8 @@ export default function SettingsPage() {
   const [agentTemplates, setAgentTemplates] = useState(settings.agentTemplates);
   const [modelConfig, setModelConfig] = useState(settings.modelConfig);
   const [dataSourcePolicy, setDataSourcePolicy] = useState(settings.dataSourcePolicy);
-  const [pagePreferences, setPagePreferences] = useState(settings.pagePreferences);
-  const [activeWorkspacePresetId, setActiveWorkspacePresetId] = useState("balanced-research");
+  const [pagePreferences, setPagePreferences] = useState(initialPagePreferences);
+  const [activeWorkspacePresetId, setActiveWorkspacePresetId] = useState(localSettingsSnapshot?.activeWorkspacePresetId || "balanced-research");
   const [databaseWorkspacePresets, setDatabaseWorkspacePresets] = useState<WorkspaceDefaultPreset[]>([]);
   const [workspacePresetName, setWorkspacePresetName] = useState("");
   const [workspacePresetLoading, setWorkspacePresetLoading] = useState(false);
@@ -416,6 +506,9 @@ export default function SettingsPage() {
   const [bochaApiKey, setBochaApiKey] = useState("");
   const [qwenConnectionStatus, setQwenConnectionStatus] = useState<ConnectionStatus>("missing");
   const [bochaConnectionStatus, setBochaConnectionStatus] = useState<ConnectionStatus>("missing");
+  const [clickHouseConnectionStatus, setClickHouseConnectionStatus] = useState<ConnectionStatus>("missing");
+  const [clickHouseVersion, setClickHouseVersion] = useState("-");
+  const [clickHouseTableCount, setClickHouseTableCount] = useState(0);
   const [modulePresetNames, setModulePresetNames] = useState<Record<NamedSettingsModuleKey, string>>({
     riskModel: "",
     agents: "",
@@ -429,6 +522,7 @@ export default function SettingsPage() {
 
   const loadRuntimeCredentials = async () => {
     setRuntimeConfigLoading(true);
+    setClickHouseConnectionStatus("testing");
     try {
       const status = await getRuntimeCredentialStatus();
       const qwenProvider = status.providers.find((provider) => provider.id === "qwen");
@@ -449,6 +543,18 @@ export default function SettingsPage() {
       setRuntimeConfigMessage("Runtime credential status loaded from backend.");
     } catch (error) {
       setRuntimeConfigMessage(getErrorMessage(error, "Failed to load runtime credential status."));
+    }
+
+    try {
+      const clickHouseStatus = await getClickHouseOverviewAsync();
+      const clickHouseReady = clickHouseStatus.status === "OK";
+      setClickHouseConnectionStatus(clickHouseReady ? "passed" : "failed");
+      setClickHouseVersion(clickHouseStatus.version || "-");
+      setClickHouseTableCount(clickHouseStatus.tables.length);
+    } catch {
+      setClickHouseConnectionStatus("failed");
+      setClickHouseVersion("-");
+      setClickHouseTableCount(0);
     } finally {
       setRuntimeConfigLoading(false);
     }
@@ -554,7 +660,7 @@ export default function SettingsPage() {
       setBochaConfigured(true);
       setBochaApiKeyAvailable(true);
       setBochaConnectionStatus("passed");
-      setRuntimeConfigMessage("Bocha API key saved encrypted on backend. Evidence retrieval will use Bocha when available and fallback to static seed on failure.");
+      setRuntimeConfigMessage("Bocha API key saved encrypted on backend. Evidence retrieval will use Bocha when available.");
       await loadRuntimeCredentials();
       setBochaConnectionStatus("passed");
     } catch (error) {
@@ -593,7 +699,7 @@ export default function SettingsPage() {
       setBochaApiKeyAvailable(false);
       setBochaConfigSource("missing");
       setBochaConnectionStatus("missing");
-      setRuntimeConfigMessage("Bocha API key removed. Evidence retrieval will use static seed fallback.");
+      setRuntimeConfigMessage("Bocha API key removed. Evidence retrieval will require another configured source.");
       await loadRuntimeCredentials();
     } catch (error) {
       setRuntimeConfigMessage(getErrorMessage(error, "Failed to remove Bocha configuration."));
@@ -696,7 +802,12 @@ export default function SettingsPage() {
       setDataSourcePolicy(data.dataSourcePolicy);
     }
     if (moduleKey === "pagePreferences" && data.pagePreferences) {
-      setPagePreferences(data.pagePreferences);
+      const nextPagePreferences = {
+        ...settings.pagePreferences,
+        ...data.pagePreferences,
+      };
+      setPagePreferences(nextPagePreferences);
+      setHideAutomationTradingOps(Boolean(nextPagePreferences.hideAutomationTradingOps));
     }
     setActiveModulePresetIds((prev) => ({ ...prev, [moduleKey]: preset.id }));
     setOperationNote(`已套用“${preset.name}”${MODULE_LABELS[moduleKey]}方案。`);
@@ -755,26 +866,141 @@ export default function SettingsPage() {
       riskSummary: `单资产上限 ${riskThresholds.maxSingleAssetWeightPct}%｜行业暴露上限 ${riskThresholds.maxSectorExposurePct}%｜最大回撤预警 ${riskThresholds.maxDrawdownAlertPct}%｜波动率预警 ${riskThresholds.volatilityAlertPct}%`,
       enabledAgentTemplateCount: agentTemplates.filter((template) => template.defaultEnabled).length,
       dataSourcePolicySummary: `优先级 ${dataSourcePolicy.priority.join(" > ")}；质量阈值 ${dataSourcePolicy.minQualityScore}；失败重试 ${dataSourcePolicy.retryStrategy}`,
-      pagePreferenceSummary: `默认首页 ${pagePreferences.defaultHomePage}；主题 ${pagePreferences.theme}；语言 ${pagePreferences.language}；默认显示证据链 ${pagePreferences.showEvidenceTrace ? "是" : "否"}`,
+      pagePreferenceSummary: `默认首页 ${pagePreferences.defaultHomePage}；主题 ${pagePreferences.theme}；语言 ${pagePreferences.language}；默认显示证据链 ${pagePreferences.showEvidenceTrace ? "是" : "否"}；隐藏自动化菜单 ${pagePreferences.hideAutomationTradingOps ? "是" : "否"}`,
     }),
     [agentTemplates, dataSourcePolicy, defaultAssetTypes, defaultMarkets, defaultTags, pagePreferences, riskThresholds],
   );
 
+  const buildCurrentSettingsSnapshot = (): SettingsSnapshot => ({
+    savedAt: new Date().toISOString(),
+    activeWorkspacePresetId,
+    defaultAssetTypes,
+    defaultMarkets,
+    defaultTags,
+    leaderboardSortMetric,
+    evidenceQualityThreshold,
+    decisionDefaultStatus,
+    dataSourceDefaultStatus,
+    riskThresholds,
+    agentTemplates,
+    modelConfig,
+    dataSourcePolicy,
+    pagePreferences,
+  });
+
+  const applySettingsSnapshot = (snapshot: Partial<SettingsSnapshot>, sourceLabel: string) => {
+    const merged: SettingsSnapshot = {
+      ...baseSettings,
+      ...snapshot,
+      savedAt: snapshot.savedAt || new Date().toISOString(),
+      activeWorkspacePresetId: snapshot.activeWorkspacePresetId || "balanced-research",
+      riskThresholds: { ...baseSettings.riskThresholds, ...(snapshot.riskThresholds || {}) },
+      modelConfig: { ...baseSettings.modelConfig, ...(snapshot.modelConfig || {}) },
+      dataSourcePolicy: { ...baseSettings.dataSourcePolicy, ...(snapshot.dataSourcePolicy || {}) },
+      pagePreferences: { ...baseSettings.pagePreferences, ...(snapshot.pagePreferences || {}) },
+    };
+    setDefaultAssetTypes(merged.defaultAssetTypes);
+    setDefaultMarkets(merged.defaultMarkets);
+    setDefaultTags(merged.defaultTags);
+    setLeaderboardSortMetric(merged.leaderboardSortMetric);
+    setEvidenceQualityThreshold(merged.evidenceQualityThreshold);
+    setDecisionDefaultStatus(merged.decisionDefaultStatus);
+    setDataSourceDefaultStatus(merged.dataSourceDefaultStatus);
+    setRiskThresholds(merged.riskThresholds);
+    setAgentTemplates(merged.agentTemplates);
+    setModelConfig(merged.modelConfig);
+    setDataSourcePolicy(merged.dataSourcePolicy);
+    setPagePreferences(merged.pagePreferences);
+    setHideAutomationTradingOps(Boolean(merged.pagePreferences.hideAutomationTradingOps));
+    setActiveWorkspacePresetId(merged.activeWorkspacePresetId);
+    window.localStorage.setItem(LOCAL_SETTINGS_STORAGE_KEY, JSON.stringify(merged));
+    appendSettingsHistory({
+      action: sourceLabel,
+      summary: `${merged.defaultAssetTypes.length} 类资产 / ${merged.agentTemplates.filter((template) => template.defaultEnabled).length} 个 Agent / 数据质量阈值 ${merged.dataSourcePolicy.minQualityScore}`,
+    });
+  };
+
+  const saveLocalSettings = () => {
+    const snapshot = buildCurrentSettingsSnapshot();
+    window.localStorage.setItem(LOCAL_SETTINGS_STORAGE_KEY, JSON.stringify(snapshot));
+    appendSettingsHistory({
+      action: "保存本地配置",
+      summary: `${defaultAssetTypes.length} 类资产 / ${previewSummary.enabledAgentTemplateCount} 个 Agent / ${dataSourcePolicy.minQualityScore} 数据质量阈值`,
+    });
+    setOperationNote(`已保存当前配置到本地浏览器。保存时间：${new Date(snapshot.savedAt).toLocaleString("zh-CN", { hour12: false })}`);
+  };
+
+  const exportSettings = () => {
+    const snapshot = buildCurrentSettingsSnapshot();
+    const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `alphatrace-settings-${snapshot.savedAt.replace(/[:.]/g, "-")}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    appendSettingsHistory({
+      action: "导出配置",
+      summary: previewSummary.pagePreferenceSummary,
+    });
+    setOperationNote("已导出当前配置快照。");
+  };
+
+  const importSettings = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const snapshot = JSON.parse(await file.text()) as Partial<SettingsSnapshot>;
+      if (!snapshot || typeof snapshot !== "object") {
+        throw new Error("配置文件格式不正确。");
+      }
+      applySettingsSnapshot(snapshot, `导入配置：${file.name}`);
+      setOperationNote(`已导入配置文件“${file.name}”，并保存到本地浏览器。`);
+    } catch (error) {
+      setOperationNote(getErrorMessage(error, "导入配置失败。"));
+    } finally {
+      if (importFileInputRef.current) {
+        importFileInputRef.current.value = "";
+      }
+    }
+  };
+
+  const showSettingsHistory = () => {
+    const history = readSettingsHistory();
+    if (!history.length) {
+      setOperationNote("暂无配置变更记录。保存、导入、导出或重置后会记录最近 20 条。");
+      return;
+    }
+    setOperationNote(
+      history
+        .slice(0, 6)
+        .map((item) => `${new Date(item.at).toLocaleString("zh-CN", { hour12: false })} · ${item.action} · ${item.summary}`)
+        .join("\n"),
+    );
+  };
+
   const resetSettings = () => {
-    setDefaultAssetTypes(settings.defaultAssetTypes);
-    setDefaultMarkets(settings.defaultMarkets);
-    setDefaultTags(settings.defaultTags);
-    setLeaderboardSortMetric(settings.leaderboardSortMetric);
-    setEvidenceQualityThreshold(settings.evidenceQualityThreshold);
-    setDecisionDefaultStatus(settings.decisionDefaultStatus);
-    setDataSourceDefaultStatus(settings.dataSourceDefaultStatus);
-    setRiskThresholds(settings.riskThresholds);
-    setAgentTemplates(settings.agentTemplates);
-    setModelConfig(settings.modelConfig);
-    setDataSourcePolicy(settings.dataSourcePolicy);
-    setPagePreferences(settings.pagePreferences);
+    setDefaultAssetTypes(baseSettings.defaultAssetTypes);
+    setDefaultMarkets(baseSettings.defaultMarkets);
+    setDefaultTags(baseSettings.defaultTags);
+    setLeaderboardSortMetric(baseSettings.leaderboardSortMetric);
+    setEvidenceQualityThreshold(baseSettings.evidenceQualityThreshold);
+    setDecisionDefaultStatus(baseSettings.decisionDefaultStatus);
+    setDataSourceDefaultStatus(baseSettings.dataSourceDefaultStatus);
+    setRiskThresholds(baseSettings.riskThresholds);
+    setAgentTemplates(baseSettings.agentTemplates);
+    setModelConfig(baseSettings.modelConfig);
+    setDataSourcePolicy(baseSettings.dataSourcePolicy);
+    setPagePreferences(baseSettings.pagePreferences);
+    setHideAutomationTradingOps(baseSettings.pagePreferences.hideAutomationTradingOps);
     setActiveWorkspacePresetId("balanced-research");
-    setOperationNote("已重置为默认配置（前端本地状态）。");
+    window.localStorage.removeItem(LOCAL_SETTINGS_STORAGE_KEY);
+    appendSettingsHistory({
+      action: "重置默认配置",
+      summary: "已清除本地配置快照并恢复默认值",
+    });
+    setOperationNote("已重置为默认配置，并清除本地保存的配置快照。");
   };
 
   return (
@@ -787,14 +1013,37 @@ export default function SettingsPage() {
             <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button size="sm" onClick={saveLocalSettings}>
+              <Save className="h-4 w-4" />
+              保存配置
+            </Button>
+            <Button size="sm" variant="outline" onClick={exportSettings}>
+              <Download className="h-4 w-4" />
+              导出
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => importFileInputRef.current?.click()}>
+              <Upload className="h-4 w-4" />
+              导入
+            </Button>
+            <Button size="sm" variant="outline" onClick={showSettingsHistory}>
+              <History className="h-4 w-4" />
+              记录
+            </Button>
             <Button size="sm" variant="outline" onClick={resetSettings}>
               <RotateCcw className="h-4 w-4" />
               重置默认
             </Button>
           </div>
         </div>
+        <input
+          ref={importFileInputRef}
+          type="file"
+          accept="application/json,.json"
+          className="hidden"
+          onChange={(event) => void importSettings(event.target.files?.[0])}
+        />
 
-        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
           <div className="rounded-lg border bg-background p-3">
             <div className="text-[11px] font-medium uppercase text-muted-foreground">Qwen Runtime</div>
             <div className="mt-2"><ConnectionIndicator status={qwenConnectionStatus} /></div>
@@ -802,6 +1051,10 @@ export default function SettingsPage() {
           <div className="rounded-lg border bg-background p-3">
             <div className="text-[11px] font-medium uppercase text-muted-foreground">Bocha Search</div>
             <div className="mt-2"><ConnectionIndicator status={bochaConnectionStatus} /></div>
+          </div>
+          <div className="rounded-lg border bg-background p-3">
+            <div className="text-[11px] font-medium uppercase text-muted-foreground">ClickHouse DB</div>
+            <div className="mt-2"><ConnectionIndicator status={clickHouseConnectionStatus} /></div>
           </div>
           <SummaryTile label="资产样本" value={assets.length} />
           <SummaryTile label="数据源样本" value={dataSources.length} />
@@ -845,15 +1098,17 @@ export default function SettingsPage() {
             }
           >
             <div className="space-y-4">
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <ConnectionIndicator status={qwenConnectionStatus} />
-                <ConnectionIndicator status={bochaConnectionStatus} />
-                <Badge variant="outline">Qwen key: {qwenApiKeyAvailable ? "available" : "missing"}</Badge>
-                <Badge variant="outline">Bocha key: {bochaApiKeyAvailable ? "available" : "missing"}</Badge>
-                <Badge variant="outline">Runtime API: {API_BASE_URL}</Badge>
-              </div>
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <ConnectionIndicator status={qwenConnectionStatus} />
+                  <ConnectionIndicator status={bochaConnectionStatus} />
+                  <ConnectionIndicator status={clickHouseConnectionStatus} />
+                  <Badge variant="outline">Qwen key: {qwenApiKeyAvailable ? "available" : "missing"}</Badge>
+                  <Badge variant="outline">Bocha key: {bochaApiKeyAvailable ? "available" : "missing"}</Badge>
+                  <Badge variant="outline">CK: {clickHouseVersion} · {clickHouseTableCount} tables</Badge>
+                  <Badge variant="outline">Runtime API: {API_BASE_URL}</Badge>
+                </div>
 
-              <div className="grid gap-4 xl:grid-cols-2">
+              <div className="grid gap-4 xl:grid-cols-3">
                 <div className="rounded-lg border bg-background p-4">
                   <div className="mb-4 flex items-start justify-between gap-3">
                     <div>
@@ -916,6 +1171,32 @@ export default function SettingsPage() {
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => void removeBochaCredentials()} disabled={!bochaConfigured || runtimeConfigSaving === "delete-bocha"}>
                       {runtimeConfigSaving === "delete-bocha" ? "Removing..." : "Remove Key"}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border bg-background p-4">
+                  <div className="mb-4 flex items-start justify-between gap-3">
+                    <div>
+                      <h2 className="text-sm font-semibold">ClickHouse Database</h2>
+                    </div>
+                    <ConnectionIndicator status={clickHouseConnectionStatus} />
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-1">
+                    <SummaryTile label="Version" value={clickHouseVersion} />
+                    <SummaryTile label="Tables" value={clickHouseTableCount} />
+                  </div>
+                  <div className="mt-3">
+                    <FieldBlock label="Endpoint">
+                      <Input value="CLICKHOUSE_HOST / CLICKHOUSE_PORT via SSH tunnel" readOnly />
+                    </FieldBlock>
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <Button size="sm" variant="outline" onClick={() => void loadRuntimeCredentials()} disabled={runtimeConfigLoading}>
+                      {runtimeConfigLoading ? "Refreshing..." : "Refresh CK Status"}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => navigateTo("/data-catalog", { tab: "clickhouse" })}>
+                      Open CK Data
                     </Button>
                   </div>
                 </div>
@@ -1315,20 +1596,27 @@ export default function SettingsPage() {
                     </FieldBlock>
                   </div>
                   <div className="grid gap-2">
-                    {[
-                      ["默认打开最近一次 Agent Run", "openRecentAgentRunByDefault"],
-                      ["默认显示 ResearchWorkspaceNav", "showResearchWorkspaceNav"],
-                      ["默认显示风险提示", "showRiskWarnings"],
-                      ["默认显示证据链", "showEvidenceTrace"],
-                    ].map(([label, key]) => (
-                      <div key={key} className="flex items-center justify-between gap-3 rounded-md border bg-background px-3 py-2 text-xs">
-                        <span>{label}</span>
-                        <Switch
-                          checked={Boolean(pagePreferences[key as keyof typeof pagePreferences])}
-                          onCheckedChange={(checked) => setPagePreferences((prev) => ({ ...prev, [key]: checked }))}
-                        />
-                      </div>
-                    ))}
+                      {[
+                        ["默认打开最近一次 Agent Run", "openRecentAgentRunByDefault"],
+                        ["默认显示 ResearchWorkspaceNav", "showResearchWorkspaceNav"],
+                        ["默认显示风险提示", "showRiskWarnings"],
+                        ["默认显示证据链", "showEvidenceTrace"],
+                        ["隐藏自动化、交易与运维菜单", "hideAutomationTradingOps"],
+                      ].map(([label, key]) => (
+                        <div key={key} className="flex items-center justify-between gap-3 rounded-md border bg-background px-3 py-2 text-xs">
+                          <span>{label}</span>
+                          <Switch
+                            checked={Boolean(pagePreferences[key as keyof typeof pagePreferences])}
+                            onCheckedChange={(checked) => {
+                              setPagePreferences((prev) => ({ ...prev, [key]: checked }));
+                              if (key === "hideAutomationTradingOps") {
+                                setHideAutomationTradingOps(checked);
+                                setOperationNote(checked ? "已隐藏左侧菜单中的自动化、交易与运维分组。" : "已显示左侧菜单中的自动化、交易与运维分组。");
+                              }
+                            }}
+                          />
+                        </div>
+                      ))}
                   </div>
                 </div>
               </div>
@@ -1341,20 +1629,24 @@ export default function SettingsPage() {
                       <RotateCcw className="h-4 w-4" />
                       重置默认
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => setOperationNote("导出配置功能待接入。")}>
-                      <Upload className="h-4 w-4" />
+                    <Button size="sm" onClick={saveLocalSettings}>
+                      <Save className="h-4 w-4" />
+                      保存配置
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={exportSettings}>
+                      <Download className="h-4 w-4" />
                       导出配置
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => setOperationNote("导入配置功能待接入。")}>
+                    <Button size="sm" variant="outline" onClick={() => importFileInputRef.current?.click()}>
                       <Upload className="h-4 w-4" />
                       导入配置
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => setOperationNote("配置变更记录功能待接入。")}>
+                    <Button size="sm" variant="outline" onClick={showSettingsHistory}>
                       <History className="h-4 w-4" />
                       变更记录
                     </Button>
                   </div>
-                  <p className="mt-3 rounded-md bg-muted/40 p-3 text-xs text-muted-foreground">{operationNote}</p>
+                  <p className="mt-3 whitespace-pre-line rounded-md bg-muted/40 p-3 text-xs text-muted-foreground">{operationNote}</p>
                 </div>
 
                 <div className="rounded-md border bg-muted/20 p-4 text-xs">

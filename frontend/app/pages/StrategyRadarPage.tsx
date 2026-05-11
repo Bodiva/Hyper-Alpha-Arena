@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { ChevronDown, Cloud, CloudSun, Star } from "lucide-react";
+import "./StrategyRadarPage.css";
 
 type Timeframe = "1h" | "4h" | "1d";
 type Source = "综合行情" | "关注资产池";
@@ -137,35 +138,27 @@ export default function StrategyRadarPage() {
       .sort((a, b) => (sort === "策略 #" ? a.id - b.id : a.risk.localeCompare(b.risk, "zh-CN") || a.id - b.id));
   }, [periodFilter, riskFilter, sort, typeFilter]);
 
-  return (
-    <div className="h-full w-full max-w-full overflow-auto overflow-x-hidden bg-[#080a10] p-4 text-[#e9eefb] md:p-6">
-      <div className="mx-auto flex w-full max-w-[calc(100vw-2rem)] min-w-0 flex-col gap-5 md:max-w-[1840px]">
-        <header className="flex flex-col gap-2">
-          <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-slate-400">Strategy Radar</p>
-          <h1 className="sr-only">Strategy Radar</h1>
-          <p className="max-w-full break-words text-sm leading-6 text-[#c7d5ee] md:max-w-4xl">
-            把用户关注的基金、ETF 和少量权重观察项翻译成可执行的定投、分批、观察和再平衡计划。
-          </p>
-        </header>
-
-        <div className="grid w-full max-w-full min-w-0 grid-cols-1 gap-4 xl:grid-cols-[minmax(560px,0.98fr)_minmax(560px,1.02fr)]">
+    return (
+      <div className="strategy-radar-page h-full w-full max-w-full overflow-auto overflow-x-hidden p-4 md:p-6">
+        <div className="mx-auto flex w-full max-w-[calc(100vw-2rem)] min-w-0 flex-col gap-5 md:max-w-[1840px]">
+          <div className="grid w-full max-w-full min-w-0 grid-cols-1 gap-4 xl:grid-cols-[minmax(560px,0.98fr)_minmax(560px,1.02fr)]">
           <section className="flex min-h-0 w-full max-w-full min-w-0 flex-col gap-4">
-            <div className="w-full max-w-full min-w-0 overflow-hidden rounded-lg border border-white/14 bg-[#15161f] shadow-[0_20px_80px_rgba(0,0,0,0.28)]">
-              <div className="flex flex-col items-stretch justify-between gap-3 border-b border-white/10 px-4 py-4 sm:flex-row sm:items-center md:px-6">
-                <button className="flex h-14 w-full min-w-0 items-center gap-3 rounded-lg border border-white/16 bg-white/[0.06] px-3 text-left transition hover:bg-white/[0.09] sm:w-auto sm:pr-5">
+            <div className="w-full max-w-full min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
+              <div className="flex flex-col items-stretch justify-between gap-3 border-b border-slate-200 px-4 py-4 sm:flex-row sm:items-center md:px-6">
+                <button className="flex h-14 w-full min-w-0 items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 text-left transition hover:bg-slate-100 sm:w-auto sm:pr-5">
                   <span className="flex size-9 items-center justify-center rounded-full" style={{ backgroundColor: selectedAsset.accent }}>
                     <span className="text-sm font-bold text-white">{typeMark(selectedAsset.assetType)}</span>
                   </span>
                   <span className="min-w-0 text-xl font-semibold">{selectedAsset.symbol}</span>
-                  <ChevronDown className="size-4 text-slate-400" />
+                  <ChevronDown className="size-4 text-slate-500" />
                 </button>
                 <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-start">
-                  <span className="text-xs text-slate-400">资产环境</span>
-                  <div className="flex shrink-0 rounded-lg border border-white/10 bg-[#10121a] p-1">
+                  <span className="text-xs text-slate-500">资产环境</span>
+                  <div className="flex shrink-0 rounded-lg border border-slate-200 bg-slate-100 p-1">
                     {(["1h", "4h", "1d"] as Timeframe[]).map((item) => (
                       <button
                         key={item}
-                        className={`h-8 min-w-10 rounded-md px-2 text-xs font-semibold transition sm:min-w-12 sm:px-3 ${timeframe === item ? "bg-white/12 text-white" : "text-slate-400 hover:text-white"}`}
+                        className={`h-8 min-w-10 rounded-md px-2 text-xs font-semibold transition sm:min-w-12 sm:px-3 ${timeframe === item ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-950"}`}
                         onClick={() => setTimeframe(item)}
                       >
                         {item}
@@ -176,31 +169,31 @@ export default function StrategyRadarPage() {
               </div>
 
               <div className="grid min-w-0 gap-6 px-4 py-5 md:grid-cols-[1.15fr_1fr] md:px-6">
-                <div className="flex min-h-[350px] min-w-0 flex-col items-center justify-center gap-5 border-white/10 md:border-r md:pr-6">
-                  <Cloud className="size-28 text-[#eef4ff] drop-shadow-[0_10px_26px_rgba(215,228,255,0.24)]" />
+                <div className="flex min-h-[350px] min-w-0 flex-col items-center justify-center gap-5 border-slate-200 md:border-r md:pr-6">
+                  <Cloud className="size-28 text-sky-500 drop-shadow-[0_10px_24px_rgba(14,165,233,0.18)]" />
                   <div className="text-center">
                     <h2 className="text-4xl font-semibold tracking-tight">{selectedDecision}</h2>
-                    <p className="mt-2 max-w-full break-words text-sm leading-6 text-[#c7d5ee] md:max-w-md">
+                    <p className="mt-2 max-w-full break-words text-sm leading-6 text-slate-600 md:max-w-md">
                       {selectedAsset.symbol} · {selectedAsset.name}。{bucketForAsset(selectedAsset)}，适合周期 {horizonForAsset(selectedAsset)}，风险 {riskForAsset(selectedAsset)}；{selectedAsset.note}
                     </p>
                   </div>
-                  <div className="w-full rounded-lg border border-white/10 bg-white/[0.03] p-3 text-sm">
+                  <div className="w-full rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
                     <div className="flex min-w-0 items-start gap-3">
-                      <span className="mt-1 h-2 w-2 rounded-full bg-amber-300" />
-                      <p className="min-w-0 break-words"><span className="font-semibold text-white">买入条件</span><span className="ml-3 text-slate-300">先确认预算、分批次数和最大回撤；若资金流、成交参与度或区间结构恶化，暂停新增。</span></p>
+                      <span className="mt-1 h-2 w-2 rounded-full bg-amber-500" />
+                      <p className="min-w-0 break-words"><span className="font-semibold text-slate-950">买入条件</span><span className="ml-3 text-slate-700">先确认预算、分批次数和最大回撤；若资金流、成交参与度或区间结构恶化，暂停新增。</span></p>
                     </div>
                   </div>
-                  <p className="text-xs font-semibold text-amber-300">建议：不自动下单，仅生成可执行的观察和买入计划。</p>
+                  <p className="text-xs font-semibold text-amber-700">建议：不自动下单，仅生成可执行的观察和买入计划。</p>
                 </div>
 
                 <div className="flex min-w-0 flex-col gap-5">
-                  <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-sm font-medium text-slate-300">策略可测试度</p>
-                    <div className="flex w-full min-w-0 rounded-lg border border-white/10 bg-[#10121a] p-1 sm:w-auto">
+                  <div className="flex min-w-0 flex-col gap-3">
+                    <p className="text-sm font-medium text-slate-700">策略可测试度</p>
+                    <div className="flex w-full min-w-0 rounded-lg border border-slate-200 bg-slate-100 p-1">
                       {(["综合行情", "关注资产池"] as Source[]).map((item) => (
                         <button
                           key={item}
-                          className={`h-8 flex-1 rounded-md px-2 text-xs font-semibold transition sm:px-3 ${source === item ? "bg-white/12 text-white" : "text-slate-400 hover:text-white"}`}
+                          className={`h-8 flex-1 whitespace-nowrap rounded-md px-2 text-xs font-semibold transition sm:px-3 ${source === item ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-950"}`}
                           onClick={() => setSource(item)}
                         >
                           {item}
@@ -213,10 +206,10 @@ export default function StrategyRadarPage() {
                     <div
                       className="grid size-36 place-items-center rounded-full"
                       style={{
-                        background: `conic-gradient(#c9ceda ${selectedAsset.confidence * 3.6}deg, rgba(255,255,255,0.08) 0deg)`,
+                        background: `conic-gradient(${selectedAsset.accent} ${selectedAsset.confidence * 3.6}deg, #e5e7eb 0deg)`,
                       }}
                     >
-                      <div className="grid size-28 place-items-center rounded-full bg-[#15161f]">
+                      <div className="grid size-28 place-items-center rounded-full border border-slate-200 bg-white">
                         <span className="text-4xl font-bold">{selectedAsset.confidence}%</span>
                       </div>
                     </div>
@@ -232,23 +225,23 @@ export default function StrategyRadarPage() {
                     <Metric label="参与度" value={selectedAsset.participation} />
                     <Metric label="风险等级" value={riskForAsset(selectedAsset)} />
                   </div>
-                  <p className="text-xs text-slate-400">更新时间 · {formatUpdatedAt()} · {source} · {timeframe}</p>
+                  <p className="text-xs text-slate-500">更新时间 · {formatUpdatedAt()} · {source} · {timeframe}</p>
                 </div>
               </div>
             </div>
 
-            <div className="w-full max-w-full min-w-0 overflow-hidden rounded-lg border border-white/10 bg-[#13151d] p-4 md:p-5">
+            <div className="w-full max-w-full min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white p-4 shadow-[0_12px_34px_rgba(15,23,42,0.05)] md:p-5">
               <div className="mb-4 flex flex-col gap-1">
-                <p className="text-sm text-slate-300">关注资产热力图</p>
-                <p className="text-sm text-[#d8e5ff]">用户关注的基金、ETF、少量权重股票、期货和指数按当前决策状态着色，点击可聚焦。</p>
+                <p className="text-sm font-medium text-slate-800">关注资产热力图</p>
+                <p className="text-sm text-slate-600">用户关注的基金、ETF、少量权重股票、期货和指数按当前决策状态着色，点击可聚焦。</p>
               </div>
               <div className="grid min-w-0 grid-cols-1 gap-2 min-[420px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
                 {RADAR_ASSETS.map((asset) => (
                   <button
                     key={asset.symbol}
                     onClick={() => setSelectedSymbol(asset.symbol)}
-                    className={`min-w-0 rounded-lg border p-3 text-left transition hover:-translate-y-0.5 hover:border-white/35 ${
-                      selectedSymbol === asset.symbol ? "border-[#e6edf8] bg-white/[0.08]" : "border-white/10 bg-white/[0.04]"
+                    className={`min-w-0 rounded-lg border p-3 text-left transition hover:-translate-y-0.5 ${
+                      selectedSymbol === asset.symbol ? "border-sky-300 bg-sky-50 shadow-sm" : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
                     }`}
                   >
                     <div className="flex items-center justify-between gap-2">
@@ -256,15 +249,15 @@ export default function StrategyRadarPage() {
                         <span className="flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white" style={{ backgroundColor: asset.accent }}>
                           {typeMark(asset.assetType)}
                         </span>
-                        <p className="text-sm font-semibold leading-none">{asset.symbol}</p>
+                        <p className="truncate text-sm font-semibold leading-none">{asset.symbol}</p>
                       </div>
-                      <span className="shrink-0 text-xs text-[#c7d5ee]">{asset.confidence}%</span>
+                      <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-600">{asset.confidence}%</span>
                     </div>
-                    <p className="mt-1 truncate pl-10 text-[11px] text-slate-400">{bucketForAsset(asset)} · {asset.name}</p>
-                    <div className="mt-2 flex items-center gap-2 text-xs text-[#d5e4ff]">
-                      <CloudSun className="size-4 text-slate-100" />
+                    <p className="mt-1 truncate pl-10 text-[11px] text-slate-500">{bucketForAsset(asset)} · {asset.name}</p>
+                    <div className="mt-2 flex items-center gap-2 text-xs text-slate-700">
+                      <CloudSun className="size-4 text-sky-500" />
                       <span>{asset.price}</span>
-                      <span className="text-slate-500">· {decisionForAsset(asset)}</span>
+                      <span className="text-slate-400">· {decisionForAsset(asset)}</span>
                     </div>
                   </button>
                 ))}
@@ -273,9 +266,9 @@ export default function StrategyRadarPage() {
           </section>
 
           <section className="flex min-h-0 w-full max-w-full min-w-0 flex-col gap-3">
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/10 bg-[#13141b] p-3">
-              <div className="flex items-center gap-2 text-sm text-slate-300">
-                <Cloud className="size-4 text-slate-100" />
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-3 shadow-[0_10px_28px_rgba(15,23,42,0.05)]">
+              <div className="flex items-center gap-2 text-sm text-slate-700">
+                <Cloud className="size-4 text-sky-500" />
                 <span>匹配 {selectedDecision}</span>
               </div>
               <div className="flex min-w-0 flex-wrap gap-2">
@@ -286,36 +279,36 @@ export default function StrategyRadarPage() {
               </div>
             </div>
 
-            <div className="w-full min-w-0 rounded-lg border border-white/70 bg-[#13141b] p-5">
-              <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+            <div className="w-full min-w-0 rounded-lg border border-slate-200 bg-white p-5 shadow-[0_10px_28px_rgba(15,23,42,0.05)]">
+              <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
                 <span>因子：</span>
-                <span className="rounded bg-white/10 px-2 py-0.5">资金流</span>
-                <span className="rounded bg-white/10 px-2 py-0.5">参与度</span>
+                <span className="rounded bg-slate-100 px-2 py-0.5 text-slate-700">资金流</span>
+                <span className="rounded bg-slate-100 px-2 py-0.5 text-slate-700">参与度</span>
               </div>
-              <p className="break-words text-sm leading-6 text-slate-300">不自动下单。根据资金流、成交参与度、波动区间和用户持仓意图，生成观察、定投、分批或再平衡建议。</p>
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
+              <p className="break-words text-sm leading-6 text-slate-600">不自动下单。根据资金流、成交参与度、波动区间和用户持仓意图，生成观察、定投、分批或再平衡建议。</p>
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
                 <span>风控过滤 · {timeframe}</span>
-                <span className="flex items-center gap-1 font-semibold"><Star className="size-4 fill-slate-500 text-slate-500" /> SUNYARD AI精选</span>
+                <span className="flex items-center gap-1 font-semibold text-sky-700"><Star className="size-4 fill-sky-500 text-sky-500" /> SUNYARD AI精选</span>
               </div>
             </div>
 
             <div className="flex flex-col gap-3">
               {filteredStrategies.map((strategy) => (
-                <article key={strategy.id} className="w-full min-w-0 rounded-lg border border-white/70 bg-[#11131a] p-5 transition hover:bg-[#151821]">
+                <article key={strategy.id} className="w-full min-w-0 rounded-lg border border-slate-200 bg-white p-5 shadow-[0_10px_28px_rgba(15,23,42,0.04)] transition hover:border-slate-300 hover:bg-slate-50">
                   <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                     <div className="min-w-0">
                       <h3 className="text-lg font-semibold tracking-tight">{strategy.title}</h3>
-                      <p className="mt-3 break-words text-sm leading-6 text-slate-300">{strategy.summary}</p>
+                      <p className="mt-3 break-words text-sm leading-6 text-slate-600">{strategy.summary}</p>
                     </div>
-                    <span className="w-fit shrink-0 rounded-md border border-white/10 bg-white/[0.04] px-2.5 py-1 text-xs text-slate-300">策略 #{strategy.id}</span>
+                    <span className="w-fit shrink-0 rounded-md border border-slate-200 bg-slate-100 px-2.5 py-1 text-xs text-slate-700">策略 #{strategy.id}</span>
                   </div>
-                  <p className="mt-3 break-words text-sm leading-6 text-slate-400">{strategy.logic}</p>
-                  <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
+                  <p className="mt-3 break-words text-sm leading-6 text-slate-500">{strategy.logic}</p>
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
                     <div className="flex flex-wrap gap-2">
                       <span>{strategy.type}规划 · {strategy.period}</span>
-                      {strategy.tags.map((tag) => <span key={tag} className="rounded bg-white/[0.06] px-2 py-0.5">{tag}</span>)}
+                      {strategy.tags.map((tag) => <span key={tag} className="rounded bg-slate-100 px-2 py-0.5 text-slate-700">{tag}</span>)}
                     </div>
-                    <span className="flex items-center gap-1 font-semibold"><Star className="size-4 fill-slate-500 text-slate-500" /> SUNYARD AI精选</span>
+                    <span className="flex items-center gap-1 font-semibold text-sky-700"><Star className="size-4 fill-sky-500 text-sky-500" /> SUNYARD AI精选</span>
                   </div>
                 </article>
               ))}
@@ -329,9 +322,9 @@ export default function StrategyRadarPage() {
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between gap-2 border-b border-dashed border-white/10 pb-1.5">
-      <span className="text-slate-400">{label}</span>
-      <span className="font-semibold text-white">{value}</span>
+    <div className="flex items-center justify-between gap-2 border-b border-dashed border-slate-200 pb-1.5">
+      <span className="text-slate-500">{label}</span>
+      <span className="font-semibold text-slate-950">{value}</span>
     </div>
   );
 }
@@ -348,15 +341,15 @@ function FilterSelect({
   onChange: (value: string) => void;
 }) {
   return (
-    <label className="flex h-9 items-center gap-2 rounded-lg border border-white/10 bg-[#0e1119] px-3 text-xs text-slate-300">
+    <label className="flex h-9 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs text-slate-600">
       <span>{label}</span>
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="bg-transparent font-semibold text-white outline-none"
+        className="bg-transparent font-semibold text-slate-950 outline-none"
       >
         {options.map((option) => (
-          <option key={option} value={option} className="bg-[#0e1119] text-white">
+          <option key={option} value={option} className="bg-white text-slate-950">
             {option === "ALL" ? "全部" : option}
           </option>
         ))}

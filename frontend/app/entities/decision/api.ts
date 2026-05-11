@@ -13,6 +13,7 @@ export interface ListDecisionsParams {
   portfolioId?: string;
   limit?: number;
   offset?: number;
+  compact?: boolean;
 }
 
 const realModeNotImplemented = (operation: string): never => {
@@ -196,18 +197,12 @@ export const listDecisionsAsync = (params: ListDecisionsParams = {}, delayMs?: n
             horizon: params.horizon?.toLowerCase(),
             limit: params.limit ?? 100,
             offset: params.offset ?? 0,
+            compact: params.compact ?? true,
           },
           timeoutMs: 1200,
         })
         .then((response) => response.items.map(mapBackendDecision))
-        .catch(() => decisionsMock.filter((decision) => {
-          const actionPass = !params.action || decision.action === params.action;
-          const horizonPass = !params.horizon || decision.horizon === params.horizon;
-          const assetPass = !params.assetId || decision.assetIds.includes(params.assetId);
-          const runPass = !params.runId || decision.runId === params.runId;
-          const portfolioPass = !params.portfolioId || decision.portfolioId === params.portfolioId;
-          return actionPass && horizonPass && assetPass && runPass && portfolioPass;
-        }));
+        .catch(() => []);
 
 export const getDecisionByIdAsync = (decisionId: string, delayMs?: number): Promise<Decision | undefined> =>
   shouldUseMockData()
@@ -217,5 +212,5 @@ export const getDecisionByIdAsync = (decisionId: string, delayMs?: number): Prom
         .then(mapBackendDecision)
         .catch((error) => {
           if (error instanceof Error && /404/.test(error.message)) return undefined;
-          return decisionsMock.find((decision) => decision.decisionId === decisionId);
+          return undefined;
         });

@@ -160,6 +160,14 @@ const goToRunDetail = (runId: string) => {
   navigateTo(`/agent-lab/runs/${encodeURIComponent(runId)}`);
 };
 
+const normalizeAssetDetailId = (value?: string): string | undefined => {
+  if (!value) return undefined;
+  if (value.startsWith("ck_monitor_fund_")) return `ck_fund_${value.replace("ck_monitor_fund_", "")}`;
+  if (value.startsWith("ck_monitor_index_")) return `ck_index_${value.replace("ck_monitor_index_", "")}`;
+  if (value.startsWith("ck_etf_index_")) return `ck_index_${value.replace("ck_etf_index_", "")}`;
+  return value;
+};
+
 const renderProfilePanel = (asset: Asset) => {
   if (asset.assetType === "ETF") {
     const etf = asset as ETFAsset;
@@ -345,15 +353,16 @@ export default function AssetDetailPage({ assetId }: AssetDetailPageProps) {
 
     const loadAsset = async () => {
       try {
-        const targetAsset = assetId
-          ? await getAssetByIdAsync(assetId)
+        const normalizedAssetId = normalizeAssetDetailId(assetId);
+        const targetAsset = normalizedAssetId
+          ? await getAssetByIdAsync(normalizedAssetId)
           : (await listAssetsAsync({ limit: 1 }))[0];
 
         if (cancelled) return;
         if (!targetAsset) {
           setAsset(undefined);
           setRelatedEvidence([]);
-          setAssetNotFound(Boolean(assetId));
+          setAssetNotFound(Boolean(normalizedAssetId));
           return;
         }
 
@@ -454,7 +463,6 @@ export default function AssetDetailPage({ assetId }: AssetDetailPageProps) {
   })();
   const text = {
     back: isZh ? "返回" : "Back",
-    dashboard: "Dashboard",
     agent: isZh ? "Agent 分析" : "Agent",
     portfolio: isZh ? "加入组合" : "Portfolio",
     watch: isZh ? "自选" : "Watch",
@@ -548,7 +556,6 @@ export default function AssetDetailPage({ assetId }: AssetDetailPageProps) {
             </div>
             <div className="flex flex-wrap gap-2">
               <Button size="sm" variant="outline" onClick={goBackOrDashboard}>{text.back}</Button>
-              <Button size="sm" variant="outline" onClick={() => navigateTo("/dashboard")}>{text.dashboard}</Button>
               <Button size="sm" onClick={handleStartAgentAnalysis} disabled={isCreatingDemoRun}>
                 {isCreatingDemoRun ? "..." : text.agent}
               </Button>
@@ -636,7 +643,7 @@ export default function AssetDetailPage({ assetId }: AssetDetailPageProps) {
               <div>
                 <CardTitle className="text-base">AlphaTrace Market Data v1</CardTitle>
               </div>
-              <Badge variant="outline">Static Seed</Badge>
+              <Badge variant="outline">ClickHouse / Provider</Badge>
             </div>
           </CardHeader>
           <CardContent className="space-y-3 text-xs">

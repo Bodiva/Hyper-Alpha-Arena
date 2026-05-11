@@ -20,7 +20,12 @@ from services.integration_adapters.langalpha_workbench_adapter import LangAlphaE
 from services.integration_adapters.market_data_adapter import ProfessionalMarketDataProviderAdapter, StaticMarketDataProviderAdapter
 from services.integration_adapters.qwen_model_adapter import QwenModelProviderAdapter
 from services.integration_adapters.registry import IntegrationAdapterRegistry, build_default_integration_registry
-from services.integration_adapters.tool_adapters import EvidenceRetrieveToolAdapter, MarketContextToolAdapter
+from services.integration_adapters.tool_adapters import (
+    BochaSearchToolAdapter,
+    EvidenceRetrieveToolAdapter,
+    MarketContextToolAdapter,
+    PreparedDataQueryToolAdapter,
+)
 
 __all__ = [
     "DataProviderAdapter",
@@ -46,6 +51,8 @@ __all__ = [
     "IntegrationAdapterRegistry",
     "build_default_integration_registry",
     "EvidenceRetrieveToolAdapter",
+    "PreparedDataQueryToolAdapter",
+    "BochaSearchToolAdapter",
     "MarketContextToolAdapter",
 ]
 

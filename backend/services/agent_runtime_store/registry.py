@@ -15,7 +15,7 @@ def _default_json_path() -> Path:
 
 
 def get_agent_run_store() -> AgentRunStore:
-    store_type = (os.getenv("ALPHA_TRACE_AGENT_RUN_STORE") or "json").strip().lower()
+    store_type = (os.getenv("ALPHA_TRACE_AGENT_RUN_STORE") or "mysql").strip().lower()
     if store_type == "memory":
         return MemoryAgentRunStore()
     if store_type == "json":

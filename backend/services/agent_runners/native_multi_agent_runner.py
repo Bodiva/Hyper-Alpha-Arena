@@ -7,10 +7,10 @@ class AlphaTraceNativeRunnerAdapter(QwenRunnerAdapter):
     """AlphaTrace-owned native multi-agent runner.
 
     The first production-facing version deliberately reuses the proven Qwen
-    execution path: evidence retrieval, Bocha/static evidence, market context,
-    Bull/Bear parallel calls, risk review, final decision, SSE, and MySQL/JSON
-    persistence. This gives AlphaTrace a stable product runner type without
-    exposing TradingAgents internals or duplicating orchestration logic.
+    execution path: evidence retrieval, market context, multi-round Bull/Bear
+    agentic loop, risk review, final decision, SSE, and MySQL/JSON persistence.
+    This gives AlphaTrace a stable product runner type without exposing
+    TradingAgents internals or duplicating orchestration logic.
     """
 
     runner_type = "alphatrace_native"
@@ -21,12 +21,11 @@ class AlphaTraceNativeRunnerAdapter(QwenRunnerAdapter):
     portfolio_run_name = "AlphaTrace Native Portfolio Diagnosis"
     initial_agent_name = "AlphaTrace Native Orchestrator"
     initial_reasoning_content = (
-        "Preparing AlphaTrace native multi-agent DAG: Evidence Retrieval, "
-        "Market View, Bull/Bear Review, Risk Review, and Final Decision."
+        "正在准备 AlphaTrace 多智能体投研流程：证据检索、市场观点、"
+        "多轮正反交锋、研究汇总、风险复核和最终决策。"
     )
     worker_name_prefix = "alpha-trace-native"
     response_message = (
-        "Agent run submitted. AlphaTraceNativeRunner is executing the native "
-        "multi-agent DAG with Qwen, Evidence Retrieval, Bocha/static evidence, "
-        "Bull/Bear parallel calls, Risk Review, and Final Decision."
+        "投研任务已提交，AlphaTraceNativeRunner 正在执行多智能体投研流程："
+        "证据检索、市场观点、多轮正反交锋、风险复核和最终决策。"
     )

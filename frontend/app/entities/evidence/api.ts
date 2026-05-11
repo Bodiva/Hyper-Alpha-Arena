@@ -20,6 +20,7 @@ export interface ListEvidenceParams {
   minQualityScore?: number;
   minReliabilityScore?: number;
   limit?: number;
+  compact?: boolean;
 }
 
 export interface SearchEvidenceParams {
@@ -58,6 +59,9 @@ interface BackendEvidenceItem {
   evidenceType: string;
   sourceName: string;
   sourceType?: string;
+  sourceApiName?: string | null;
+  snapshotId?: string | null;
+  snapshotCapturedAt?: string | null;
   url?: string;
   publishedAt?: string;
   collectedAt?: string;
@@ -126,6 +130,9 @@ const mapBackendEvidenceItem = (item: BackendEvidenceItem): Evidence => ({
   evidenceType: mapEvidenceType(item.evidenceType),
   sourceName: item.sourceName,
   sourceType: item.sourceType,
+  sourceApiName: item.sourceApiName ?? undefined,
+  snapshotId: item.snapshotId ?? undefined,
+  snapshotCapturedAt: item.snapshotCapturedAt ?? undefined,
   url: item.url ?? "#",
   publishedAt: item.publishedAt ?? "",
   collectedAt: item.collectedAt ?? item.publishedAt ?? "",
@@ -220,23 +227,19 @@ export const listEvidenceAsync = async (params: ListEvidenceParams = {}, delayMs
     return mockDelay(listEvidence(params), delayMs);
   }
 
-  try {
-    const response = await httpClient.get<BackendEvidenceListResponse>(ENDPOINTS.alphaTraceEvidence, {
-      params: {
-        assetId: params.assetId,
-        evidenceType: params.evidenceType,
-        sourceName: params.sourceName,
-        keyword: params.keyword,
-        minQualityScore: params.minQualityScore,
-        limit: params.limit ?? 100,
-      },
-      timeoutMs: 5000,
-    });
-    const items = response.items.map(mapBackendEvidenceItem);
-    return items.length > 0 ? items : listEvidenceFromMock(params);
-  } catch {
-    return listEvidenceFromMock(params);
-  }
+  const response = await httpClient.get<BackendEvidenceListResponse>(ENDPOINTS.alphaTraceEvidence, {
+    params: {
+      assetId: params.assetId,
+      evidenceType: params.evidenceType,
+      sourceName: params.sourceName,
+      keyword: params.keyword,
+      minQualityScore: params.minQualityScore,
+      limit: params.limit ?? 100,
+      compact: params.compact ?? true,
+    },
+    timeoutMs: 12000,
+  });
+  return response.items.map(mapBackendEvidenceItem);
 };
 
 export const getEvidenceByIdAsync = async (
@@ -252,11 +255,11 @@ export const getEvidenceByIdAsync = async (
     return mapBackendEvidenceItem(
       await httpClient.get<BackendEvidenceItem>(ENDPOINTS.alphaTraceEvidenceDetail(evidenceId), {
         params: { runId: options.runId },
-        timeoutMs: 5000,
+        timeoutMs: 12000,
       }),
     );
   } catch {
-    return getEvidenceByIdFromMock(evidenceId);
+    return undefined;
   }
 };
 
@@ -271,27 +274,14 @@ export const searchEvidenceAsync = async (params: SearchEvidenceParams = {}, del
     );
   }
 
-  try {
-    const response = await httpClient.get<BackendEvidenceSearchResponse>(ENDPOINTS.alphaTraceEvidenceSearch, {
-      params: {
-        assetId: params.assetId,
-        q: params.q,
-        taskType: params.taskType ?? "single_asset_analysis",
-        limit: params.limit ?? 5,
-      },
-      timeoutMs: 5000,
-    });
-    const items = response.items.map(mapBackendEvidenceItem);
-    return items.length > 0
-      ? items
-      : listEvidenceFromMock({
-          assetId: params.assetId,
-          keyword: params.q,
-        }).slice(0, params.limit ?? 5);
-  } catch {
-    return listEvidenceFromMock({
+  const response = await httpClient.get<BackendEvidenceSearchResponse>(ENDPOINTS.alphaTraceEvidenceSearch, {
+    params: {
       assetId: params.assetId,
-      keyword: params.q,
-    }).slice(0, params.limit ?? 5);
-  }
+      q: params.q,
+      taskType: params.taskType ?? "single_asset_analysis",
+      limit: params.limit ?? 5,
+    },
+    timeoutMs: 12000,
+  });
+  return response.items.map(mapBackendEvidenceItem);
 };

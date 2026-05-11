@@ -1,30 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Line, LineChart, ResponsiveContainer, Tooltip, YAxis } from "recharts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { listAssetsAsync } from "@/entities/asset/api";
-import { listAgentRunsAsync } from "@/entities/agent/api";
-import { listLeaderboardAsync, listStrategiesAsync } from "@/entities/strategy/api";
-import { listEvidenceAsync } from "@/entities/evidence/api";
-import { listDecisionsAsync } from "@/entities/decision/api";
-import { listPortfoliosAsync } from "@/entities/portfolio/api";
-import { listDataSourcesAsync } from "@/entities/data-source/api";
+import {
+  getDashboardFundTrendsAsync,
+  getDashboardSummaryAsync,
+  type DashboardCounts,
+  type FundTrendSeries,
+} from "@/entities/dashboard/api";
 import { navigateTo } from "@/shared/lib/navigation";
 import ResearchWorkspaceNav from "@/shared/ui/ResearchWorkspaceNav";
 
 interface DashboardPageProps {
   onNavigate?: (path: string) => void;
-}
-
-interface DashboardCounts {
-  assets: number;
-  evidence: number;
-  agentRuns: number;
-  strategies: number;
-  portfolios: number;
-  decisions: number;
-  dataSources: number;
-  leaderboard: number;
 }
 
 const EMPTY_COUNTS: DashboardCounts = {
@@ -56,53 +45,69 @@ const MOBILE_SHORTCUTS = [
   { en: "Agents", zh: "Agent", metric: "Qwen", path: "/agent-lab" },
 ];
 
+function trendAssetPath(series: FundTrendSeries) {
+  if (series.assetId) {
+    return `/assets/${encodeURIComponent(series.assetId)}`;
+  }
+  const code = series.code.replace(/^(SH|SZ)/i, "").replace(/\.(SH|SZ)$/i, "");
+  const prefix = series.assetType?.toLowerCase() === "index" ? "ck_index_" : "ck_fund_";
+  return `/assets/${encodeURIComponent(`${prefix}${code}`)}`;
+}
+
 export default function DashboardPage({ onNavigate }: DashboardPageProps) {
   const { i18n } = useTranslation();
   const isZh = i18n.language?.startsWith("zh");
   const [counts, setCounts] = useState<DashboardCounts>(EMPTY_COUNTS);
   const [isLoadingCounts, setIsLoadingCounts] = useState(true);
   const [countsError, setCountsError] = useState<string | null>(null);
+  const [fundTrends, setFundTrends] = useState<FundTrendSeries[]>([]);
+  const [isLoadingFundTrends, setIsLoadingFundTrends] = useState(true);
+  const [fundTrendsError, setFundTrendsError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setIsLoadingCounts(true);
     setCountsError(null);
 
-    const safeCount = async (loader: () => Promise<unknown[]>): Promise<number> => {
-      try {
-        return (await loader()).length;
-      } catch (error) {
-        console.warn("[Dashboard] Failed to load dashboard count:", error);
-        return 0;
-      }
-    };
-
     const loadCounts = async () => {
-      const [assets, evidence, agentRuns, strategies, portfolios, decisions, dataSources, leaderboard] = await Promise.all([
-        safeCount(() => listAssetsAsync({ limit: 100 })),
-        safeCount(() => listEvidenceAsync({ limit: 100 })),
-        safeCount(() => listAgentRunsAsync({ limit: 100 })),
-        safeCount(() => listStrategiesAsync({ limit: 100 })),
-        safeCount(() => listPortfoliosAsync({ limit: 100 })),
-        safeCount(() => listDecisionsAsync({ limit: 100 })),
-        safeCount(() => listDataSourcesAsync({ limit: 100 })),
-        safeCount(() => listLeaderboardAsync({ limit: 100 })),
-      ]);
-
+      const summary = await getDashboardSummaryAsync();
       if (cancelled) return;
-      setCounts({ assets, evidence, agentRuns, strategies, portfolios, decisions, dataSources, leaderboard });
+      setCounts(summary.counts);
       setIsLoadingCounts(false);
     };
 
     loadCounts().catch((error) => {
       if (cancelled) return;
-      setCountsError(error instanceof Error ? error.message : "Failed to load dashboard statistics.");
+      console.warn("[AlphaTrace] Dashboard summary unavailable", error);
+      setCountsError(isZh ? "统计暂不可用" : "Statistics unavailable");
       setIsLoadingCounts(false);
     });
 
     return () => {
       cancelled = true;
     };
+  }, [isZh]);
+
+  const loadFundTrends = async () => {
+    setIsLoadingFundTrends(true);
+    setFundTrendsError(null);
+    try {
+      const response = await getDashboardFundTrendsAsync();
+      setFundTrends(response.series);
+      if (response.status !== "completed" && response.message) {
+        setFundTrendsError(response.message);
+      }
+    } catch (error) {
+      console.error("Failed to load ClickHouse fund trends.", error);
+      setFundTrendsError(isZh ? "ClickHouse ETF 走势暂不可用，请稍后重试。" : "ClickHouse ETF trends are temporarily unavailable.");
+      setFundTrends([]);
+    } finally {
+      setIsLoadingFundTrends(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadFundTrends();
   }, []);
 
   const handleNavigate = (path: string) => {
@@ -175,7 +180,85 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
           </Card>
         ))}
       </div>
-      {countsError ? <p className="text-xs text-destructive">Dashboard statistics unavailable: {countsError}</p> : null}
+      {countsError ? <p className="text-xs text-muted-foreground">{countsError}</p> : null}
+
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-base">{isZh ? "ClickHouse ETF 随机走势" : "ClickHouse ETF Trends"}</CardTitle>
+              <CardDescription>
+                {isZh
+                  ? "从理杏仁同步到 CK 的业务表随机抽样，展示近 180 个交易日收盘价。"
+                  : "Random samples from Lixinger business tables in ClickHouse, last 180 trading closes."}
+              </CardDescription>
+            </div>
+            <Button size="sm" variant="outline" onClick={() => void loadFundTrends()} disabled={isLoadingFundTrends}>
+              {isLoadingFundTrends ? (isZh ? "加载中" : "Loading") : (isZh ? "换一组" : "Shuffle")}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {fundTrendsError ? <p className="mb-3 text-xs text-destructive">{fundTrendsError}</p> : null}
+          {isLoadingFundTrends ? (
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              {[0, 1, 2, 3].map((item) => (
+                <div key={item} className="h-[180px] rounded-md border bg-muted/40" />
+              ))}
+            </div>
+          ) : fundTrends.length === 0 ? (
+            <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
+              {isZh ? "暂无可展示的 ETF 走势。" : "No ETF trend data available."}
+            </div>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              {fundTrends.map((series) => {
+                const first = series.points[0]?.value ?? 0;
+                const latest = series.points[series.points.length - 1]?.value ?? 0;
+                const changePercent = first ? ((latest - first) / first) * 100 : 0;
+                const isPositive = changePercent >= 0;
+                return (
+                  <button
+                    key={series.assetId || series.code}
+                    type="button"
+                    className="rounded-md border bg-background p-3 text-left transition hover:border-primary/40 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    onClick={() => handleNavigate(trendAssetPath(series))}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold" title={series.name}>{series.name}</p>
+                        <p className="mt-1 font-mono text-xs text-muted-foreground">{series.code}</p>
+                      </div>
+                      <span className={isPositive ? "text-xs font-medium text-emerald-600" : "text-xs font-medium text-red-600"}>
+                        {changePercent.toFixed(2)}%
+                      </span>
+                    </div>
+                    <div className="mt-3 h-[110px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={series.points}>
+                          <YAxis domain={["dataMin", "dataMax"]} hide />
+                          <Tooltip
+                            contentStyle={{ borderRadius: 8, borderColor: "#e2e8f0", fontSize: 12 }}
+                            formatter={(value) => [Number(value).toFixed(4), isZh ? "收盘价" : "Close"]}
+                            labelFormatter={(label) => String(label)}
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="value"
+                            dot={false}
+                            strokeWidth={2}
+                            stroke={isPositive ? "#059669" : "#dc2626"}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="pb-3">

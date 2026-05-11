@@ -164,6 +164,69 @@ docker compose up -d --build # 或 docker-compose up -d --build
 - 停止/重启容器不会丢失数据
 - 只有 `docker-compose down -v` 会删除数据（除非想重置，否则别加 `-v`）
 
+### ClickHouse SSH 隧道验证
+
+这些脚本用于验证远端 ECS 上仅绑定 `127.0.0.1` 的 ClickHouse。不要开放 ClickHouse 公网端口，本地通过 SSH 隧道访问。
+
+开启 HTTP 隧道：
+
+```bash
+pnpm clickhouse:tunnel
+# 或：
+# ssh -N -L 18123:127.0.0.1:18123 root@120.27.194.30
+```
+
+如果还需要 Native TCP 端口：
+
+```bash
+pnpm clickhouse:tunnel:native
+# 或：
+# ssh -N -L 18123:127.0.0.1:18123 -L 19000:127.0.0.1:19000 root@120.27.194.30
+```
+
+配置 `.env`：
+
+```bash
+CLICKHOUSE_HOST=127.0.0.1
+CLICKHOUSE_PORT=18123
+CLICKHOUSE_USER=admin
+CLICKHOUSE_PASSWORD=<your-clickhouse-password>
+CLICKHOUSE_DATABASE=monitor
+```
+
+安装后端依赖并初始化数据库和测试表：
+
+```bash
+pnpm install:all
+pnpm clickhouse:init
+```
+
+插入两条测试数据：
+
+```bash
+pnpm clickhouse:insert-test
+```
+
+执行查询验证：
+
+```bash
+pnpm clickhouse:query-test
+```
+
+查询脚本执行：
+
+```sql
+SELECT
+    domain,
+    count() AS total,
+    avg(latency_ms) AS avg_latency
+FROM monitor.url_check_log
+GROUP BY domain
+ORDER BY total DESC;
+```
+
+如果 ClickHouse 连接失败，优先确认 SSH 隧道仍在运行，并检查本地 `18123` 端口没有被其他进程占用。如果端口已通但 HTTP 返回空响应或提前结束，检查 ClickHouse 容器的 `listen_host`；如果服务只监听容器内 `127.0.0.1`，Docker 端口映射无法正常转发到 ClickHouse HTTP。
+
 ## 首次配置
 
 详细配置指南请参考官方文档，包括：

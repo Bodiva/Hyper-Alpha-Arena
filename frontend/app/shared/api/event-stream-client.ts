@@ -117,7 +117,7 @@ const createSseClient = (options: EventStreamClientOptions): EventStreamClient =
           const payload = JSON.parse((message as MessageEvent<string>).data) as { message?: string; status?: string };
           const status = payload.status?.toLowerCase();
           if (status === "running") {
-            options.onError?.(new Error(payload.message || "Runtime SSE stream ended before the run completed."));
+            options.onComplete?.();
             return;
           }
         } catch {

@@ -26,6 +26,7 @@ export default function SamplingSettingsCard() {
   const [samplingDepth, setSamplingDepth] = useState(10)
   const [samplingInterval, setSamplingInterval] = useState(18)
   const [samplingStatus, setSamplingStatus] = useState<Record<string, SamplingPoolSymbolStatus>>({})
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const maxAllowedDepth = entitlements.maxSamplingDepth
   const statusRows = useMemo(
@@ -53,11 +54,11 @@ export default function SamplingSettingsCard() {
 
   const loadSamplingSettings = async () => {
     setLoading(true)
+    setLoadError(null)
     try {
       await Promise.all([fetchGlobalConfig(), fetchSamplingStatus()])
     } catch (error) {
-      console.error('Failed to load sampling settings:', error)
-      toast.error('Failed to load AI sampling settings')
+      setLoadError(error instanceof Error ? error.message : '采样运行时配置加载失败')
     } finally {
       setLoading(false)
     }
@@ -111,23 +112,28 @@ export default function SamplingSettingsCard() {
   return (
     <Card>
       <CardHeader className="py-4">
-        <div className="flex items-start justify-between gap-3">
-          <div>
+        <div className="flex flex-col items-start justify-between gap-3 sm:flex-row">
+          <div className="min-w-0">
             <CardTitle>{t('trader.aiSamplingRuntime', 'AI Sampling Runtime')}</CardTitle>
             <CardDescription>
               {t('trader.aiSamplingRuntimeDesc', 'Global short-term market memory passed into AI Trader decisions.')}
             </CardDescription>
           </div>
-          <Badge variant="outline">{t('trader.globalRuntime', 'Global runtime')}</Badge>
+          <Badge variant="outline" className="shrink-0">{t('trader.globalRuntime', 'Global runtime')}</Badge>
         </div>
       </CardHeader>
       <CardContent className="grid gap-4 pb-4 lg:grid-cols-[1fr_280px_1.2fr]">
-        <div className="space-y-3">
+        {loadError ? (
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 lg:col-span-3">
+            采样运行时暂不可用，已保留本地默认值。后端恢复后点击刷新即可重新读取。错误：{loadError}
+          </div>
+        ) : null}
+        <div className="min-w-0 space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium">{t('trader.samplingDepth', 'Sampling Depth')}</span>
             <span className="text-sm text-muted-foreground">{samplingDepth} points</span>
           </div>
-          <div className="grid grid-cols-6 gap-2">
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
             {[10, 20, 30, 40, 50, 60].map((depth) => (
               <Button
                 key={depth}
@@ -153,7 +159,7 @@ export default function SamplingSettingsCard() {
           </div>
         </div>
 
-        <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
+        <div className="min-w-0 rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
           <div className="mb-2 flex items-center gap-2 font-medium text-foreground">
             <Info className="h-3.5 w-3.5" />
             {t('trader.currentWindow', 'Current Window')}
@@ -163,7 +169,7 @@ export default function SamplingSettingsCard() {
           <div>{t('trader.entitlementLimit', 'Entitlement limit')}: {maxAllowedDepth}</div>
         </div>
 
-        <div className="rounded-md border bg-muted/30 p-3">
+        <div className="min-w-0 rounded-md border bg-muted/30 p-3">
           <div className="mb-2 flex items-center justify-between gap-3">
             <div className="text-sm font-medium">{t('trader.samplingPoolStatus', 'Sampling Pool Status')}</div>
             <Button variant="outline" size="sm" onClick={loadSamplingSettings} disabled={saving}>
@@ -173,9 +179,9 @@ export default function SamplingSettingsCard() {
           {statusRows.length > 0 ? (
             <div className="grid gap-2 md:grid-cols-2">
               {statusRows.map(([symbol, status]) => (
-                <div key={symbol} className="flex items-center justify-between gap-3 rounded-md bg-background px-3 py-2 text-xs">
-                  <span className="font-medium">{symbol}</span>
-                  <span className="text-muted-foreground">
+                <div key={symbol} className="flex min-w-0 items-center justify-between gap-3 rounded-md bg-background px-3 py-2 text-xs">
+                  <span className="shrink-0 font-medium">{symbol}</span>
+                  <span className="min-w-0 truncate text-right text-muted-foreground">
                     {status.sample_count}/{status.max_samples ?? samplingDepth}
                     {status.coverage_seconds ? ` · ${(status.coverage_seconds / 60).toFixed(1)}m` : ''}
                     {typeof status.price_change_percent === 'number' ? ` · ${status.price_change_percent.toFixed(2)}%` : ''}

@@ -7508,3 +7508,38 @@ Validation:
 Rollback:
 
 Revert the Strategy Radar route/page files and AgentLabPage interaction changes in this milestone only.
+
+## M234 - ClickHouse AgentRun Projection Write Path
+
+Status: Completed
+
+Goal:
+
+Enable an explicit, opt-in AgentRun analytical projection write path into ClickHouse while keeping normal AgentRun control-plane reads in MySQL/JSON and keeping preview endpoints side-effect free.
+
+Scope:
+
+1. Add ClickHouse DDL helpers for AgentRun projection tables.
+2. Add a projection writer service that writes runtime events, reports, evidence refs, and decisions.
+3. Add `POST /api/alpha-trace/agent-runs/{runId}/clickhouse-projection/write`.
+4. Keep `GET /clickhouse-projection/preview` side-effect free.
+5. Keep writes explicit; do not automatically write on submit/detail/event polling.
+6. Do not change runner behavior or frontend pages.
+
+Acceptance:
+
+1. Projection write ensures target ClickHouse tables exist.
+2. Projection write can replace existing rows for a run before inserting fresh rows.
+3. Projection write returns per-table row counts and total rows written.
+4. ClickHouse unavailable returns a clear 503 error and does not affect AgentRun control-plane data.
+5. Schema catalog marks AgentRun projection tables as implemented.
+
+Validation:
+
+1. `python -m py_compile backend/services/clickhouse_business_store.py backend/services/clickhouse_agent_run_projection.py backend/services/clickhouse_agent_run_writer.py backend/services/clickhouse_schema_catalog.py backend/api/alpha_trace_agent_runtime_routes.py`
+2. Direct FakeStore smoke validates delete/insert behavior and row counts.
+3. `pnpm --dir frontend build`
+
+Rollback:
+
+Remove `clickhouse_agent_run_writer.py`, the write endpoint, and the AgentRun projection DDL helpers. Keep preview-only projection intact.

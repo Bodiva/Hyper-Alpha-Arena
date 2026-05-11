@@ -4,7 +4,7 @@ import type { Decision, DecisionAction, DecisionHorizon } from "@/entities/decis
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { listDecisionsAsync } from "@/entities/decision/api";
+import { getDecisionByIdAsync, listDecisionsAsync } from "@/entities/decision/api";
 import { listAssetsAsync } from "@/entities/asset/api";
 import { listEvidenceAsync } from "@/entities/evidence/api";
 import { listAgentRunsAsync } from "@/entities/agent/api";
@@ -144,11 +144,11 @@ export default function DecisionAttributionPage() {
             assetId: linkedAssetId,
             runId: linkedRunId,
             portfolioId: linkedPortfolioId,
-            limit: 200,
+            limit: 50,
           }),
-          listAssetsAsync({ limit: 200 }),
-          listEvidenceAsync({ limit: 200 }),
-          listAgentRunsAsync({}),
+          listAssetsAsync({ limit: 100 }),
+          listEvidenceAsync({ limit: 50 }),
+          listAgentRunsAsync({ limit: 20 }),
         ]);
         if (cancelled) return;
         setDecisions(nextDecisions);
@@ -327,6 +327,24 @@ export default function DecisionAttributionPage() {
     if (filteredDecisions.length === 0) return null;
     return filteredDecisions.find((item) => item.decision.decisionId === selectedDecisionId) ?? filteredDecisions[0];
   }, [filteredDecisions, selectedDecisionId]);
+
+  useEffect(() => {
+    const decisionId = selected?.decision.decisionId;
+    if (!decisionId) return;
+    let cancelled = false;
+    getDecisionByIdAsync(decisionId)
+      .then((detail) => {
+        if (cancelled || !detail) return;
+        setDecisions((current) => {
+          const exists = current.some((item) => item.decisionId === detail.decisionId);
+          return exists ? current.map((item) => (item.decisionId === detail.decisionId ? detail : item)) : [detail, ...current];
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [selected?.decision.decisionId]);
 
   return (
     <div className="flex flex-col gap-4 h-full overflow-auto">

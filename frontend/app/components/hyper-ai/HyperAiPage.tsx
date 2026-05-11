@@ -48,11 +48,13 @@ import {
   Brain,
   MessageCircle,
   Blocks,
+  PlugZap,
   Search as SearchIcon
 } from 'lucide-react'
 import { pollAiStream } from '@/lib/pollAiStream'
 import BotIntegrationModal from './BotIntegrationModal'
 import NotificationConfigModal from './NotificationConfigModal'
+import OpenClawIntegrationModal, { type OpenClawBridgeStatus } from './OpenClawIntegrationModal'
 import ToolConfigModal, { type ToolInfo } from './ToolConfigModal'
 
 interface Conversation {
@@ -146,6 +148,96 @@ interface LLMProvider {
   base_url?: string
 }
 
+type HyperAiPageMode = 'automation' | 'research'
+type HyperAiLocale = 'zh' | 'en'
+
+const RESEARCH_COPY = {
+  zh: {
+    configTitle: '投研助手配置',
+    providerLabel: '服务商',
+    modelLabel: '模型',
+    baseUrlLabel: 'API 地址',
+    notConfigured: '未配置',
+    inputPlaceholder: '输入资产、数据集或投研问题...',
+    skills: '能力模块',
+    skillsHint: '按投研任务自动调用，也可输入 /命令 触发',
+    tools: '外部 API',
+    integrations: '通知集成',
+    memoryButton: '投研记忆',
+    memoryTitle: '投研助手记忆',
+    memoryEmpty: '暂无记忆。后续对话中，它会记录你的资产偏好、数据集选择、研究假设和复盘结论。',
+    memoryCategories: {
+      preference: '投研偏好',
+      decision: '关键结论',
+      lesson: '复盘记录',
+      insight: '研究洞察',
+      context: '上下文',
+    },
+    welcomeWithName: (name: string) => `你好，${name}！我是 AlphaTrace 投研助手。`,
+    welcomeNoName: '你好！我是 AlphaTrace 投研助手。',
+    welcomeCapabilities: '我可以帮你：',
+    capabilities: [
+      '梳理 ETF / 基金 / 期货的投研问题',
+      '调用真实模型、Bocha 搜索和本地离线数据',
+      '规划 Data Catalog、Dataset 绑定和 Agent Lab 任务',
+      '生成可追溯、可复盘的投研结论',
+    ],
+    welcomePrompt: '可以直接输入资产、数据集或研究问题。',
+    suggestions: [
+      '你可以如何帮助我完成 ETF / 基金 / 期货投研？',
+      '如何配置模型、Bocha 搜索和离线数据集？',
+      '请用 510300.SH 做一次中期配置分析',
+      '如何把 Data Catalog 的数据交给 Agent Lab 使用？',
+      '如何让报告引用 CK 数据和 Bocha 搜索证据？',
+    ],
+    customApiPlaceholder: '例如：Baidu 联网搜索',
+  },
+  en: {
+    configTitle: 'Research Assistant Config',
+    providerLabel: 'Provider',
+    modelLabel: 'Model',
+    baseUrlLabel: 'API URL',
+    notConfigured: 'Not configured',
+    inputPlaceholder: 'Enter an asset, dataset, or research question...',
+    skills: 'Capabilities',
+    skillsHint: 'Auto-selected for research tasks, or type /command',
+    tools: 'External APIs',
+    integrations: 'Notification Integrations',
+    memoryButton: 'Research Memory',
+    memoryTitle: 'Research Assistant Memory',
+    memoryEmpty: 'No memory yet. Future conversations will record asset preferences, dataset choices, research assumptions, and review conclusions.',
+    memoryCategories: {
+      preference: 'Research Preferences',
+      decision: 'Key Conclusions',
+      lesson: 'Review Notes',
+      insight: 'Research Insights',
+      context: 'Context',
+    },
+    welcomeWithName: (name: string) => `Hello, ${name}. I'm the AlphaTrace research assistant.`,
+    welcomeNoName: "Hello. I'm the AlphaTrace research assistant.",
+    welcomeCapabilities: 'I can help you:',
+    capabilities: [
+      'Frame ETF, fund, and futures research questions',
+      'Use real models, Bocha search, and local offline datasets',
+      'Plan Data Catalog bindings and Agent Lab tasks',
+      'Produce traceable and reviewable investment research conclusions',
+    ],
+    welcomePrompt: 'Enter an asset, dataset, or research question to begin.',
+    suggestions: [
+      'How can you help with ETF, fund, and futures research?',
+      'How do I configure models, Bocha search, and offline datasets?',
+      'Run a medium-term allocation review for 510300.SH',
+      'How do I let Agent Lab use Data Catalog datasets?',
+      'How can reports cite CK data and Bocha search evidence?',
+    ],
+    customApiPlaceholder: 'Example: Baidu web search',
+  },
+}
+
+function getResearchCopy(locale: HyperAiLocale) {
+  return RESEARCH_COPY[locale]
+}
+
 // Memory category icons and colors
 const MEMORY_CATEGORY_STYLES: Record<string, { icon: string; color: string }> = {
   preference: { icon: '🎯', color: 'text-blue-500' },
@@ -158,14 +250,20 @@ const MEMORY_CATEGORY_STYLES: Record<string, { icon: string; color: string }> = 
 // Memory Modal component - read-only view of AI memories
 function MemoryModal({
   open,
-  onClose
+  onClose,
+  mode = 'automation',
+  currentLang = 'en'
 }: {
   open: boolean
   onClose: () => void
+  mode?: HyperAiPageMode
+  currentLang?: HyperAiLocale
 }) {
   const { t } = useTranslation()
   const [memories, setMemories] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
+  const researchCopy = getResearchCopy(currentLang)
+  const isResearchMode = mode === 'research'
 
   useEffect(() => {
     if (open) {
@@ -199,7 +297,7 @@ function MemoryModal({
           <div className="flex items-center gap-2">
             <Brain className="w-5 h-5 text-primary" />
             <h2 className="text-lg font-semibold">
-              {t('hyperAi.memory.title', 'What Hyper AI Remembered')}
+              {isResearchMode ? researchCopy.memoryTitle : t('hyperAi.memory.title', 'What Hyper AI Remembered')}
             </h2>
             {memories.length > 0 && (
               <span className="text-xs text-muted-foreground ml-2">
@@ -222,7 +320,7 @@ function MemoryModal({
             <div className="flex flex-col items-center justify-center h-full text-center">
               <Brain className="w-12 h-12 text-muted-foreground/30 mb-3" />
               <p className="text-sm text-muted-foreground max-w-sm">
-                {t('hyperAi.memory.empty')}
+                {isResearchMode ? researchCopy.memoryEmpty : t('hyperAi.memory.empty')}
               </p>
             </div>
           ) : (
@@ -231,7 +329,9 @@ function MemoryModal({
                 const items = grouped[cat]
                 if (!items || items.length === 0) return null
                 const style = MEMORY_CATEGORY_STYLES[cat] || MEMORY_CATEGORY_STYLES.context
-                const label = t(`hyperAi.memory.category.${cat}`, cat)
+                const label = isResearchMode
+                  ? researchCopy.memoryCategories[cat as keyof typeof researchCopy.memoryCategories] || cat
+                  : t(`hyperAi.memory.category.${cat}`, cat)
                 return (
                   <div key={cat}>
                     <div className="flex items-center gap-2 mb-2">
@@ -280,13 +380,15 @@ function LLMConfigModal({
   onClose,
   providers,
   currentProfile,
-  onSaved
+  onSaved,
+  title
 }: {
   open: boolean
   onClose: () => void
   providers: LLMProvider[]
   currentProfile: any
   onSaved: () => void
+  title?: string
 }) {
   const { t } = useTranslation()
   const [selectedProvider, setSelectedProvider] = useState(currentProfile?.llm_provider || '')
@@ -369,7 +471,7 @@ function LLMConfigModal({
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="w-full max-w-md bg-background rounded-lg shadow-xl p-6 space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">{t('hyperAi.configTitle', 'Hyper AI Config')}</h2>
+          <h2 className="text-lg font-semibold">{title || t('hyperAi.configTitle', 'Hyper AI Config')}</h2>
           <Button variant="ghost" size="icon" onClick={onClose}>
             <X className="w-4 h-4" />
           </Button>
@@ -480,19 +582,43 @@ function BotConvIcon() {
   )
 }
 
+function WechatSmallIcon() {
+  return (
+    <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[#07C160] text-[9px] font-semibold text-white">
+      微
+    </span>
+  )
+}
+
+function FeishuSmallIcon() {
+  return (
+    <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[#3370FF] text-[9px] font-semibold text-white">
+      飞
+    </span>
+  )
+}
+
+function DingTalkSmallIcon() {
+  return (
+    <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[#1677FF] text-[9px] font-semibold text-white">
+      钉
+    </span>
+  )
+}
+
 function TelegramSmallIcon() {
   return (
-    <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 text-[#26A5E4]" fill="currentColor">
-      <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/>
-    </svg>
+    <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[#26A5E4] text-[9px] font-semibold text-white">
+      T
+    </span>
   )
 }
 
 function DiscordSmallIcon() {
   return (
-    <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 text-[#5865F2]" fill="currentColor">
-      <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.947 2.418-2.157 2.418z"/>
-    </svg>
+    <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[#5865F2] text-[9px] font-semibold text-white">
+      D
+    </span>
   )
 }
 
@@ -508,11 +634,15 @@ function NotificationBellSmallIcon() {
 function WelcomeMessage({
   nickname,
   t,
-  onSuggestionClick
+  onSuggestionClick,
+  mode = 'automation',
+  currentLang = 'en'
 }: {
   nickname?: string
   t: any
   onSuggestionClick: (question: string) => void
+  mode?: HyperAiPageMode
+  currentLang?: HyperAiLocale
 }) {
   const [suggestions, setSuggestions] = useState<string[]>([])
   const [isNewUser, setIsNewUser] = useState(true)
@@ -532,20 +662,26 @@ function WelcomeMessage({
       .finally(() => setLoading(false))
   }, [])
 
-  const greeting = nickname
-    ? t('hyperAi.welcomeWithName', { name: nickname, defaultValue: `你好，${nickname}！我是 Hyper AI，你的专属交易助手。` })
-    : t('hyperAi.welcomeNoName', '你好！我是 Hyper AI，Hyper Alpha Arena 的智能助手。')
+  const isResearchMode = mode === 'research'
+  const researchCopy = getResearchCopy(currentLang)
+  const greeting = isResearchMode
+    ? (nickname ? researchCopy.welcomeWithName(nickname) : researchCopy.welcomeNoName)
+    : (nickname
+      ? t('hyperAi.welcomeWithName', { name: nickname, defaultValue: `Hello, ${nickname}! I'm Hyper AI, your personal trading assistant.` })
+      : t('hyperAi.welcomeNoName', "Hello! I'm Hyper AI, the intelligent assistant for Hyper Alpha Arena."))
 
   // Default suggestions for new users (follows i18n)
-  const defaultSuggestions = [
-    t('hyperAi.defaultSuggestions.intro', 'What can you help me with?'),
-    t('hyperAi.defaultSuggestions.setup', 'Guide me through the initial setup'),
-    t('hyperAi.defaultSuggestions.first', 'I want to create my first trading strategy'),
-    t('hyperAi.defaultSuggestions.strategyRadar', 'Help me find strategy ideas from Strategy Radar'),
-    t('hyperAi.defaultSuggestions.walletSignals', 'How do I connect Hyper Insight wallet signals?'),
-  ]
+  const defaultSuggestions = isResearchMode
+    ? researchCopy.suggestions
+    : [
+      t('hyperAi.defaultSuggestions.intro', 'Tell me what you can help me with'),
+      t('hyperAi.defaultSuggestions.setup', 'Walk me through the initial setup'),
+      t('hyperAi.defaultSuggestions.first', 'I want to create my first trading strategy'),
+      t('hyperAi.defaultSuggestions.strategyRadar', 'Help me find ideas from Strategy Radar'),
+      t('hyperAi.defaultSuggestions.walletSignals', 'How do I connect Hyper Insight wallet signals?'),
+    ]
 
-  const displaySuggestions = (isNewUser || suggestions.length === 0) ? defaultSuggestions : suggestions
+  const displaySuggestions = (isResearchMode || isNewUser || suggestions.length === 0) ? defaultSuggestions : suggestions
 
   return (
     <div className="flex flex-col items-center justify-center h-full text-center px-4">
@@ -554,14 +690,20 @@ function WelcomeMessage({
       </div>
       <p className="text-lg mb-4">{greeting}</p>
       <div className="text-sm text-muted-foreground space-y-1 max-w-md">
-        <p>{t('hyperAi.welcomeCapabilities', '我可以帮你：')}</p>
+        <p>{isResearchMode ? researchCopy.welcomeCapabilities : t('hyperAi.welcomeCapabilities', 'I can help you:')}</p>
         <ul className="text-left list-disc list-inside space-y-1 mt-2">
-          <li>{t('hyperAi.capability1', '了解系统功能和使用方法')}</li>
-          <li>{t('hyperAi.capability2', '生成和优化 AI 交易策略')}</li>
-          <li>{t('hyperAi.capability3', '管理 AI 交易员和钱包配置')}</li>
-          <li>{t('hyperAi.capability4', '分析市场数据和交易表现')}</li>
+          {(isResearchMode ? researchCopy.capabilities : [
+            t('hyperAi.capability1', 'Learn system features and usage'),
+            t('hyperAi.capability2', 'Generate and optimize AI trading strategies'),
+            t('hyperAi.capability3', 'Manage AI traders and wallet configuration'),
+            t('hyperAi.capability4', 'Analyze market data and trading performance'),
+          ]).map((item) => (
+            <li key={item}>{item}</li>
+          ))}
         </ul>
-        <p className="mt-4">{t('hyperAi.welcomePrompt', '有什么想了解的，直接问我就行。')}</p>
+        <p className="mt-4">
+          {isResearchMode ? researchCopy.welcomePrompt : t('hyperAi.welcomePrompt', 'Ask me anything.')}
+        </p>
       </div>
 
       {/* Suggestion buttons */}
@@ -582,7 +724,7 @@ function WelcomeMessage({
   )
 }
 
-export default function HyperAiPage() {
+export default function HyperAiPage({ mode = 'automation' }: { mode?: HyperAiPageMode }) {
   const { t, i18n } = useTranslation()
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [currentConvId, setCurrentConvId] = useState<number | null>(null)
@@ -606,8 +748,10 @@ export default function HyperAiPage() {
   const [pendingSkillToggles, setPendingSkillToggles] = useState<Record<string, boolean>>({})
   const [showBotModal, setShowBotModal] = useState(false)
   const [showDiscordBotModal, setShowDiscordBotModal] = useState(false)
+  const [showOpenClawModal, setShowOpenClawModal] = useState(false)
   const [botConfig, setBotConfig] = useState<{ platform: string; bot_username: string | null; status: string } | null>(null)
   const [discordBotConfig, setDiscordBotConfig] = useState<{ platform: string; bot_username: string | null; bot_app_id?: string; status: string } | null>(null)
+  const [openClawStatus, setOpenClawStatus] = useState<OpenClawBridgeStatus | null>(null)
   const [showNotificationModal, setShowNotificationModal] = useState(false)
   const [notificationCount, setNotificationCount] = useState(0)
   const [externalTools, setExternalTools] = useState<ToolInfo[]>([])
@@ -618,6 +762,47 @@ export default function HyperAiPage() {
 
   // Get current language
   const currentLang = i18n.language?.startsWith('zh') ? 'zh' : 'en'
+  const isResearchMode = mode === 'research'
+  const researchCopy = getResearchCopy(currentLang)
+  const visibleExternalTools = isResearchMode
+    ? externalTools.filter(tool => tool.configured || tool.name.startsWith('custom_'))
+    : externalTools
+  const customApiTool: ToolInfo = {
+    name: 'custom_new',
+    display_name: 'Custom API',
+    display_name_zh: '自定义 API',
+    description: 'Add a user-defined external API and key.',
+    description_zh: '新增一个用户自定义外部 API 和密钥。',
+    icon: 'wrench',
+    configured: false,
+    enabled: true,
+    config_fields: [
+      {
+        key: 'display_name',
+        type: 'text',
+        label: 'Name',
+        label_zh: '名称',
+        required: true,
+        placeholder: researchCopy.customApiPlaceholder,
+      },
+      {
+        key: 'api_url',
+        type: 'text',
+        label: 'API URL',
+        label_zh: 'API 地址',
+        required: true,
+        placeholder: 'https://api.example.com/v1/search',
+      },
+      {
+        key: 'api_key',
+        type: 'secret',
+        label: 'API Key',
+        label_zh: 'API 密钥',
+        required: true,
+        placeholder: '输入 API Key',
+      },
+    ],
+  }
 
   useEffect(() => {
     fetchConversations()
@@ -626,6 +811,7 @@ export default function HyperAiPage() {
     fetchSkills()
     fetchBotConfig()
     fetchDiscordBotConfig()
+    fetchOpenClawStatus()
     fetchNotificationConfig()
     fetchExternalTools()
   }, [])
@@ -669,6 +855,16 @@ export default function HyperAiPage() {
       setDiscordBotConfig(data.config || null)
     } catch (e) {
       console.error('Failed to fetch discord bot config:', e)
+    }
+  }
+
+  const fetchOpenClawStatus = async () => {
+    try {
+      const res = await fetch('/api/bot/openclaw/status')
+      const data = await res.json()
+      setOpenClawStatus(data)
+    } catch (e) {
+      console.error('Failed to fetch OpenClaw bridge status:', e)
     }
   }
 
@@ -1165,8 +1361,8 @@ export default function HyperAiPage() {
                       <span className="truncate font-medium">{conv.title}</span>
                     </div>
                     <div className="flex items-center gap-1.5 mt-1.5 ml-6">
-                      {botConfig?.status === 'connected' && <TelegramSmallIcon />}
-                      {discordBotConfig?.status === 'connected' && <DiscordSmallIcon />}
+                      {botConfig?.status === 'connected' && (isResearchMode ? <WechatSmallIcon /> : <TelegramSmallIcon />)}
+                      {discordBotConfig?.status === 'connected' && (isResearchMode ? <FeishuSmallIcon /> : <DiscordSmallIcon />)}
                     </div>
                   </>
                 ) : (
@@ -1203,6 +1399,8 @@ export default function HyperAiPage() {
           <WelcomeMessage
             nickname={nickname}
             t={t}
+            mode={mode}
+            currentLang={currentLang}
             onSuggestionClick={(question) => {
               setInputValue(question)
               setTimeout(() => handleSend(), 100)
@@ -1247,7 +1445,7 @@ export default function HyperAiPage() {
               value={inputValue}
               onChange={e => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={t('hyperAi.inputPlaceholder', 'Type a message...')}
+              placeholder={isResearchMode ? researchCopy.inputPlaceholder : t('hyperAi.inputPlaceholder', 'Type a message...')}
               disabled={sending}
               className="w-full min-h-[80px] max-h-[200px] rounded-xl border border-input bg-transparent px-4 py-3 pb-12 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 resize-y"
               rows={3}
@@ -1281,7 +1479,7 @@ export default function HyperAiPage() {
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-medium flex items-center gap-1.5">
               <Settings className="w-4 h-4 shrink-0" />
-              {t('hyperAi.configTitle', 'Hyper AI Config')}
+              {isResearchMode ? researchCopy.configTitle : t('hyperAi.configTitle', 'Hyper AI Config')}
             </h3>
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowConfigModal(true)}>
               <Pencil className="w-3.5 h-3.5" />
@@ -1294,16 +1492,24 @@ export default function HyperAiPage() {
               onClick={() => setShowConfigModal(true)}
             >
               <div className="flex items-center">
-                <span className="text-muted-foreground shrink-0 w-[72px]">Provider</span>
-                <span className="truncate">{profile.llm_provider || 'Not configured'}</span>
+                <span className="text-muted-foreground shrink-0 w-[72px]">
+                  {isResearchMode ? researchCopy.providerLabel : 'Provider'}
+                </span>
+                <span className="truncate">
+                  {profile.llm_provider || (isResearchMode ? researchCopy.notConfigured : 'Not configured')}
+                </span>
               </div>
               <div className="flex items-center">
-                <span className="text-muted-foreground shrink-0 w-[72px]">Model</span>
+                <span className="text-muted-foreground shrink-0 w-[72px]">
+                  {isResearchMode ? researchCopy.modelLabel : 'Model'}
+                </span>
                 <span className="truncate">{profile.llm_model || '-'}</span>
               </div>
               {profile.llm_base_url && (
                 <div className="flex items-center">
-                  <span className="text-muted-foreground shrink-0 w-[72px]">Base URL</span>
+                  <span className="text-muted-foreground shrink-0 w-[72px]">
+                    {isResearchMode ? researchCopy.baseUrlLabel : 'Base URL'}
+                  </span>
                   <span className="truncate">{profile.llm_base_url}</span>
                 </div>
               )}
@@ -1317,7 +1523,9 @@ export default function HyperAiPage() {
               className="w-full flex items-center gap-1.5 py-1 rounded-lg text-sm hover:bg-muted/50 transition-colors text-left"
             >
               <Brain className="w-4 h-4 text-primary shrink-0" />
-              <span className="text-sm font-medium">{t('hyperAi.memory.button', 'Memory')}</span>
+              <span className="text-sm font-medium">
+                {isResearchMode ? researchCopy.memoryButton : t('hyperAi.memory.button', 'Memory')}
+              </span>
               <ChevronRight className="w-3 h-3 text-muted-foreground ml-auto shrink-0" />
             </button>
           </div>
@@ -1328,7 +1536,7 @@ export default function HyperAiPage() {
                 <svg className="w-4 h-4 shrink-0" viewBox="0 0 1024 1024" fill="currentColor">
                   <path d="M556.8 960H166.4c-25.6 0-51.2-12.8-70.4-25.6-19.2-19.2-32-44.8-32-70.4v-115.2c6.4-19.2 12.8-38.4 32-51.2 12.8-6.4 19.2-12.8 32-12.8s25.6 6.4 44.8 12.8H192c12.8 6.4 19.2 6.4 32 6.4s25.6 0 32-6.4c12.8-6.4 19.2-12.8 25.6-19.2 6.4-6.4 12.8-19.2 19.2-25.6 6.4-12.8 6.4-19.2 6.4-32s0-25.6-6.4-32c-6.4-12.8-12.8-19.2-19.2-25.6s-19.2-12.8-25.6-19.2c-12.8-6.4-19.2-6.4-32-6.4s-19.2 0-32 6.4h-6.4-6.4c-6.4 6.4-19.2 6.4-25.6 12.8-12.8 6.4-25.6 6.4-38.4 6.4-19.2 0-32-12.8-38.4-25.6-6.4-12.8-12.8-25.6-12.8-44.8V390.4c0-25.6 12.8-51.2 32-70.4 19.2-19.2 44.8-32 70.4-32h83.2c-6.4-19.2-6.4-32-6.4-51.2 0-25.6 6.4-51.2 12.8-70.4l38.4-57.6c19.2-19.2 38.4-32 57.6-38.4 25.6-12.8 44.8-12.8 70.4-12.8s51.2 6.4 70.4 12.8l57.6 38.4c19.2 19.2 32 38.4 38.4 57.6 12.8 25.6 12.8 44.8 12.8 70.4 0 19.2 0 38.4-6.4 51.2h25.6c25.6 0 51.2 12.8 70.4 32 19.2 19.2 25.6 44.8 25.6 70.4v19.2c0 12.8-12.8 32-38.4 32-25.6 0-32-12.8-38.4-25.6v-25.6c0-6.4 0-12.8-6.4-19.2-6.4-6.4-6.4-6.4-19.2-6.4H441.6l51.2-64c19.2-19.2 25.6-38.4 25.6-64 0-12.8 0-32-6.4-44.8-6.4-12.8-12.8-25.6-25.6-32-12.8-12.8-19.2-19.2-32-25.6-12.8-6.4-25.6-6.4-44.8-6.4-12.8 0-25.6 0-44.8 6.4-12.8 6.4-25.6 12.8-32 25.6-12.8 12.8-19.2 19.2-25.6 32-6.4 12.8-6.4 25.6-6.4 44.8 0 12.8 0 25.6 6.4 38.4 6.4 12.8 12.8 25.6 19.2 32l51.2 64H153.6c-6.4 0-12.8 0-19.2 6.4-6.4 6.4-6.4 12.8-6.4 19.2v89.6s6.4 0 6.4-6.4c6.4 0 6.4-6.4 12.8-6.4 19.2-6.4 38.4-12.8 64-12.8 19.2 0 44.8 6.4 64 12.8 19.2 6.4 38.4 19.2 51.2 32 12.8 12.8 25.6 32 32 51.2 6.4 19.2 12.8 38.4 12.8 64 0 19.2-6.4 44.8-12.8 64-6.4 19.2-19.2 38.4-32 51.2-12.8 12.8-32 25.6-51.2 32-19.2 6.4-38.4 12.8-64 12.8-19.2 0-44.8-6.4-64-12.8-6.4 0-12.8-6.4-19.2-6.4v96c0 6.4 0 12.8 6.4 19.2 6.4 6.4 12.8 6.4 19.2 6.4h396.8c19.2 6.4 25.6 19.2 25.6 38.4 6.4 25.6 0 32-19.2 38.4z m204.8-76.8c-6.4-6.4-25.6-19.2-32-19.2-6.4 0-25.6 12.8-32 19.2-6.4 6.4-19.2 12.8-25.6 12.8-6.4 0-12.8 0-12.8-6.4l-51.2-25.6c-12.8-12.8-19.2-25.6-12.8-44.8 0 0 6.4-6.4 6.4-12.8 0-12.8-6.4-19.2-12.8-25.6-6.4-6.4-19.2-12.8-25.6-12.8-12.8 0-25.6-12.8-32-32 0 0-6.4-25.6-6.4-44.8 0-19.2 6.4-44.8 6.4-44.8 6.4-19.2 12.8-32 32-32s38.4-19.2 38.4-38.4c0-6.4-6.4-12.8-6.4-12.8-6.4-19.2 0-38.4 12.8-44.8l57.6-32c6.4 0 12.8-6.4 12.8-6.4 12.8 0 19.2 6.4 25.6 12.8 6.4 6.4 25.6 19.2 32 19.2 6.4 0 25.6-12.8 32-19.2 6.4-6.4 19.2-12.8 25.6-12.8 6.4 0 12.8 0 12.8 6.4l51.2 25.6c12.8 12.8 19.2 25.6 12.8 44.8 0 0-6.4 6.4-6.4 12.8 0 19.2 19.2 38.4 38.4 38.4 12.8 0 25.6 12.8 32 32 0 0 6.4 25.6 6.4 44.8 0 19.2-6.4 44.8-6.4 44.8-6.4 19.2-12.8 32-32 32-12.8 0-19.2 6.4-25.6 12.8s-12.8 19.2-12.8 25.6c0 6.4 6.4 12.8 6.4 12.8 6.4 19.2 0 38.4-12.8 44.8l-57.6 32c-6.4 0-12.8 6.4-12.8 6.4-12.8 0-19.2-6.4-25.6-12.8z m-38.4-70.4c19.2 0 32 6.4 51.2 19.2 6.4 6.4 12.8 6.4 12.8 12.8l32-19.2c0-6.4 0-12.8-6.4-25.6 0-44.8 32-83.2 76.8-89.6v-19.2-19.2c-44.8-6.4-76.8-44.8-76.8-89.6 0-6.4 0-19.2 6.4-25.6l-32-19.2-12.8 12.8c-19.2 12.8-32 19.2-51.2 19.2s-32-6.4-51.2-19.2c-6.4-6.4-12.8-6.4-12.8-12.8l-32 19.2c0 6.4 6.4 12.8 6.4 25.6 0 44.8-32 83.2-76.8 89.6v38.4c44.8 6.4 76.8 44.8 76.8 89.6 0 6.4 0 19.2-6.4 25.6l25.6 12.8 12.8-12.8c25.6-6.4 44.8-12.8 57.6-12.8z m0-38.4c-44.8 0-83.2-38.4-83.2-83.2 0-44.8 38.4-83.2 83.2-83.2 44.8 0 83.2 38.4 83.2 83.2 6.4 44.8-32 83.2-83.2 83.2z m0-115.2c-6.4 0-19.2 6.4-25.6 6.4-6.4 6.4-6.4 12.8-6.4 25.6 0 19.2 12.8 32 32 32s32-12.8 32-32-12.8-32-32-32z" />
                 </svg>
-                {t('hyperAi.skills', 'Skills')}
+                {isResearchMode ? researchCopy.skills : t('hyperAi.skills', 'Skills')}
               </h4>
               {skills.length > 0 && !skillsEditMode && (
                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSkillsEditMode(true)}>
@@ -1337,7 +1545,7 @@ export default function HyperAiPage() {
               )}
             </div>
             <p className="text-[10px] text-muted-foreground/60 mb-2 px-0.5">
-              {t('hyperAi.skillsHint', 'Auto-loaded by AI, or type /command')}
+              {isResearchMode ? researchCopy.skillsHint : t('hyperAi.skillsHint', 'Auto-loaded by AI, or type /command')}
             </p>
             {skills.length === 0 ? (
               <p className="text-xs text-muted-foreground">
@@ -1402,14 +1610,13 @@ export default function HyperAiPage() {
           </div>
 
           {/* External Tools */}
-          {externalTools.length > 0 && (
-            <div className="pt-4">
-              <h4 className="text-sm font-medium flex items-center gap-1.5 mb-2">
-                <Wrench className="w-4 h-4 shrink-0" />
-                {t('hyperAi.tools', 'Tools')}
-              </h4>
-              <div className="space-y-1">
-                {externalTools.map(tool => (
+          <div className="pt-4">
+            <h4 className="text-sm font-medium flex items-center gap-1.5 mb-2">
+              <Wrench className="w-4 h-4 shrink-0" />
+              {isResearchMode ? researchCopy.tools : t('hyperAi.tools', 'Tools')}
+            </h4>
+            <div className="space-y-1">
+              {visibleExternalTools.map(tool => (
                   <div
                     key={tool.name}
                     className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-muted/30 hover:bg-muted/50 cursor-pointer transition-colors"
@@ -1427,16 +1634,29 @@ export default function HyperAiPage() {
                       </span>
                     )}
                   </div>
-                ))}
-              </div>
+              ))}
+              {isResearchMode && (
+                <div
+                  className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-muted/30 hover:bg-muted/50 cursor-pointer transition-colors"
+                  onClick={() => { setSelectedTool(customApiTool); setShowToolModal(true) }}
+                >
+                  <Plus className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+                  <span className="text-xs truncate flex-1">
+                    {t('tools.addCustom', '新增配置')}
+                  </span>
+                  <span className="text-[10px] text-primary shrink-0">
+                    {t('tools.setup', 'Setup')}
+                  </span>
+                </div>
+              )}
             </div>
-          )}
+          </div>
 
           {/* Bot Integrations */}
           <div className="pt-4">
             <h4 className="text-sm font-medium flex items-center gap-1.5 mb-2">
               <Blocks className="w-4 h-4 shrink-0" />
-              {t('hyperAi.integrations', 'Integrations')}
+              {isResearchMode ? researchCopy.integrations : t('hyperAi.integrations', 'Integrations')}
               <button
                 onClick={() => setShowNotificationModal(true)}
                 className="ml-auto flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-primary/10 hover:bg-primary/20 transition-colors"
@@ -1451,42 +1671,115 @@ export default function HyperAiPage() {
               </button>
             </h4>
             <div className="space-y-2">
-              {/* Telegram Bot */}
-              <div
-                className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-muted/30 hover:bg-muted/50 cursor-pointer transition-colors"
-                onClick={() => setShowBotModal(true)}
-              >
-                <TelegramSmallIcon />
-                <span className="text-xs">{t('hyperAi.telegramBot', 'Telegram Bot')}</span>
-                {botConfig && botConfig.status === 'connected' ? (
-                  <>
-                    <span className="ml-auto text-[10px] text-muted-foreground">@{botConfig.bot_username}</span>
-                    <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                  </>
-                ) : (
-                  <span className="ml-auto text-[10px] text-primary">
-                    {t('bot.setup', 'Setup')}
-                  </span>
-                )}
-              </div>
-              {/* Discord Bot - Coming Soon */}
-              <div
-                className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-muted/30 hover:bg-muted/50 cursor-pointer transition-colors"
-                onClick={() => setShowDiscordBotModal(true)}
-              >
-                <DiscordSmallIcon />
-                <span className="text-xs">{t('hyperAi.discordBot', 'Discord Bot')}</span>
-                {discordBotConfig && discordBotConfig.status === 'connected' ? (
-                  <>
-                    <span className="ml-auto text-[10px] text-muted-foreground">@{discordBotConfig.bot_username}</span>
-                    <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                  </>
-                ) : (
-                  <span className="ml-auto text-[10px] text-primary">
-                    {t('bot.setup', 'Setup')}
-                  </span>
-                )}
-              </div>
+              {isResearchMode ? (
+                <>
+                  <div
+                    className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-muted/30 hover:bg-muted/50 cursor-pointer transition-colors"
+                    onClick={() => setShowNotificationModal(true)}
+                  >
+                    <WechatSmallIcon />
+                    <span className="text-xs">{t('hyperAi.wechatBot', 'WeChat')}</span>
+                    <span className="ml-auto text-[10px] text-primary">
+                      {t('bot.setup', 'Setup')}
+                    </span>
+                  </div>
+                  <div
+                    className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-muted/30 hover:bg-muted/50 cursor-pointer transition-colors"
+                    onClick={() => setShowNotificationModal(true)}
+                  >
+                    <FeishuSmallIcon />
+                    <span className="text-xs">{t('hyperAi.feishuBot', 'Feishu')}</span>
+                    <span className="ml-auto text-[10px] text-primary">
+                      {t('bot.setup', 'Setup')}
+                    </span>
+                  </div>
+                  <div
+                    className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-muted/30 hover:bg-muted/50 cursor-pointer transition-colors"
+                    onClick={() => setShowNotificationModal(true)}
+                  >
+                    <DingTalkSmallIcon />
+                    <span className="text-xs">{t('hyperAi.dingTalkBot', 'DingTalk')}</span>
+                    <span className="ml-auto text-[10px] text-primary">
+                      {t('bot.setup', 'Setup')}
+                    </span>
+                  </div>
+                  <div
+                    className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-muted/30 hover:bg-muted/50 cursor-pointer transition-colors"
+                    onClick={() => setShowOpenClawModal(true)}
+                  >
+                    <PlugZap className="w-3.5 h-3.5 shrink-0 text-primary" />
+                    <span className="text-xs">{t('hyperAi.openClawBridge', 'OpenClaw Bridge')}</span>
+                    {openClawStatus?.configured ? (
+                      <>
+                        <span className="ml-auto text-[10px] text-muted-foreground">
+                          {openClawStatus.env_token_configured ? 'env' : openClawStatus.config?.status || 'connected'}
+                        </span>
+                        <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                      </>
+                    ) : (
+                      <span className="ml-auto text-[10px] text-primary">
+                        {t('bot.setup', 'Setup')}
+                      </span>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div
+                    className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-muted/30 hover:bg-muted/50 cursor-pointer transition-colors"
+                    onClick={() => setShowBotModal(true)}
+                  >
+                    <TelegramSmallIcon />
+                    <span className="text-xs">{t('hyperAi.telegramBot', 'Telegram Bot')}</span>
+                    {botConfig && botConfig.status === 'connected' ? (
+                      <>
+                        <span className="ml-auto text-[10px] text-muted-foreground">@{botConfig.bot_username}</span>
+                        <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                      </>
+                    ) : (
+                      <span className="ml-auto text-[10px] text-primary">
+                        {t('bot.setup', 'Setup')}
+                      </span>
+                    )}
+                  </div>
+                  <div
+                    className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-muted/30 hover:bg-muted/50 cursor-pointer transition-colors"
+                    onClick={() => setShowDiscordBotModal(true)}
+                  >
+                    <DiscordSmallIcon />
+                    <span className="text-xs">{t('hyperAi.discordBot', 'Discord Bot')}</span>
+                    {discordBotConfig && discordBotConfig.status === 'connected' ? (
+                      <>
+                        <span className="ml-auto text-[10px] text-muted-foreground">@{discordBotConfig.bot_username}</span>
+                        <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                      </>
+                    ) : (
+                      <span className="ml-auto text-[10px] text-primary">
+                        {t('bot.setup', 'Setup')}
+                      </span>
+                    )}
+                  </div>
+                  <div
+                    className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-muted/30 hover:bg-muted/50 cursor-pointer transition-colors"
+                    onClick={() => setShowOpenClawModal(true)}
+                  >
+                    <PlugZap className="w-3.5 h-3.5 shrink-0 text-primary" />
+                    <span className="text-xs">{t('hyperAi.openClawBridge', 'OpenClaw Bridge')}</span>
+                    {openClawStatus?.configured ? (
+                      <>
+                        <span className="ml-auto text-[10px] text-muted-foreground">
+                          {openClawStatus.env_token_configured ? 'env' : openClawStatus.config?.status || 'connected'}
+                        </span>
+                        <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                      </>
+                    ) : (
+                      <span className="ml-auto text-[10px] text-primary">
+                        {t('bot.setup', 'Setup')}
+                      </span>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -1499,12 +1792,15 @@ export default function HyperAiPage() {
         providers={providers}
         currentProfile={profile}
         onSaved={fetchProfile}
+        title={isResearchMode ? researchCopy.configTitle : undefined}
       />
 
       {/* Memory Modal */}
       <MemoryModal
         open={showMemoryModal}
         onClose={() => setShowMemoryModal(false)}
+        mode={mode}
+        currentLang={currentLang}
       />
 
       {/* Bot Integration Modal */}
@@ -1524,6 +1820,14 @@ export default function HyperAiPage() {
         onConnected={fetchDiscordBotConfig}
         currentBotUsername={discordBotConfig?.status === 'connected' ? discordBotConfig.bot_username : undefined}
         currentBotAppId={discordBotConfig?.bot_app_id}
+      />
+
+      {/* OpenClaw Bridge Integration Modal */}
+      <OpenClawIntegrationModal
+        open={showOpenClawModal}
+        onClose={() => setShowOpenClawModal(false)}
+        onSaved={fetchOpenClawStatus}
+        status={openClawStatus}
       />
 
       {/* Notification Config Modal */}

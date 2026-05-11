@@ -11,7 +11,22 @@ interface FinalDecisionViewProps {
   onEvidenceSelect?: (evidenceId: string) => void;
 }
 
-const TECHNICAL_NOTE_PATTERNS = [/TradingAgents/i, /database-backed/i, /invalid evidence/i, /Invalid evidence/i, /未接入/i, /stub/i];
+const TECHNICAL_NOTE_PATTERNS = [
+  /TradingAgents/i,
+  /database-backed/i,
+  /invalid evidence/i,
+  /Invalid evidence/i,
+  /未接入/i,
+  /stub/i,
+  /Final Decision was not provided/i,
+  /Risk Review was not provided/i,
+  /was not explicitly separated/i,
+  /structured Qwen output/i,
+  /Qwen output/i,
+  /parser fallback/i,
+  /Rule-based evidence support/i,
+  /Evidence semantic support/i,
+];
 
 const normalizeLine = (value: string): string => value.replace(/^[-*]\s+/, "").replace(/^\d+[.)]\s+/, "").trim();
 
@@ -23,15 +38,22 @@ const extractSection = (text: string, names: string[]): string => {
 
 const stripDecisionMetadata = (text: string): string => {
   return text
+    .replace(/```[\s\S]*?```/g, " ")
     .split(/\r?\n/)
     .filter((line) => !/^\s*(?:\*\*)?(?:action|confidence|evidenceIds|evidence used)(?:\*\*)?\s*[:：]/i.test(line.trim()))
+    .filter((line) => !TECHNICAL_NOTE_PATTERNS.some((pattern) => pattern.test(line)))
     .join("\n")
+    .replace(/\b(ev|ck)_[a-z0-9_]{16,}\b/gi, "")
+    .replace(/`(?:ev_|ck_|marketContext\.|toolContext\.)[^`]+`/g, "")
     .trim();
 };
 
 const buildThesis = (decision: AgentDecision): string => {
   const thesisSection = extractSection(decision.thesis, ["thesis", "核心逻辑"]);
-  return stripDecisionMetadata(thesisSection || decision.thesis);
+  const thesis = stripDecisionMetadata(thesisSection || decision.thesis);
+  if (thesis && !TECHNICAL_NOTE_PATTERNS.some((pattern) => pattern.test(thesis))) return thesis;
+  const summary = stripDecisionMetadata(decision.summary ?? "");
+  return summary || "本次任务缺少可直接展示的结构化最终结论，建议先按观察状态处理，并结合证据、风险复核和图谱节点继续确认。";
 };
 
 const splitRiskText = (text: string): string[] => {
@@ -39,11 +61,13 @@ const splitRiskText = (text: string): string[] => {
   const bulletLines = normalized
     .split(/\r?\n/)
     .map(normalizeLine)
-    .filter((line) => line && !/^#{1,6}\s/.test(line) && !/^>?\s*注[:：]?/.test(line));
+    .filter((line) => line && !/^#{1,6}\s/.test(line) && !/^>?\s*注[:：]?/.test(line))
+    .filter((line) => !TECHNICAL_NOTE_PATTERNS.some((pattern) => pattern.test(line)));
 
   const candidates = bulletLines.length > 1 ? bulletLines : normalized.split(/[；;。]\s*/).map((item) => item.trim());
   return candidates
     .map((item) => item.replace(/^(?:\*\*)?(?:risks?|主要风险)(?:\*\*)?\s*[:：]?/i, "").trim())
+    .map((item) => item.replace(/\b(ev|ck)_[a-z0-9_]{16,}\b/gi, "").trim())
     .filter((item) => item.length > 8);
 };
 
@@ -81,7 +105,8 @@ const buildWatchIndicators = (decision: AgentDecision): string[] => {
       source
         .split(/\r?\n|[；;]/)
         .map(normalizeLine)
-        .filter((line) => line.length > 4 && !/^(?:action|confidence|thesis|risks|evidenceIds)/i.test(line)),
+        .filter((line) => line.length > 4 && !/^(?:action|confidence|thesis|risks|evidenceIds)/i.test(line))
+        .filter((line) => !TECHNICAL_NOTE_PATTERNS.some((pattern) => pattern.test(line))),
     ),
   ).slice(0, 6);
 };
@@ -95,28 +120,28 @@ const FinalDecisionView = ({ decision, actionLabel, horizonLabel, confidenceLabe
     <div className="space-y-4 text-xs">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
         <div className="rounded border bg-muted/20 p-2">
-          <p className="text-muted-foreground">Action</p>
+          <p className="text-muted-foreground">操作建议</p>
           <p className="font-semibold text-foreground">{actionLabel}</p>
         </div>
         <div className="rounded border bg-muted/20 p-2">
-          <p className="text-muted-foreground">Horizon</p>
+          <p className="text-muted-foreground">周期</p>
           <p className="font-semibold text-foreground">{horizonLabel}</p>
         </div>
         <div className="rounded border bg-muted/20 p-2">
-          <p className="text-muted-foreground">Confidence</p>
+          <p className="text-muted-foreground">置信度</p>
           <p className="font-semibold text-foreground">{confidenceLabel}</p>
         </div>
       </div>
 
       <section className="space-y-1">
-        <p className="font-medium">Thesis</p>
+        <p className="font-medium">核心逻辑</p>
         <div className="rounded border bg-background p-2 max-h-72 overflow-auto">
           <StructuredReportView text={thesis} compact />
         </div>
       </section>
 
       <section className="space-y-1">
-        <p className="font-medium">Key Risks</p>
+        <p className="font-medium">主要风险</p>
         {risks.length ? (
           <ul className="list-disc pl-4 text-muted-foreground space-y-1">
             {risks.map((risk, index) => (
@@ -131,7 +156,7 @@ const FinalDecisionView = ({ decision, actionLabel, horizonLabel, confidenceLabe
       </section>
 
       <section className="space-y-1">
-        <p className="font-medium">Watch Indicators</p>
+        <p className="font-medium">观察指标</p>
         {watchIndicators.length ? (
           <ul className="list-disc pl-4 text-muted-foreground space-y-1">
             {watchIndicators.map((item, index) => (
@@ -144,13 +169,13 @@ const FinalDecisionView = ({ decision, actionLabel, horizonLabel, confidenceLabe
       </section>
 
       <section className="space-y-1">
-        <p className="font-medium">Evidence Used</p>
+        <p className="font-medium">使用证据</p>
         <EvidenceBadges evidenceIds={decision.evidenceIds} onSelect={onEvidenceSelect} />
       </section>
 
       {technicalNotes.length ? (
         <details className="rounded border bg-muted/20 p-2">
-          <summary className="cursor-pointer font-medium">Technical Notes</summary>
+          <summary className="cursor-pointer font-medium">技术说明</summary>
           <div className="mt-2 flex flex-wrap gap-2">
             {technicalNotes.map((note) => (
               <Badge key={note} variant="outline">{note}</Badge>

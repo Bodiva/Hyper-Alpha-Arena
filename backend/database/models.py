@@ -1617,6 +1617,109 @@ class HyperAiMessage(Base):
 
 
 # ============================================================================
+# Research AI Independent Assistant
+# ============================================================================
+class ResearchAiProfile(Base):
+    """Research AI profile and configuration, stored independently from Hyper AI."""
+    __tablename__ = "research_ai_profile"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    nickname = Column(String(100), nullable=True)
+
+    trading_style = Column(String(50), nullable=True)
+    risk_preference = Column(String(50), nullable=True)
+    experience_level = Column(String(50), nullable=True)
+    preferred_symbols = Column(Text, nullable=True)
+    preferred_timeframe = Column(String(50), nullable=True)
+    capital_scale = Column(String(50), nullable=True)
+
+    onboarding_completed = Column(Boolean, default=False)
+
+    llm_provider = Column(String(50), nullable=True)
+    llm_base_url = Column(String(500), nullable=True)
+    llm_api_key_encrypted = Column(Text, nullable=True)
+    llm_model = Column(String(100), nullable=True)
+
+    enabled_skills = Column(Text, nullable=True)
+    tool_configs = Column(Text, nullable=True)
+    suggested_questions = Column(Text, nullable=True)
+    suggested_questions_at = Column(TIMESTAMP, nullable=True)
+
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp())
+    updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
+
+
+class ResearchAiMemory(Base):
+    """Research AI long-term memory, isolated from Hyper AI memory."""
+    __tablename__ = "research_ai_memory"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    category = Column(String(50), nullable=False, index=True)
+    content = Column(Text, nullable=False)
+    source = Column(String(50), nullable=True)
+    importance = Column(Float, default=0.5)
+    is_active = Column(Boolean, default=True)
+
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp(), index=True)
+    updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
+
+
+class ResearchAiConversation(Base):
+    """Research AI conversation session with compression metadata."""
+    __tablename__ = "research_ai_conversations"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    title = Column(String(200), nullable=False, default="Research AI Chat")
+    is_onboarding = Column(Boolean, default=False)
+
+    summary = Column(Text, nullable=True)
+    compression_points = Column(Text, nullable=True)
+    message_count = Column(Integer, default=0)
+    total_tokens = Column(Integer, default=0)
+
+    is_bot_conversation = Column(Boolean, default=False)
+    bot_platform = Column(String(20), nullable=True)
+
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp(), index=True)
+    updated_at = Column(TIMESTAMP, server_default=func.current_timestamp(), onupdate=func.current_timestamp())
+    compressed_at = Column(TIMESTAMP, nullable=True)
+
+    messages = relationship(
+        "ResearchAiMessage",
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+        order_by="ResearchAiMessage.created_at"
+    )
+
+
+class ResearchAiMessage(Base):
+    """Research AI message row, isolated from Hyper AI messages."""
+    __tablename__ = "research_ai_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    conversation_id = Column(Integer, ForeignKey("research_ai_conversations.id"), nullable=False, index=True)
+
+    role = Column(String(20), nullable=False)
+    content = Column(Text, nullable=False)
+
+    reasoning_snapshot = Column(Text, nullable=True)
+    tool_calls_log = Column(Text, nullable=True)
+    subagent_calls_log = Column(Text, nullable=True)
+
+    is_complete = Column(Boolean, default=True)
+    interrupt_reason = Column(Text, nullable=True)
+
+    token_count = Column(Integer, nullable=True)
+
+    created_at = Column(TIMESTAMP, server_default=func.current_timestamp(), index=True)
+
+    conversation = relationship("ResearchAiConversation", back_populates="messages")
+
+
+# ============================================================================
 # CRYPTO market trading configuration constants
 # ============================================================================
 CRYPTO_MIN_COMMISSION = 0.1  # $0.1 minimum commission

@@ -285,7 +285,7 @@ export default function DataImportPage() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <CardTitle className="text-base">上传 ETF 数据文件</CardTitle>
-                <CardDescription>导入后写入 ClickHouse 的 ETF 文件导入表</CardDescription>
+                <CardDescription>上传后可预览并保存结构化数据</CardDescription>
               </div>
               <Database className="h-5 w-5 text-muted-foreground" />
             </div>
@@ -338,7 +338,7 @@ export default function DataImportPage() {
                 onChange={(event) => setDryRun(event.target.checked)}
                 className="h-4 w-4"
               />
-              仅解析预览，不写入 ClickHouse
+              仅解析预览，不保存
             </label>
 
             <Button onClick={handleImport} disabled={!file || isImporting}>
@@ -347,7 +347,7 @@ export default function DataImportPage() {
               ) : (
                 <FileUp className="h-4 w-4" data-icon="inline-start" />
               )}
-              {dryRun ? "解析预览" : "导入到 ClickHouse"}
+              {dryRun ? "解析预览" : "导入"}
             </Button>
 
             {error ? (
@@ -361,7 +361,7 @@ export default function DataImportPage() {
         <Card className="xl:col-span-3">
           <CardHeader className="pb-3">
             <CardTitle className="text-base">导入结果</CardTitle>
-            <CardDescription>服务端会按 ClickHouse 宽表列解析指数估值指标</CardDescription>
+            <CardDescription>按标准字段解析指数估值指标</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             {!result ? (
@@ -415,7 +415,7 @@ export default function DataImportPage() {
                     <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                       <div>
                         <p className="text-sm font-medium">字段映射</p>
-                        <p className="text-xs text-muted-foreground">目标列是 ClickHouse 宽表 schema，默认按同名字段和已知中文表头匹配。</p>
+                        <p className="text-xs text-muted-foreground">默认按同名字段和已知中文表头匹配。</p>
                       </div>
                       <Badge variant="secondary">{sourceColumns.length} 个文件列</Badge>
                     </div>
@@ -517,8 +517,8 @@ export default function DataImportPage() {
         <CardHeader className="pb-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <CardTitle className="text-base">已导入 ClickHouse 数据</CardTitle>
-              <CardDescription>点击导入批次查看前 100 行 ClickHouse 宽表指标列</CardDescription>
+              <CardTitle className="text-base">已导入数据</CardTitle>
+              <CardDescription>点击导入批次查看前 100 行</CardDescription>
             </div>
             <Button size="sm" variant="outline" onClick={loadImportedData} disabled={isLoadingImportedData}>
               <RefreshCw className={isLoadingImportedData ? "h-4 w-4 animate-spin" : "h-4 w-4"} data-icon="inline-start" />

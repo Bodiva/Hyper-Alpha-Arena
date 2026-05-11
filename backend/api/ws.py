@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import os
 import threading
 import time
 from datetime import date, datetime, timedelta
@@ -799,6 +800,13 @@ async def websocket_endpoint(websocket: WebSocket):
     logging.info(f"[WS] New WebSocket connection from {client_host}")
     await websocket.accept()
     logging.info(f"[WS] WebSocket connection accepted from {client_host}")
+    if os.getenv("ALPHA_TRACE_DOMAIN_STORE", "").strip().lower() == "mysql":
+        await websocket.send_text(json.dumps({
+            "type": "legacy_ws_disabled",
+            "message": "Legacy trading WebSocket is disabled in AlphaTrace MySQL profile.",
+        }))
+        await websocket.close()
+        return
     try:
         manager.set_event_loop(asyncio.get_running_loop())
     except RuntimeError:

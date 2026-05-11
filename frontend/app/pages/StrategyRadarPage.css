@@ -1,0 +1,108 @@
+.strategy-radar-page {
+  --radar-bg-page: #f1eee9;
+  --radar-bg-card: rgba(255, 255, 255, 0.86);
+  --radar-bg-elevated: #ffffff;
+  --radar-bg-input: #f5f2ed;
+  --radar-bg-hover: #f4f1ec;
+  --radar-bg-tag: #ece8e2;
+  --radar-border-muted: #e2ddd5;
+  --radar-border-default: #d3cdc3;
+  --radar-border-accent: #bfc8e6;
+  --radar-text-primary: #2f2d2a;
+  --radar-text-secondary: #77736c;
+  --radar-text-tertiary: #9a958d;
+  --radar-accent-primary: #3f63df;
+  --radar-accent-soft: rgba(122, 139, 187, 0.16);
+  --radar-profit: #5d9a58;
+  --radar-profit-soft: #edf8ed;
+  --radar-loss: #d74c43;
+  --radar-loss-soft: #fdecea;
+  background: var(--radar-bg-page);
+  color: var(--radar-text-primary);
+}
+
+.strategy-radar-page * {
+  letter-spacing: 0;
+}
+
+.strategy-radar-page .bg-white {
+  background-color: var(--radar-bg-card) !important;
+}
+
+.strategy-radar-page .bg-slate-50,
+.strategy-radar-page .bg-slate-100 {
+  background-color: var(--radar-bg-input) !important;
+}
+
+.strategy-radar-page .hover\:bg-slate-50:hover,
+.strategy-radar-page .hover\:bg-slate-100:hover {
+  background-color: var(--radar-bg-hover) !important;
+}
+
+.strategy-radar-page .bg-sky-50 {
+  background-color: var(--radar-accent-soft) !important;
+}
+
+.strategy-radar-page .bg-amber-50 {
+  background-color: var(--radar-profit-soft) !important;
+}
+
+.strategy-radar-page .bg-amber-500 {
+  background-color: var(--radar-profit) !important;
+}
+
+.strategy-radar-page .border-slate-200,
+.strategy-radar-page .border-amber-200 {
+  border-color: var(--radar-border-muted) !important;
+}
+
+.strategy-radar-page .border-sky-300 {
+  border-color: var(--radar-border-accent) !important;
+}
+
+.strategy-radar-page .hover\:border-slate-300:hover {
+  border-color: var(--radar-border-default) !important;
+}
+
+.strategy-radar-page .border-dashed {
+  border-color: var(--radar-border-default) !important;
+}
+
+.strategy-radar-page .text-slate-950,
+.strategy-radar-page .text-slate-900,
+.strategy-radar-page .text-slate-800 {
+  color: var(--radar-text-primary) !important;
+}
+
+.strategy-radar-page .text-slate-700,
+.strategy-radar-page .text-slate-600,
+.strategy-radar-page .text-slate-500,
+.strategy-radar-page .text-slate-400 {
+  color: var(--radar-text-secondary) !important;
+}
+
+.strategy-radar-page .text-sky-500,
+.strategy-radar-page .text-sky-700,
+.strategy-radar-page .text-amber-700 {
+  color: var(--radar-accent-primary) !important;
+}
+
+.strategy-radar-page .fill-sky-500 {
+  fill: var(--radar-accent-primary) !important;
+}
+
+.strategy-radar-page .shadow-\[0_18px_50px_rgba\(15\,23\,42\,0\.08\)\],
+.strategy-radar-page .shadow-\[0_12px_34px_rgba\(15\,23\,42\,0\.05\)\],
+.strategy-radar-page .shadow-\[0_10px_28px_rgba\(15\,23\,42\,0\.05\)\],
+.strategy-radar-page .shadow-\[0_10px_28px_rgba\(15\,23\,42\,0\.04\)\] {
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.75) !important;
+}
+
+.strategy-radar-page .drop-shadow-\[0_10px_24px_rgba\(14\,165\,233\,0\.18\)\] {
+  filter: drop-shadow(0 10px 24px rgba(63, 99, 223, 0.14)) !important;
+}
+
+.strategy-radar-page select option {
+  background: var(--radar-bg-elevated);
+  color: var(--radar-text-primary);
+}

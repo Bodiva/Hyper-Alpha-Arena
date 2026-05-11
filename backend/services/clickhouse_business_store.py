@@ -31,6 +31,10 @@ def _split_table_name(table_name: str) -> tuple[str, str]:
     raise ClickHouseStoreError(f"Invalid ClickHouse table name: {table_name}")
 
 
+def _escape_sql_string(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("'", "\\'")
+
+
 @dataclass(frozen=True)
 class ClickHouseBusinessStore:
     url: str
@@ -122,12 +126,109 @@ class ClickHouseBusinessStore:
         )
         return f"{database}.{table}"
 
+    def ensure_agent_runtime_projection_tables(self, database_name: str = "alpha_trace") -> dict[str, str]:
+        database = _validate_identifier(database_name)
+        self.execute(f"CREATE DATABASE IF NOT EXISTS `{database}`")
+        table_ddls = {
+            "alpha_trace_runtime_events": """
+                (
+                    workspace_id String,
+                    run_id String,
+                    runner_type LowCardinality(String),
+                    task_type LowCardinality(String),
+                    event_time DateTime64(3, 'UTC'),
+                    sequence UInt64,
+                    event_type LowCardinality(String),
+                    agent_name LowCardinality(String),
+                    step_id LowCardinality(String),
+                    payload_json String
+                )
+                ENGINE = MergeTree
+                PARTITION BY toYYYYMM(event_time)
+                ORDER BY (workspace_id, run_id, sequence)
+            """,
+            "alpha_trace_agent_reports": """
+                (
+                    workspace_id String,
+                    run_id String,
+                    runner_type LowCardinality(String),
+                    task_type LowCardinality(String),
+                    event_time DateTime64(3, 'UTC'),
+                    report_id String,
+                    report_type LowCardinality(String),
+                    title String,
+                    content String,
+                    payload_json String
+                )
+                ENGINE = MergeTree
+                PARTITION BY toYYYYMM(event_time)
+                ORDER BY (workspace_id, run_id, report_type, report_id)
+            """,
+            "alpha_trace_evidence_refs": """
+                (
+                    workspace_id String,
+                    run_id String,
+                    runner_type LowCardinality(String),
+                    task_type LowCardinality(String),
+                    event_time DateTime64(3, 'UTC'),
+                    evidence_id String,
+                    source_type LowCardinality(String),
+                    evidence_type LowCardinality(String),
+                    asset_ids Array(String),
+                    source_url String,
+                    quality_score Float32,
+                    summary String,
+                    payload_json String
+                )
+                ENGINE = MergeTree
+                PARTITION BY toYYYYMM(event_time)
+                ORDER BY (workspace_id, source_type, evidence_id, run_id)
+            """,
+            "alpha_trace_decisions": """
+                (
+                    workspace_id String,
+                    run_id String,
+                    runner_type LowCardinality(String),
+                    task_type LowCardinality(String),
+                    event_time DateTime64(3, 'UTC'),
+                    decision_id String,
+                    action LowCardinality(String),
+                    confidence Float32,
+                    horizon LowCardinality(String),
+                    evidence_ids Array(String),
+                    payload_json String
+                )
+                ENGINE = MergeTree
+                PARTITION BY toYYYYMM(event_time)
+                ORDER BY (workspace_id, run_id, decision_id)
+            """,
+        }
+        for table_name, ddl in table_ddls.items():
+            table = _validate_identifier(table_name)
+            self.execute(f"CREATE TABLE IF NOT EXISTS `{database}`.`{table}` {ddl}")
+        return {table_name: f"{database}.{table_name}" for table_name in table_ddls}
+
+    def delete_run_projection_rows(self, table_name: str, run_id: str) -> None:
+        database, table = _split_table_name(table_name)
+        safe_run_id = _escape_sql_string(run_id)
+        self.execute(f"ALTER TABLE `{database}`.`{table}` DELETE WHERE run_id = '{safe_run_id}'")
+
 
 def get_clickhouse_business_store() -> ClickHouseBusinessStore:
+    configured_url = os.getenv("ALPHA_TRACE_CLICKHOUSE_URL")
+    if configured_url:
+        url = configured_url.rstrip("/")
+    elif os.getenv("CLICKHOUSE_HOST") or os.getenv("CLICKHOUSE_PORT"):
+        host = os.getenv("CLICKHOUSE_HOST", "127.0.0.1").strip() or "127.0.0.1"
+        port = os.getenv("CLICKHOUSE_PORT", "18123").strip() or "18123"
+        url = f"http://{host}:{port}"
+    else:
+        url = "http://clickhouse:8123"
+
     return ClickHouseBusinessStore(
-        url=os.getenv("ALPHA_TRACE_CLICKHOUSE_URL", "http://clickhouse:8123").rstrip("/"),
-        user=(os.getenv("ALPHA_TRACE_CLICKHOUSE_USER") or "").strip() or None,
-        password=os.getenv("ALPHA_TRACE_CLICKHOUSE_PASSWORD"),
+        url=url,
+        user=(os.getenv("ALPHA_TRACE_CLICKHOUSE_USER") or os.getenv("CLICKHOUSE_USER") or "").strip() or None,
+        password=os.getenv("ALPHA_TRACE_CLICKHOUSE_PASSWORD") or os.getenv("CLICKHOUSE_PASSWORD"),
         timeout_seconds=int(os.getenv("ALPHA_TRACE_CLICKHOUSE_TIMEOUT_SECONDS", "30")),
     )
 
@@ -140,9 +241,14 @@ def get_etf_import_table_name() -> str:
     )
 
 
+def get_agent_runtime_clickhouse_database() -> str:
+    return os.getenv("ALPHA_TRACE_AGENT_RUNTIME_CLICKHOUSE_DATABASE", "alpha_trace").strip() or "alpha_trace"
+
+
 __all__ = [
     "ClickHouseBusinessStore",
     "ClickHouseStoreError",
+    "get_agent_runtime_clickhouse_database",
     "get_clickhouse_business_store",
     "get_etf_import_table_name",
 ]

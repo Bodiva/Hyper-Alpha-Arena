@@ -233,6 +233,8 @@ def get_llm_config(db: Session) -> Dict[str, Any]:
     mysql_config = _get_mysql_llm_config()
     if mysql_config:
         return mysql_config
+    if os.getenv("ALPHA_TRACE_DOMAIN_STORE", "").strip().lower() == "mysql":
+        return {"configured": False, "source": "mysql_system_config"}
 
     profile = get_or_create_profile(db)
 

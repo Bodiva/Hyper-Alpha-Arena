@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any
 
 from schemas.alpha_trace_agent_runtime import (
@@ -25,13 +26,26 @@ def _run_time(run: AgentRun) -> str:
     return run.completedAt or run.updatedAt or run.startedAt
 
 
+def _clickhouse_datetime(value: str | None) -> str:
+    raw_value = str(value or "").strip()
+    if not raw_value:
+        return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    try:
+        parsed = datetime.fromisoformat(raw_value.replace("Z", "+00:00"))
+        if parsed.tzinfo is not None:
+            parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+        return parsed.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    except ValueError:
+        return raw_value
+
+
 def _base_run_fields(run: AgentRun, event_time: str | None = None) -> dict[str, Any]:
     return {
         "workspace_id": "default",
         "run_id": run.runId,
         "runner_type": _runner_type(run),
         "task_type": run.taskType,
-        "event_time": event_time or _run_time(run),
+        "event_time": _clickhouse_datetime(event_time or _run_time(run)),
     }
 
 

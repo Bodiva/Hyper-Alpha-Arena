@@ -18,6 +18,9 @@ class EvidenceItem:
     summary: str
     url: Optional[str] = None
     extractedFields: Dict[str, Any] = field(default_factory=dict)
+    sourceApiName: Optional[str] = None
+    snapshotId: Optional[str] = None
+    snapshotCapturedAt: Optional[str] = None
 
 
 STATIC_EVIDENCE_SEED: List[EvidenceItem] = [

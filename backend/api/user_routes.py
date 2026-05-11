@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from typing import List
 import logging
+import os
 
 from database.connection import SessionLocal
 from database.models import User, UserExchangeConfig, UserSubscription
@@ -182,6 +183,8 @@ async def list_users(db: Session = Depends(get_db)):
 @router.get("/exchange-config")
 async def get_exchange_config(db: Session = Depends(get_db)):
     """Get current exchange configuration for default user"""
+    if os.getenv("ALPHA_TRACE_DOMAIN_STORE", "").strip().lower() == "mysql":
+        return {"selected_exchange": "hyperliquid", "source": "alphatrace_mysql_profile"}
     try:
         # Use default user_id=1 for now
         config = db.query(UserExchangeConfig).filter(UserExchangeConfig.user_id == 1).first()
@@ -201,6 +204,8 @@ async def set_exchange_config(exchange_data: dict, db: Session = Depends(get_db)
         selected_exchange = exchange_data.get("selected_exchange")
         if not selected_exchange or selected_exchange not in ["hyperliquid", "binance", "aster"]:
             raise HTTPException(status_code=400, detail="Invalid exchange selection")
+        if os.getenv("ALPHA_TRACE_DOMAIN_STORE", "").strip().lower() == "mysql":
+            return {"selected_exchange": selected_exchange, "status": "success", "source": "alphatrace_mysql_profile"}
 
         # Use default user_id=1 for now
         config = db.query(UserExchangeConfig).filter(UserExchangeConfig.user_id == 1).first()

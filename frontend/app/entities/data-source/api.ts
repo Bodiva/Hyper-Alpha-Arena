@@ -147,6 +147,124 @@ export interface ImportedFileRowsResponse {
   offset: number;
 }
 
+export interface ClickHouseColumn {
+  name: string;
+  type: string;
+  position: number;
+}
+
+export interface ClickHouseTopValue {
+  key: string;
+  rows: number;
+}
+
+export interface ClickHouseTableSummary {
+  database: string;
+  name: string;
+  rows: number;
+  bytes: number;
+  modifiedAt?: string | null;
+}
+
+export interface ClickHouseOverviewResponse {
+  status: string;
+  tableName: string;
+  version: string;
+  totalRows: number;
+  importBatches: number;
+  files: number;
+  sources: number;
+  minTradeDate?: string | null;
+  maxTradeDate?: string | null;
+  latestImportedAt?: string | null;
+  columns: ClickHouseColumn[];
+  tables: ClickHouseTableSummary[];
+  topSources: ClickHouseTopValue[];
+  topAssets: ClickHouseTopValue[];
+  message: string;
+}
+
+export interface ClickHouseTableRowsResponse {
+  tableName: string;
+  columns: ClickHouseColumn[];
+  rows: Array<Record<string, unknown>>;
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface LixingerLlmTableCatalogItem {
+  api_id: string;
+  asset_type: string;
+  endpoint_type: string;
+  priority?: string;
+  api_name: string;
+  description?: string;
+  request_url?: string;
+  stage_table?: string;
+  query_table: string;
+  query_layer: string;
+  row_count?: number;
+  size_on_disk?: string;
+  grain?: string;
+  key_fields?: string;
+  time_fields?: string;
+  best_for?: string;
+  caution?: string;
+}
+
+export interface LixingerLlmContextResponse {
+  sourceRoot: string;
+  generatedAt?: string | null;
+  tableCatalog: LixingerLlmTableCatalogItem[];
+  usageRules: string[];
+  queryTemplatesMarkdown: string;
+  dataDictionaryPreview: string;
+  syncAuditPreview: string;
+  llmViewsSqlPreview: string;
+  sourcePaths: Record<string, string>;
+  message: string;
+}
+
+export interface DatasetBinding {
+  bindingId: string;
+  name: string;
+  datasetId: string;
+  tableName: string;
+  assetId: string;
+  assetSymbol: string;
+  assetName: string;
+  dataSymbol: string;
+  dateField: string;
+  primaryMetrics: string[];
+  agentRunners: string[];
+  isDefault: boolean;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DatasetBindingPayload {
+  bindingId?: string;
+  name: string;
+  datasetId: string;
+  tableName?: string;
+  assetId: string;
+  assetSymbol?: string;
+  assetName?: string;
+  dataSymbol?: string;
+  dateField?: string;
+  primaryMetrics?: string[];
+  agentRunners?: string[];
+  isDefault?: boolean;
+  status?: string;
+}
+
+export interface DatasetBindingListResponse {
+  items: DatasetBinding[];
+  total: number;
+}
+
 const normalize = (value: string): string => value.trim().toLowerCase();
 
 const realModeNotImplemented = (operation: string): never => {
@@ -198,21 +316,21 @@ export const getDataSourceEvidence = (sourceName: string): Evidence[] => {
 export const listDataSourcesAsync = (params: ListDataSourcesParams = {}, delayMs?: number): Promise<DataSource[]> =>
   shouldUseMockData()
     ? mockDelay(listDataSources(params), delayMs)
-    : listRealDataSources(params).catch(() => listDataSourcesFromMock(params));
+    : listRealDataSources(params);
 
 export const getDataSourceByIdAsync = (sourceId: string, delayMs?: number): Promise<DataSource | undefined> =>
   shouldUseMockData()
     ? mockDelay(getDataSourceById(sourceId), delayMs)
     : httpClient
         .get<DataSource>(ENDPOINTS.alphaTraceDataSourceDetail(sourceId), { timeoutMs: 1200 })
-        .catch(() => dataSourcesMock.find((source) => source.sourceId === sourceId));
+        .catch(() => undefined);
 
 export const getDataSourceTasksAsync = (sourceId: string, delayMs?: number): Promise<DataSourceTask[]> =>
   shouldUseMockData()
     ? mockDelay(getDataSourceTasks(sourceId), delayMs)
     : httpClient
         .get<DataSourceTask[]>(ENDPOINTS.alphaTraceDataSourceTasks(sourceId), { timeoutMs: 1200 })
-        .catch(() => dataSourcesMock.find((source) => source.sourceId === sourceId)?.recentTasks ?? []);
+        .catch(() => []);
 
 export const getDataApiCatalogAsync = (): Promise<DataApiCatalogResponse> =>
   httpClient.get<DataApiCatalogResponse>(ENDPOINTS.alphaTraceDataApiCatalog);
@@ -228,6 +346,44 @@ export const listImportedFileBatchesAsync = (): Promise<ImportedFileBatchListRes
 export const listImportedFileRowsAsync = (importId: string): Promise<ImportedFileRowsResponse> =>
   httpClient.get<ImportedFileRowsResponse>(ENDPOINTS.alphaTraceDataSourceImportRows(encodeURIComponent(importId)), {
     params: { limit: 100 },
+  });
+
+export const getClickHouseOverviewAsync = (): Promise<ClickHouseOverviewResponse> =>
+  httpClient.get<ClickHouseOverviewResponse>(ENDPOINTS.alphaTraceClickHouseOverview, {
+    timeoutMs: 15000,
+  });
+
+export const getClickHouseTableRowsAsync = (
+  database: string,
+  table: string,
+): Promise<ClickHouseTableRowsResponse> =>
+  httpClient.get<ClickHouseTableRowsResponse>(
+    ENDPOINTS.alphaTraceClickHouseTableRows(encodeURIComponent(database), encodeURIComponent(table)),
+    {
+      params: { limit: 100 },
+      timeoutMs: 15000,
+      },
+    );
+
+export const getLixingerLlmContextAsync = (): Promise<LixingerLlmContextResponse> =>
+  httpClient.get<LixingerLlmContextResponse>(ENDPOINTS.alphaTraceLixingerLlmContext, {
+    timeoutMs: 15000,
+  });
+
+export const listDatasetBindingsAsync = (params: { assetId?: string; datasetId?: string; activeOnly?: boolean } = {}): Promise<DatasetBindingListResponse> =>
+  httpClient.get<DatasetBindingListResponse>(ENDPOINTS.alphaTraceDatasetBindings, {
+    params,
+    timeoutMs: 15000,
+  });
+
+export const saveDatasetBindingAsync = (payload: DatasetBindingPayload): Promise<DatasetBindingListResponse> =>
+  httpClient.post<DatasetBindingListResponse>(ENDPOINTS.alphaTraceDatasetBindings, payload, {
+    timeoutMs: 3000,
+  });
+
+export const deleteDatasetBindingAsync = (bindingId: string): Promise<DatasetBindingListResponse> =>
+  httpClient.delete<DatasetBindingListResponse>(ENDPOINTS.alphaTraceDatasetBinding(encodeURIComponent(bindingId)), {
+    timeoutMs: 3000,
   });
 
 export const importLocalEtfFileAsync = ({

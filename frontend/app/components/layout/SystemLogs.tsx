@@ -203,7 +203,7 @@ useEffect(() => {
   return (
     <div className="container mx-auto p-4 space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">{t('logs.title', 'System Logs')}</h1>
+        <h1 className="text-2xl font-bold">{t('logs.title', 'Automation Runtime Logs')}</h1>
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
@@ -287,7 +287,7 @@ useEffect(() => {
       {/* Main Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="logs">{t('logs.systemLogs', 'System Logs')}</TabsTrigger>
+          <TabsTrigger value="logs">{t('logs.systemLogs', 'Automation Events')}</TabsTrigger>
           <TabsTrigger value="sampling">{t('logs.samplingPool', 'Sampling Pool')}</TabsTrigger>
           <TabsTrigger value="hyperliquid">{t('logs.hyperliquidActions', 'Hyperliquid Actions')}</TabsTrigger>
         </TabsList>

@@ -66,8 +66,11 @@ const summarizeRuntimeEvent = (event: AgentRuntimeEvent): string => {
     case "evidence.linked":
       return isEvidencePayload(event.payload) ? `Evidence linked: ${event.payload.evidenceIds.join(", ")}` : "Evidence linked";
     case "metric.updated":
-      if (isMetricPayload(event.payload) && typeof event.payload.metrics.totalTokens === "number") {
-        return `Runtime metrics updated · tokens ${Math.round(event.payload.metrics.totalTokens).toLocaleString("en-US")}`;
+      if (isMetricPayload(event.payload)) {
+        const metrics = normalizeRuntimeMetrics(event.payload.metrics);
+        if (typeof metrics.totalTokens === "number") {
+          return `Runtime metrics updated · tokens ${Math.round(metrics.totalTokens).toLocaleString("en-US")}`;
+        }
       }
       return "Runtime metrics updated";
     case "checkpoint.created":
@@ -97,6 +100,62 @@ const ensureAgentState = (snapshot: AgentRuntimeSnapshot, event: AgentRuntimeEve
 };
 
 const uniqueStrings = (values: string[]): string[] => Array.from(new Set(values));
+
+const metricNumber = (metrics: Record<string, unknown>, keys: string[]): number | undefined => {
+  for (const key of keys) {
+    const value = metrics[key];
+    if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, Math.round(value));
+    if (typeof value === "string" && value.trim()) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) return Math.max(0, Math.round(parsed));
+    }
+  }
+  return undefined;
+};
+
+const normalizeRuntimeMetrics = (metrics: Record<string, unknown>): AgentRuntimeSnapshot["metrics"] => {
+  const promptTokens = metricNumber(metrics, [
+    "promptTokens",
+    "prompt_tokens",
+    "inputTokens",
+    "input_tokens",
+    "inputTokenCount",
+    "input_token_count",
+  ]);
+  const completionTokens = metricNumber(metrics, [
+    "completionTokens",
+    "completion_tokens",
+    "outputTokens",
+    "output_tokens",
+    "outputTokenCount",
+    "output_token_count",
+  ]);
+  const explicitTotalTokens = metricNumber(metrics, ["totalTokens", "total_tokens", "tokenCount", "token_count"]);
+  const inferredTotalTokens =
+    promptTokens !== undefined || completionTokens !== undefined ? (promptTokens ?? 0) + (completionTokens ?? 0) : undefined;
+  const normalized: AgentRuntimeSnapshot["metrics"] = {};
+
+  const llmCalls = metricNumber(metrics, ["llmCalls", "llm_calls", "modelCalls", "model_calls"]);
+  const toolCalls = metricNumber(metrics, ["toolCalls", "tool_calls"]);
+  const generatedReports = metricNumber(metrics, ["generatedReports", "generated_reports"]);
+  const durationSeconds = metricNumber(metrics, ["durationSeconds", "duration_seconds"]);
+  const totalTokens = explicitTotalTokens && explicitTotalTokens > 0 ? explicitTotalTokens : inferredTotalTokens;
+
+  if (llmCalls !== undefined) normalized.llmCalls = llmCalls;
+  if (toolCalls !== undefined) normalized.toolCalls = toolCalls;
+  if (generatedReports !== undefined) normalized.generatedReports = generatedReports;
+  if (durationSeconds !== undefined) normalized.durationSeconds = durationSeconds;
+  if (promptTokens !== undefined) normalized.promptTokens = promptTokens;
+  if (completionTokens !== undefined) normalized.completionTokens = completionTokens;
+  if (totalTokens !== undefined) normalized.totalTokens = totalTokens;
+
+  const estimatedCostUsd = metrics.estimatedCostUsd ?? metrics.estimated_cost_usd;
+  if (typeof estimatedCostUsd === "number" && Number.isFinite(estimatedCostUsd)) {
+    normalized.estimatedCostUsd = estimatedCostUsd;
+  }
+
+  return normalized;
+};
 
 export const createInitialRuntimeSnapshot = (runId: string): AgentRuntimeSnapshot => ({
   runId,
@@ -210,7 +269,7 @@ export const applyRuntimeEvent = (snapshot: AgentRuntimeSnapshot, event: AgentRu
       break;
     case "metric.updated":
       if (isMetricPayload(event.payload)) {
-        next.metrics = { ...next.metrics, ...event.payload.metrics };
+        next.metrics = { ...next.metrics, ...normalizeRuntimeMetrics(event.payload.metrics) };
       }
       break;
     case "checkpoint.created":

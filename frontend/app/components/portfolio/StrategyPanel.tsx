@@ -10,9 +10,12 @@ import {
   getHyperliquidWatchlist,
   updateHyperliquidWatchlist,
 } from '@/lib/api'
+import { listDataSourcesAsync } from '@/entities/data-source/api'
+import type { DataSource } from '@/entities/data-source/model'
 import type { HyperliquidSymbolMeta } from '@/lib/api'
 import { formatDateTime } from '@/lib/dateTime'
 import { useTranslation } from 'react-i18next'
+import { navigateTo } from '@/shared/lib/navigation'
 
 interface StrategyConfig {
   price_threshold: number
@@ -49,6 +52,8 @@ interface StrategyPanelProps {
   accounts?: Array<{ id: number; name: string; model?: string | null }>
   onAccountChange?: (accountId: number) => void
   accountsLoading?: boolean
+  executionVenueMode?: 'exchange' | 'dataSource'
+  onExecutionVenueChange?: (value: string, label: string) => void
 }
 
 // Use formatDateTime from @/lib/dateTime
@@ -64,6 +69,8 @@ export default function StrategyPanel({
   accounts,
   onAccountChange,
   accountsLoading = false,
+  executionVenueMode = 'exchange',
+  onExecutionVenueChange,
 }: StrategyPanelProps) {
   const { t } = useTranslation()
   const [loading, setLoading] = useState(true)
@@ -80,12 +87,16 @@ export default function StrategyPanel({
   const [signalPoolIds, setSignalPoolIds] = useState<number[]>([])
   const [signalPools, setSignalPools] = useState<SignalPool[]>([])
   const [exchange, setExchange] = useState<string>('hyperliquid')
+  const [selectedDataSourceId, setSelectedDataSourceId] = useState<string | null>(null)
+  const [dataSources, setDataSources] = useState<DataSource[]>([])
+  const [dataSourcesLoading, setDataSourcesLoading] = useState(false)
+  const [dataSourcesError, setDataSourcesError] = useState<string | null>(null)
 
   // Global settings
   const [samplingInterval, setSamplingInterval] = useState<string>('18')
   const [availableWatchlistSymbols, setAvailableWatchlistSymbols] = useState<HyperliquidSymbolMeta[]>([])
   const [watchlistSymbols, setWatchlistSymbols] = useState<string[]>([])
-  const [watchlistLoading, setWatchlistLoading] = useState(true)
+  const [watchlistLoading, setWatchlistLoading] = useState(executionVenueMode === 'exchange')
   const [watchlistSaving, setWatchlistSaving] = useState(false)
   const [watchlistError, setWatchlistError] = useState<string | null>(null)
   const [watchlistSuccess, setWatchlistSuccess] = useState<string | null>(null)
@@ -162,13 +173,40 @@ export default function StrategyPanel({
       setWatchlistLoading(false)
     }
   }, [resetWatchlistMessages])
+
+  const fetchConfigurableDataSources = useCallback(async () => {
+    if (executionVenueMode !== 'dataSource') return
+
+    setDataSourcesLoading(true)
+    setDataSourcesError(null)
+    try {
+      const sources = await listDataSourcesAsync()
+      setDataSources(sources.filter((source) => source.status !== 'OUTAGE'))
+    } catch (err) {
+      console.error('Failed to load data sources', err)
+      setDataSources([])
+      setDataSourcesError(err instanceof Error ? err.message : 'Unable to load data sources.')
+    } finally {
+      setDataSourcesLoading(false)
+    }
+  }, [executionVenueMode])
+
   useEffect(() => {
     fetchStrategy()
   }, [fetchStrategy, refreshKey])
 
   useEffect(() => {
+    if (executionVenueMode !== 'exchange') {
+      setWatchlistLoading(false)
+      setWatchlistError(null)
+      return
+    }
     fetchWatchlistConfig()
-  }, [fetchWatchlistConfig, refreshKey])
+  }, [executionVenueMode, fetchWatchlistConfig, refreshKey])
+
+  useEffect(() => {
+    fetchConfigurableDataSources()
+  }, [fetchConfigurableDataSources, refreshKey])
 
   const accountOptions = useMemo(() => {
     if (!accounts || accounts.length === 0) return []
@@ -184,6 +222,27 @@ export default function StrategyPanel({
   }, [accountOptions, accountId, accountName])
 
   const watchlistCount = watchlistSymbols.length
+  const dataSourceOptions = useMemo(() => dataSources.map((source) => ({
+    value: source.sourceId,
+    label: `${source.name} · ${source.vendor}`,
+    status: source.status,
+    type: source.sourceType,
+  })), [dataSources])
+  const selectedDataSourceOption = useMemo(
+    () => dataSourceOptions.find((option) => option.value === selectedDataSourceId),
+    [dataSourceOptions, selectedDataSourceId],
+  )
+
+  useEffect(() => {
+    if (executionVenueMode !== 'dataSource' || dataSourceOptions.length === 0) return
+    if (selectedDataSourceId && dataSourceOptions.some((option) => option.value === selectedDataSourceId)) {
+      onExecutionVenueChange?.(selectedDataSourceId, selectedDataSourceOption?.label ?? selectedDataSourceId)
+      return
+    }
+    const firstOption = dataSourceOptions[0]
+    setSelectedDataSourceId(firstOption.value)
+    onExecutionVenueChange?.(firstOption.value, firstOption.label)
+  }, [dataSourceOptions, executionVenueMode, onExecutionVenueChange, selectedDataSourceId, selectedDataSourceOption?.label])
 
   useEffect(() => {
     resetMessages()
@@ -326,9 +385,11 @@ export default function StrategyPanel({
     <div className="h-full flex flex-col">
       <p className="text-sm text-muted-foreground mb-4">{t('strategy.description', 'Configure trigger parameters and Hyperliquid watchlist')}</p>
       <Tabs defaultValue="strategy" className="flex flex-col h-full flex-1 overflow-hidden">
-          <TabsList className="grid grid-cols-3 max-w-2xl mb-4">
+          <TabsList className={`grid ${executionVenueMode === 'dataSource' ? 'grid-cols-2 max-w-lg' : 'grid-cols-3 max-w-2xl'} mb-4`}>
             <TabsTrigger value="strategy">{t('strategy.aiStrategy', 'AI Strategy')}</TabsTrigger>
-            <TabsTrigger value="watchlist">{t('strategy.symbolWatchlist', 'Symbol Watchlist')}</TabsTrigger>
+            {executionVenueMode === 'exchange' ? (
+              <TabsTrigger value="watchlist">{t('strategy.symbolWatchlist', 'Symbol Watchlist')}</TabsTrigger>
+            ) : null}
             <TabsTrigger value="global">{t('strategy.globalConfig', 'Global Configuration')}</TabsTrigger>
           </TabsList>
           <TabsContent value="strategy" className="flex-1 overflow-y-auto space-y-6">
@@ -383,19 +444,67 @@ export default function StrategyPanel({
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                {/* Exchange Selection */}
+                {/* Exchange / Data Source Selection */}
                 <section className="space-y-2">
-                  <div className="text-xs text-muted-foreground uppercase tracking-wide">{t('strategy.exchange', 'Exchange')}</div>
-                  <Select value={exchange} onValueChange={(value) => { setExchange(value); resetMessages() }}>
+                  <div className="text-xs text-muted-foreground uppercase tracking-wide">
+                    {executionVenueMode === 'dataSource'
+                      ? t('strategy.dataSource', 'Data Source')
+                      : t('strategy.exchange', 'Exchange')}
+                  </div>
+                  <Select
+                    value={executionVenueMode === 'dataSource' ? selectedDataSourceId ?? '' : exchange}
+                    onValueChange={(value) => {
+                      resetMessages()
+                      if (executionVenueMode === 'dataSource') {
+                        setSelectedDataSourceId(value)
+                        const option = dataSourceOptions.find((item) => item.value === value)
+                        onExecutionVenueChange?.(value, option?.label ?? value)
+                        return
+                      }
+                      setExchange(value)
+                    }}
+                    disabled={executionVenueMode === 'dataSource' && dataSourcesLoading}
+                  >
                     <SelectTrigger className="w-full">
-                      <SelectValue placeholder={t('strategy.selectExchange', 'Select exchange')} />
+                      <SelectValue
+                        placeholder={
+                          executionVenueMode === 'dataSource'
+                            ? t('strategy.selectDataSource', 'Select data source')
+                            : t('strategy.selectExchange', 'Select exchange')
+                        }
+                      />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="hyperliquid">{t('strategy.exchangeHyperliquid', 'Hyperliquid')}</SelectItem>
-                      <SelectItem value="binance">{t('strategy.exchangeBinance', 'Binance')}</SelectItem>
+                      {executionVenueMode === 'dataSource' ? (
+                        dataSourceOptions.length > 0 ? (
+                          dataSourceOptions.map((source) => (
+                            <SelectItem key={source.value} value={source.value}>
+                              {source.label} · {source.type} · {source.status}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="__no_data_sources__" disabled>
+                            {dataSourcesLoading
+                              ? t('strategy.loadingDataSources', 'Loading data sources...')
+                              : t('strategy.noDataSources', 'No configurable data sources')}
+                          </SelectItem>
+                        )
+                      ) : (
+                        <>
+                          <SelectItem value="hyperliquid">{t('strategy.exchangeHyperliquid', 'Hyperliquid')}</SelectItem>
+                          <SelectItem value="binance">{t('strategy.exchangeBinance', 'Binance')}</SelectItem>
+                        </>
+                      )}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">{t('strategy.exchangeHint', 'Select exchange for market data and trade execution')}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {executionVenueMode === 'dataSource'
+                      ? t('strategy.dataSourceHint', 'Select the AlphaTrace data source used for market data and research context.')
+                      : t('strategy.exchangeHint', 'Select exchange for market data and trade execution')}
+                  </p>
+                  {executionVenueMode === 'dataSource' && dataSourcesError ? (
+                    <p className="text-xs text-destructive">{dataSourcesError}</p>
+                  ) : null}
                 </section>
 
                 <section className="space-y-2">
@@ -509,6 +618,7 @@ export default function StrategyPanel({
               </>
             )}
           </TabsContent>
+          {executionVenueMode === 'exchange' ? (
           <TabsContent value="watchlist" className="flex-1 overflow-y-auto space-y-4">
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <div className="text-muted-foreground mb-4">
@@ -519,15 +629,13 @@ export default function StrategyPanel({
               </div>
               <Button
                 variant="outline"
-                onClick={() => {
-                  window.location.hash = 'settings'
-                  window.location.reload()
-                }}
+                onClick={() => navigateTo('/settings')}
               >
                 {t('strategy.goToSettings', 'Go to Settings')}
               </Button>
             </div>
           </TabsContent>
+          ) : null}
           <TabsContent value="global" className="flex-1 overflow-y-auto space-y-4">
             {loading ? (
               <div className="text-sm text-muted-foreground">{t('strategy.loadingConfig', 'Loading configuration…')}</div>

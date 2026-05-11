@@ -6,9 +6,15 @@ from typing import Any, Iterable
 from services.integration_adapters.base import IntegrationAdapter
 from services.integration_adapters.bocha_adapter import BochaDataProviderAdapter
 from services.integration_adapters.langalpha_workbench_adapter import LangAlphaExternalWorkbenchAdapter
+from services.integration_adapters.lixinger_adapter import LixingerDataProviderAdapter
 from services.integration_adapters.market_data_adapter import ProfessionalMarketDataProviderAdapter, StaticMarketDataProviderAdapter
 from services.integration_adapters.qwen_model_adapter import QwenModelProviderAdapter
-from services.integration_adapters.tool_adapters import EvidenceRetrieveToolAdapter, MarketContextToolAdapter
+from services.integration_adapters.tool_adapters import (
+    BochaSearchToolAdapter,
+    EvidenceRetrieveToolAdapter,
+    MarketContextToolAdapter,
+    PreparedDataQueryToolAdapter,
+)
 
 
 class IntegrationAdapterRegistry:
@@ -54,9 +60,12 @@ def build_default_integration_registry() -> IntegrationAdapterRegistry:
     registry = IntegrationAdapterRegistry()
     registry.register(BochaDataProviderAdapter())
     registry.register(StaticMarketDataProviderAdapter())
+    registry.register(LixingerDataProviderAdapter())
     registry.register(ProfessionalMarketDataProviderAdapter())
     registry.register(QwenModelProviderAdapter())
     registry.register(EvidenceRetrieveToolAdapter())
+    registry.register(PreparedDataQueryToolAdapter())
+    registry.register(BochaSearchToolAdapter())
     registry.register(MarketContextToolAdapter())
     registry.register(LangAlphaExternalWorkbenchAdapter())
     return registry

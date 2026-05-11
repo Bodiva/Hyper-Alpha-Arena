@@ -1,3 +1,5 @@
+import type { ResearchArtifactType, ResearchRunType } from "../research-workspace/taxonomy";
+
 export type AgentTeam =
   | "ANALYST_TEAM"
   | "RESEARCH_TEAM"
@@ -22,6 +24,7 @@ export type AgentRole =
   | "LIQUIDITY_ANALYST"
   | "CONCENTRATION_ANALYST"
   | "SCENARIO_ANALYST"
+  | "RISK_ANALYST"
   | "PORTFOLIO_MANAGER";
 
 export type AgentStatus = "IDLE" | "RUNNING" | "COMPLETED" | "FAILED" | "CANCELLED";
@@ -71,6 +74,7 @@ export interface AgentReport {
   title: string;
   summary: string;
   createdAt: string;
+  artifactType?: ResearchArtifactType;
 }
 
 export type AgentDecisionAction =
@@ -93,6 +97,31 @@ export interface AgentDecision {
   triggerConditions?: string[];
   invalidationConditions?: string[];
   observationIndicators?: string[];
+}
+
+export interface DecisionTraceStep {
+  stepId: string;
+  title: string;
+  agentName?: string;
+  artifactIds: string[];
+  evidenceIds: string[];
+  summary: string;
+  status: "pending" | "completed" | "needs_review";
+}
+
+export interface DecisionTrace {
+  traceId: string;
+  runId: string;
+  researchRunType?: ResearchRunType;
+  artifactIds: string[];
+  evidenceIds: string[];
+  conclusion: string;
+  supportSummary: string;
+  riskSummary: string;
+  openQuestions: string[];
+  reviewStatus: "pending" | "approved" | "rejected" | "needs_revision";
+  steps: DecisionTraceStep[];
+  createdAt: string;
 }
 
 export type AgentEvent =
@@ -187,6 +216,7 @@ export interface AgentRun {
   name: string;
   target: string;
   taskType: AgentRunTaskType;
+  researchRunType?: ResearchRunType;
   riskLevel: "LOW" | "MEDIUM" | "HIGH";
   status: AgentRunStatus;
   assetIds: string[];
@@ -202,6 +232,7 @@ export interface AgentRun {
   events: AgentEvent[];
   evidenceIds: string[];
   finalDecision: AgentDecision;
+  decisionTrace?: DecisionTrace;
   metrics: AgentRunMetrics;
 }
 

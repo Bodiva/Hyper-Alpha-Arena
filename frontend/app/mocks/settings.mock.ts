@@ -60,6 +60,7 @@ export interface PagePreferenceConfig {
   showResearchWorkspaceNav: boolean;
   showRiskWarnings: boolean;
   showEvidenceTrace: boolean;
+  hideAutomationTradingOps: boolean;
 }
 
 export interface SettingsMock {
@@ -237,5 +238,6 @@ export const settingsMock: SettingsMock = {
     showResearchWorkspaceNav: true,
     showRiskWarnings: true,
     showEvidenceTrace: true,
+    hideAutomationTradingOps: false,
   },
 };

@@ -49,6 +49,16 @@ _TOOL_CONTRACTS: Dict[str, AgentToolContract] = {
         output_class="portfolio_context",
         description="Loads AlphaTrace portfolio detail, holdings, recommendations, strategies, and evidence links.",
     ),
+    "prepared_data.query": AgentToolContract(
+        tool_name="prepared_data.query",
+        display_name="Prepared Data Query",
+        category="prepared_data",
+        source="alphatrace_data_catalog",
+        auth_mode="none",
+        timeout_policy="local_read_bounded",
+        output_class="market_context_and_evidence_items",
+        description="Queries AlphaTrace prepared data from static stores and ClickHouse catalog, then maps it into model-ready context and evidence.",
+    ),
     "evidence.retrieve": AgentToolContract(
         tool_name="evidence.retrieve",
         display_name="Evidence Retriever",

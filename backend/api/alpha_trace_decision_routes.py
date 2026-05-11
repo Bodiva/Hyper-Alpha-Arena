@@ -17,6 +17,30 @@ from services.decision_store.decision_store import get_agent_run_decision_store
 router = APIRouter(prefix="/api/alpha-trace/decisions", tags=["AlphaTrace Decisions"])
 
 
+def _truncate_text(value: str, limit: int = 420) -> str:
+    return value if len(value) <= limit else f"{value[:limit].rstrip()}..."
+
+
+def _compact_decision_item(item: AlphaTraceDecisionItem) -> AlphaTraceDecisionItem:
+    attribution = item.attribution.model_copy(
+        update={
+            "summary": _truncate_text(item.attribution.summary, 260),
+            "factors": [],
+            "riskReview": {},
+            "mistakeReview": None,
+            "agentContributions": [],
+            "learningPoints": [],
+        }
+    )
+    return item.model_copy(
+        update={
+            "thesis": _truncate_text(item.thesis),
+            "risks": item.risks[:3],
+            "attribution": attribution,
+        }
+    )
+
+
 @router.get("", response_model=DecisionListResponse)
 def list_alpha_trace_decisions(
     assetId: Optional[str] = Query(None),
@@ -26,6 +50,7 @@ def list_alpha_trace_decisions(
     horizon: Optional[str] = Query(None),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    compact: bool = Query(False),
 ):
     store = get_agent_run_decision_store()
     items = store.list_decisions(
@@ -44,6 +69,8 @@ def list_alpha_trace_decisions(
         action=action,
         horizon=horizon,
     )
+    if compact:
+        items = [_compact_decision_item(item) for item in items]
     return DecisionListResponse(items=items, total=total, limit=limit, offset=offset)
 
 

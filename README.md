@@ -164,6 +164,69 @@ docker compose up -d --build # (or docker-compose up -d --build)
 - Data will be preserved when you stop/restart containers
 - Only `docker-compose down -v` will delete data (don't use `-v` flag unless you want to reset everything)
 
+### ClickHouse SSH Tunnel Smoke Tests
+
+These scripts validate a ClickHouse instance that is bound to `127.0.0.1` on a remote ECS host. Do not expose ClickHouse ports to the public internet; use an SSH tunnel from your local machine.
+
+Open the HTTP tunnel:
+
+```bash
+pnpm clickhouse:tunnel
+# or:
+# ssh -N -L 18123:127.0.0.1:18123 root@120.27.194.30
+```
+
+If you also need the native TCP port:
+
+```bash
+pnpm clickhouse:tunnel:native
+# or:
+# ssh -N -L 18123:127.0.0.1:18123 -L 19000:127.0.0.1:19000 root@120.27.194.30
+```
+
+Configure `.env`:
+
+```bash
+CLICKHOUSE_HOST=127.0.0.1
+CLICKHOUSE_PORT=18123
+CLICKHOUSE_USER=admin
+CLICKHOUSE_PASSWORD=<your-clickhouse-password>
+CLICKHOUSE_DATABASE=monitor
+```
+
+Install backend dependencies, then initialize the database and smoke table:
+
+```bash
+pnpm install:all
+pnpm clickhouse:init
+```
+
+Insert two test rows:
+
+```bash
+pnpm clickhouse:insert-test
+```
+
+Run the aggregation check:
+
+```bash
+pnpm clickhouse:query-test
+```
+
+The query script runs:
+
+```sql
+SELECT
+    domain,
+    count() AS total,
+    avg(latency_ms) AS avg_latency
+FROM monitor.url_check_log
+GROUP BY domain
+ORDER BY total DESC;
+```
+
+If any ClickHouse command cannot connect, first check that the SSH tunnel is still running and that local port `18123` is not occupied by another process. If the port is open but HTTP returns an empty or prematurely ended response, check the ClickHouse container `listen_host` setting; Docker port mapping will not reach ClickHouse HTTP if the server only listens on `127.0.0.1` inside the container.
+
 ## First-Time Setup
 
 For detailed setup instructions including:

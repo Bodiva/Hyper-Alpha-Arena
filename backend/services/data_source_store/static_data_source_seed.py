@@ -4,7 +4,7 @@ from typing import Dict, List
 
 
 def get_static_data_source_seed() -> List[Dict[str, object]]:
-    """AlphaTrace-governed data source seed for MVP/demo mode.
+    """AlphaTrace-governed data source bootstrap records.
 
     These records describe data origins and governance state; they do not imply
     real-time subscriptions or production-grade vendor integrations.
@@ -49,10 +49,10 @@ def get_static_data_source_seed() -> List[Dict[str, object]]:
         },
         {
             "sourceId": "ds_alphatrace_static_evidence_seed",
-            "name": "AlphaTrace Static Evidence Seed",
+            "name": "AlphaTrace Development Evidence Fixture",
             "sourceType": "DATABASE_SYNC",
-            "vendor": "AlphaTrace MVP Seed",
-            "status": "HEALTHY",
+            "vendor": "AlphaTrace Development Fixture",
+            "status": "PAUSED",
             "reliabilityScore": 82,
             "qualityScore": 84,
             "lastSyncAt": "2026-05-05T08:00:00+08:00",
@@ -60,30 +60,30 @@ def get_static_data_source_seed() -> List[Dict[str, object]]:
             "supportedAssetTypes": ["ETF", "FUND", "FUTURE", "INDEX"],
             "dataCategories": ["NEWS", "ANNOUNCEMENT", "RESEARCH_REPORT", "MACRO_DATA", "MARKET_DATA"],
             "evidenceSources": [
-                "Fund Disclosure Static Sample",
-                "Macro Static Dataset",
-                "Broker Research Static Sample",
-                "AlphaTrace Static Market Feed",
+                "Fund Disclosure Fixture",
+                "Macro Fixture Dataset",
+                "Broker Research Fixture",
+                "AlphaTrace Market Fixture",
             ],
-            "description": "Static evidence corpus used for deterministic AlphaTrace MVP demos and fallback retrieval.",
-            "configState": "configured",
+            "description": "Development-only evidence fixture. Product retrieval should prefer ClickHouse catalog evidence and Bocha external search when configured.",
+            "configState": "development_only",
             "governanceNotes": [
-                "Development seed, not an external real-time feed.",
-                "Used as fallback when external search is disabled or unavailable.",
+                "Development fixture, not an external real-time feed.",
+                "Do not present this source as production truth.",
             ],
             "recentTasks": [
                 {
                     "taskId": "task_static_evidence_seed_load",
-                    "taskName": "Load static evidence seed",
+                    "taskName": "Load development evidence fixture",
                     "taskType": "SEED_LOAD",
-                    "status": "SUCCESS",
+                    "status": "PAUSED",
                     "startedAt": "2026-05-05T08:00:00+08:00",
                     "endedAt": "2026-05-05T08:00:01+08:00",
                     "durationSeconds": 1,
                     "recordsFetched": 10,
                     "recordsSucceeded": 10,
                     "recordsFailed": 0,
-                    "message": "Static evidence seed available.",
+                    "message": "Development evidence fixture is not a product data source.",
                 }
             ],
         },
@@ -104,7 +104,7 @@ def get_static_data_source_seed() -> List[Dict[str, object]]:
             "configState": "configured_or_env_required",
             "governanceNotes": [
                 "External search results keep source URL as canonical evidence.",
-                "Search failures must fall back to static evidence and must not fail AgentRun.",
+                "Search failures should be surfaced as unavailable/degraded instead of silently substituting fixture data.",
             ],
             "recentTasks": [
                 {
@@ -124,36 +124,36 @@ def get_static_data_source_seed() -> List[Dict[str, object]]:
         },
         {
             "sourceId": "ds_alphatrace_static_market_data",
-            "name": "AlphaTrace Static Market Data Seed",
+            "name": "AlphaTrace Development Market Data Fixture",
             "sourceType": "DATABASE_SYNC",
-            "vendor": "AlphaTrace MVP Seed",
-            "status": "HEALTHY",
+            "vendor": "AlphaTrace Development Fixture",
+            "status": "PAUSED",
             "reliabilityScore": 76,
             "qualityScore": 78,
             "lastSyncAt": "2026-05-05T08:00:00+08:00",
             "syncFrequency": "ON_DEMAND",
             "supportedAssetTypes": ["ETF", "FUND", "FUTURE", "INDEX"],
             "dataCategories": ["MARKET_DATA", "FUTURES_STRUCTURE"],
-            "evidenceSources": ["AlphaTrace Static Market Feed"],
-            "description": "Static quote/snapshot/kline/indicator seed for ETF/fund/index/future demos.",
-            "configState": "configured",
+            "evidenceSources": ["AlphaTrace Market Fixture"],
+            "description": "Development-only quote/snapshot/kline/indicator fixture. Product market data should come from ClickHouse or a configured provider.",
+            "configState": "development_only",
             "governanceNotes": [
                 "Not a real-time market data subscription.",
-                "Professional ETF/fund/index data providers are planned after MVP stabilization.",
+                "Do not present this source as production truth.",
             ],
             "recentTasks": [
                 {
                     "taskId": "task_market_seed_load",
-                    "taskName": "Load static market data seed",
+                    "taskName": "Load development market data fixture",
                     "taskType": "SEED_LOAD",
-                    "status": "SUCCESS",
+                    "status": "PAUSED",
                     "startedAt": "2026-05-05T08:00:00+08:00",
                     "endedAt": "2026-05-05T08:00:01+08:00",
                     "durationSeconds": 1,
                     "recordsFetched": 8,
                     "recordsSucceeded": 8,
                     "recordsFailed": 0,
-                    "message": "Static market context available.",
+                    "message": "Development market fixture is not a product data source.",
                 }
             ],
         },

@@ -49,6 +49,8 @@ from services.agent_skill_catalog import get_agent_skill_catalog
 from services.backend_module_boundaries import get_backend_module_boundary_catalog
 from services.clickhouse_schema_catalog import get_clickhouse_schema_catalog
 from services.clickhouse_agent_run_projection import build_agent_run_clickhouse_projection
+from services.clickhouse_agent_run_writer import write_agent_run_clickhouse_projection
+from services.clickhouse_business_store import ClickHouseStoreError
 from services.data_center_catalog import get_data_center_catalog
 from services.external_component_catalog import get_external_component_catalog
 from services.integration_decision_guide import get_integration_decision_guide
@@ -74,8 +76,59 @@ from services.runtime_readiness import get_runtime_readiness_summary
 router = APIRouter(prefix="/api/alpha-trace/agent-runs", tags=["AlphaTrace Agent Runtime"])
 
 
+def _is_alphatrace_mysql_profile() -> bool:
+    return os.getenv("ALPHA_TRACE_DOMAIN_STORE", "").strip().lower() == "mysql"
+
+
+def _get_runtime_db():
+    if _is_alphatrace_mysql_profile():
+        yield None
+        return
+    yield from get_db()
+
+
 def _not_found(run_id: str) -> HTTPException:
     return HTTPException(status_code=404, detail=f"Agent Run not found: {run_id}")
+
+
+def _safe_response_value(value: Any, seen: set[int] | None = None) -> Any:
+    """Return a JSON-safe tree even if runtime payloads contain accidental object cycles."""
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+
+    seen = seen or set()
+    if isinstance(value, dict):
+        value_id = id(value)
+        if value_id in seen:
+            return "[Circular]"
+        seen.add(value_id)
+        try:
+            return {str(key): _safe_response_value(item, seen) for key, item in value.items()}
+        finally:
+            seen.remove(value_id)
+
+    if isinstance(value, (list, tuple, set)):
+        value_id = id(value)
+        if value_id in seen:
+            return ["[Circular]"]
+        seen.add(value_id)
+        try:
+            return [_safe_response_value(item, seen) for item in value]
+        finally:
+            seen.remove(value_id)
+
+    model_fields = getattr(value, "model_fields", None)
+    if model_fields:
+        value_id = id(value)
+        if value_id in seen:
+            return "[Circular]"
+        seen.add(value_id)
+        try:
+            return {field_name: _safe_response_value(getattr(value, field_name), seen) for field_name in model_fields}
+        finally:
+            seen.remove(value_id)
+
+    return str(value)
 
 
 _SECRET_PATTERNS = [
@@ -199,7 +252,7 @@ def _check_tradingagents_import(raw_path: str) -> tuple[bool, str]:
 
 
 @router.get("/runners/status")
-def get_agent_runner_status_endpoint(db: Session = Depends(get_db)):
+def get_agent_runner_status_endpoint(db: Optional[Session] = Depends(_get_runtime_db)):
     runtime_config = get_runtime_config_facade().snapshot(db)
     qwen_runtime = runtime_config["qwen"]
     tradingagents_runtime = runtime_config["tradingagents"]
@@ -374,7 +427,7 @@ def get_agent_runtime_integrations_endpoint():
 
 
 @router.get("/runtime/config")
-def get_agent_runtime_config_endpoint(db: Session = Depends(get_db)):
+def get_agent_runtime_config_endpoint(db: Optional[Session] = Depends(_get_runtime_db)):
     return {
         "config": get_runtime_config_facade().snapshot(db),
         "message": "Runtime configuration diagnostics are sanitized. No raw API keys or encrypted secret values are returned.",
@@ -446,17 +499,17 @@ def get_agent_runtime_agent_skill_bindings_endpoint():
 def get_agent_runtime_clickhouse_schema_catalog_endpoint():
     return {
         **get_clickhouse_schema_catalog().to_response(),
-        "message": "ClickHouse schema catalog describes planned structured business and analytical projections. It does not connect to ClickHouse yet.",
+        "message": "ClickHouse schema catalog describes structured business and analytical projections. AgentRun projections now have an explicit opt-in write endpoint; normal preview endpoints remain side-effect free.",
     }
 
 
 @router.get("/runtime/readiness")
-def get_agent_runtime_readiness_endpoint(db: Session = Depends(get_db)):
+def get_agent_runtime_readiness_endpoint(db: Optional[Session] = Depends(_get_runtime_db)):
     return get_runtime_readiness_summary(db)
 
 
 @router.get("/runtime/model-providers")
-def get_agent_runtime_model_providers_endpoint(db: Session = Depends(get_db)):
+def get_agent_runtime_model_providers_endpoint(db: Optional[Session] = Depends(_get_runtime_db)):
     return {
         **list_model_provider_descriptors(db),
         "message": "Model provider diagnostics describe backend model boundaries and contain no raw credentials.",
@@ -547,7 +600,7 @@ def get_agent_runtime_tasks_endpoint(limit: int = Query(50, ge=1, le=200)):
 @router.get("/runtime/store-health")
 def get_agent_runtime_store_health_endpoint():
     """Return safe AlphaTrace runtime/config store health without secrets."""
-    store_type = (os.getenv("ALPHA_TRACE_AGENT_RUN_STORE") or "json").strip().lower()
+    store_type = (os.getenv("ALPHA_TRACE_AGENT_RUN_STORE") or "mysql").strip().lower()
     result: dict[str, Any] = {
         "agentRunStore": {
             "configuredType": store_type,
@@ -743,6 +796,38 @@ def get_agent_run_clickhouse_projection_preview_endpoint(
     return projection.to_response(sample_limit=sampleLimit)
 
 
+@router.post("/{run_id}/clickhouse-projection/write")
+def write_agent_run_clickhouse_projection_endpoint(
+    run_id: str,
+    replaceExisting: bool = Query(True),
+    sampleLimit: int = Query(3, ge=0, le=20),
+):
+    run = get_agent_run(run_id)
+    if not run:
+        raise _not_found(run_id)
+    projection = build_agent_run_clickhouse_projection(
+        run=run,
+        events=get_agent_run_events(run_id),
+        reports=get_agent_run_reports(run_id),
+        evidence=get_agent_run_evidence(run_id),
+        decision=get_agent_run_decision(run_id),
+    )
+    try:
+        write_result = write_agent_run_clickhouse_projection(
+            projection,
+            replace_existing=replaceExisting,
+        )
+    except ClickHouseStoreError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"ClickHouse projection write failed: {exc}",
+        ) from exc
+    return {
+        **write_result.to_response(),
+        "projection": projection.to_response(sample_limit=sampleLimit),
+    }
+
+
 @router.get("", response_model=AgentRunListResponse)
 def list_agent_runs_endpoint(
     assetId: Optional[str] = Query(None),
@@ -770,14 +855,14 @@ def get_agent_run_endpoint(run_id: str):
     run = get_agent_run(run_id)
     if not run:
         raise _not_found(run_id)
-    return run
+    return _safe_response_value(run)
 
 
 @router.get("/{run_id}/events", response_model=list[AgentRuntimeEvent])
 def get_agent_run_events_endpoint(run_id: str):
     if not get_agent_run(run_id):
         raise _not_found(run_id)
-    return get_agent_run_events(run_id)
+    return _safe_response_value(get_agent_run_events(run_id))
 
 
 @router.get("/{run_id}/reports", response_model=list[AgentReport])
@@ -810,7 +895,8 @@ def stream_agent_run_events_endpoint(run_id: str, after: int = Query(0, ge=0)):
     async def event_generator():
         last_sequence = after
         idle_ticks = 0
-        max_idle_ticks = 360
+        heartbeat_ticks = 0
+        max_idle_ticks = 7200
 
         while True:
             run = get_agent_run(run_id)
@@ -822,7 +908,7 @@ def stream_agent_run_events_endpoint(run_id: str, after: int = Query(0, ge=0)):
             new_events = [event for event in get_agent_run_events(run_id) if event.sequence > last_sequence]
             for event in new_events:
                 yield f"event: {event.type}\n"
-                yield f"data: {json.dumps(event.model_dump(), ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps(_safe_response_value(event), ensure_ascii=False)}\n\n"
                 last_sequence = max(last_sequence, event.sequence)
                 idle_ticks = 0
 
@@ -835,6 +921,11 @@ def stream_agent_run_events_endpoint(run_id: str, after: int = Query(0, ge=0)):
                 return
 
             idle_ticks += 1
+            heartbeat_ticks += 1
+            if heartbeat_ticks >= 20:
+                yield f": heartbeat {json.dumps({'runId': run_id, 'status': run.status}, ensure_ascii=False)}\n\n"
+                heartbeat_ticks = 0
+
             if idle_ticks >= max_idle_ticks:
                 yield "event: done\n"
                 yield f"data: {json.dumps({'runId': run_id, 'status': run.status, 'message': 'SSE stream idle timeout'}, ensure_ascii=False)}\n\n"
@@ -858,7 +949,7 @@ def create_demo_agent_run_endpoint(request: CreateDemoAgentRunRequest):
 
 
 @router.post("/submit", response_model=SubmitAgentRunResponse)
-def submit_agent_run_endpoint(request: SubmitAgentRunRequest, db: Session = Depends(get_db)):
+def submit_agent_run_endpoint(request: SubmitAgentRunRequest, db: Optional[Session] = Depends(_get_runtime_db)):
     try:
         return submit_agent_run(request, db=db)
     except AgentRunnerConfigurationError as exc:
@@ -880,7 +971,7 @@ def cancel_agent_run_endpoint(run_id: str):
 
 
 @router.post("/{run_id}/retry", response_model=SubmitAgentRunResponse)
-def retry_agent_run_endpoint(run_id: str, db: Session = Depends(get_db)):
+def retry_agent_run_endpoint(run_id: str, db: Optional[Session] = Depends(_get_runtime_db)):
     try:
         response = retry_agent_run(run_id, db=db)
     except ValueError as exc:

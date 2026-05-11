@@ -17,6 +17,8 @@ Endpoints:
 - PUT  /api/hyper-ai/tools/{tool_name}/config - Save tool configuration
 - DELETE /api/hyper-ai/tools/{tool_name}/config - Remove tool configuration
 """
+import os
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
@@ -39,6 +41,10 @@ from services.hyper_ai_llm_providers import get_all_providers, get_provider
 from services.ai_stream_service import get_buffer_manager
 
 router = APIRouter(prefix="/api/hyper-ai", tags=["Hyper AI"])
+
+
+def _alphatrace_mysql_profile() -> bool:
+    return os.getenv("ALPHA_TRACE_DOMAIN_STORE", "").strip().lower() == "mysql"
 
 
 # Request/Response models
@@ -87,6 +93,27 @@ def list_providers():
 @router.get("/profile")
 def get_profile(db: Session = Depends(get_db)):
     """Get user profile including LLM config status and trading preferences."""
+    if _alphatrace_mysql_profile():
+        from services.system_config_store import get_mysql_system_config_store
+
+        llm_config = get_mysql_system_config_store().get_llm_config()
+        return {
+            "llm_configured": bool(llm_config.get("configured")),
+            "llm_api_key_available": bool(llm_config.get("api_key_available")),
+            "llm_config_source": llm_config.get("source"),
+            "llm_provider": llm_config.get("provider") or "custom",
+            "llm_model": llm_config.get("model") or "",
+            "llm_base_url": llm_config.get("base_url") or "",
+            "onboarding_completed": True,
+            "nickname": "AlphaTrace",
+            "trading_style": None,
+            "risk_preference": None,
+            "experience_level": None,
+            "preferred_symbols": [],
+            "preferred_timeframe": None,
+            "capital_scale": None,
+        }
+
     profile = get_or_create_profile(db)
     llm_config = get_llm_config(db)
 
@@ -536,12 +563,18 @@ def toggle_skill(skill_name: str, body: SkillToggleRequest, db: Session = Depend
 def list_tools(db: Session = Depends(get_db)):
     """List all registered external tools with their config status."""
     from services.hyper_ai_tool_registry import (
-        EXTERNAL_TOOL_REGISTRY, get_tool_configs,
+        EXTERNAL_TOOL_REGISTRY, get_custom_tool_registry, get_tool_configs,
     )
 
-    configs = get_tool_configs(db)
+    if _alphatrace_mysql_profile():
+        from services.system_config_store import get_mysql_system_config_store
+
+        configs = get_mysql_system_config_store().get_tool_configs()
+    else:
+        configs = get_tool_configs(db)
     tools = []
-    for name, meta in EXTERNAL_TOOL_REGISTRY.items():
+    registry = {**EXTERNAL_TOOL_REGISTRY, **get_custom_tool_registry(configs)}
+    for name, meta in registry.items():
         tool_cfg = configs.get(name, {})
         has_key = bool(tool_cfg.get("api_key_encrypted"))
         config_source = tool_cfg.get("source") or ("legacy_hyper_ai_profile" if has_key else "missing")
@@ -575,11 +608,34 @@ async def save_tool_config(
 ):
     """Save configuration for an external tool. Optionally validates the key."""
     from services.hyper_ai_tool_registry import (
-        EXTERNAL_TOOL_REGISTRY, TOOL_VALIDATORS, set_tool_api_key,
+        EXTERNAL_TOOL_REGISTRY,
+        TOOL_VALIDATORS,
+        normalize_custom_tool_name,
+        set_custom_tool_config,
+        set_tool_api_key,
     )
 
-    if tool_name not in EXTERNAL_TOOL_REGISTRY:
+    is_custom_tool = tool_name.startswith("custom_")
+    if tool_name not in EXTERNAL_TOOL_REGISTRY and not is_custom_tool:
         raise HTTPException(status_code=404, detail=f"Tool '{tool_name}' not found")
+
+    if is_custom_tool:
+        display_name = str(body.config.get("display_name") or body.config.get("name") or "").strip()
+        api_url = str(body.config.get("api_url") or body.config.get("api") or "").strip()
+        api_key = str(body.config.get("api_key") or "").strip()
+        if not display_name:
+            raise HTTPException(status_code=400, detail="Tool name is required")
+        if not api_url:
+            raise HTTPException(status_code=400, detail="API URL is required")
+        normalized_name = normalize_custom_tool_name(tool_name if tool_name != "custom_new" else display_name)
+        set_custom_tool_config(
+            db,
+            normalized_name,
+            display_name=display_name,
+            api_url=api_url,
+            api_key=api_key or None,
+        )
+        return {"success": True, "tool_name": normalized_name}
 
     api_key = body.config.get("api_key", "").strip()
     if not api_key:
@@ -602,7 +658,7 @@ def delete_tool_config(tool_name: str, db: Session = Depends(get_db)):
         EXTERNAL_TOOL_REGISTRY, remove_tool_config,
     )
 
-    if tool_name not in EXTERNAL_TOOL_REGISTRY:
+    if tool_name not in EXTERNAL_TOOL_REGISTRY and not tool_name.startswith("custom_"):
         raise HTTPException(status_code=404, detail=f"Tool '{tool_name}' not found")
 
     remove_tool_config(db, tool_name)

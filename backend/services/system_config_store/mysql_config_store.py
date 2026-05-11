@@ -24,7 +24,12 @@ class MysqlSystemConfigStore:
 
     def __init__(self, database_url: Optional[str] = None) -> None:
         self.database_url = database_url or get_mysql_domain_database_url()
-        self.engine: Engine = create_engine(self.database_url, pool_pre_ping=True, pool_recycle=1800)
+        self.engine: Engine = create_engine(
+            self.database_url,
+            pool_pre_ping=True,
+            pool_recycle=1800,
+            connect_args={"connect_timeout": 2, "read_timeout": 2, "write_timeout": 2},
+        )
         self.metadata = MetaData()
         self.configs = Table(
             "alpha_trace_system_configs",

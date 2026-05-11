@@ -3,12 +3,13 @@ import { useEffect, useRef, useState } from "react";
 interface TypewriterOptions {
   enabled?: boolean;
   charsPerTick?: number;
+  maxCharsPerTick?: number;
   intervalMs?: number;
 }
 
 export const useTypewriterStream = (
   targetText: string,
-  { enabled = true, charsPerTick = 4, intervalMs = 24 }: TypewriterOptions = {},
+  { enabled = true, charsPerTick = 12, maxCharsPerTick = 80, intervalMs = 16 }: TypewriterOptions = {},
 ): string => {
   const [visibleText, setVisibleText] = useState(targetText);
   const latestVisibleRef = useRef(visibleText);
@@ -45,7 +46,10 @@ export const useTypewriterStream = (
           return previous;
         }
 
-        const nextLength = Math.min(targetText.length, previous.length + charsPerTick);
+        const remaining = targetText.length - previous.length;
+        const adaptiveStep = Math.max(charsPerTick, Math.ceil(remaining / 8));
+        const step = Math.min(maxCharsPerTick, adaptiveStep);
+        const nextLength = Math.min(targetText.length, previous.length + step);
         const next = targetText.slice(0, nextLength);
         latestVisibleRef.current = next;
         return next;
@@ -57,4 +61,3 @@ export const useTypewriterStream = (
 
   return visibleText;
 };
-

@@ -5,19 +5,11 @@ import { ExternalLink } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
-  getPromptTemplates,
-  updatePromptTemplate,
-  upsertPromptBinding,
-  deletePromptBinding,
-  getAccounts,
-  createPromptTemplate,
-  copyPromptTemplate,
-  deletePromptTemplate,
-  updatePromptTemplateName,
-  getVariablesReference,
+  legacyPromptWorkspaceApi,
   PromptTemplate,
   PromptBinding,
   TradingAccount,
+  type PromptWorkspaceApi,
 } from '@/lib/api'
 import { STRATEGY_RADAR_URL } from '@/lib/strategyRadar'
 import { useFeatures } from '@/contexts/FeatureContext'
@@ -54,7 +46,15 @@ const DEFAULT_BINDING_FORM: BindingFormState = {
   promptTemplateId: undefined,
 }
 
-export default function PromptManager() {
+interface PromptManagerProps {
+  api?: PromptWorkspaceApi
+  workspaceLabel?: string
+}
+
+export default function PromptManager({
+  api = legacyPromptWorkspaceApi,
+  workspaceLabel,
+}: PromptManagerProps) {
   const { t, i18n } = useTranslation()
   const [templates, setTemplates] = useState<PromptTemplate[]>([])
   const [bindings, setBindings] = useState<PromptBinding[]>([])
@@ -119,6 +119,7 @@ export default function PromptManager() {
   }, [i18n.language])
 
   const { entitlements } = useFeatures()
+  const canUseAiPromptGenerator = entitlements.canUsePromptGenerator && api.aiPromptChatAvailable
 
   const selectedTemplate = useMemo(
     () => templates.find((tpl) => tpl.id === selectedId) || null,
@@ -128,7 +129,7 @@ export default function PromptManager() {
   const loadTemplates = async () => {
     setLoading(true)
     try {
-      const data = await getPromptTemplates()
+      const data = await api.getPromptTemplates()
       setTemplates(data.templates)
       setBindings(data.bindings)
 
@@ -165,7 +166,7 @@ export default function PromptManager() {
   const loadAccounts = async () => {
     setAccountsLoading(true)
     try {
-      const list = await getAccounts()
+      const list = await api.getAccounts()
       setAccounts(list)
     } catch (err) {
       console.error(err)
@@ -194,7 +195,7 @@ export default function PromptManager() {
     if (!selectedTemplate) return
     setSaving(true)
     try {
-      const updated = await updatePromptTemplate(selectedTemplate.key, {
+      const updated = await api.updatePromptTemplate(selectedTemplate.key, {
         templateText: templateDraft,
         description: descriptionDraft,
         updatedBy: 'ui',
@@ -202,7 +203,7 @@ export default function PromptManager() {
 
       // Also update name if changed
       if (nameDraft !== selectedTemplate.name) {
-        await updatePromptTemplateName(selectedTemplate.id, {
+        await api.updatePromptTemplateName(selectedTemplate.id, {
           name: nameDraft,
           description: descriptionDraft,
           updatedBy: 'ui',
@@ -233,7 +234,7 @@ export default function PromptManager() {
 
     setCreating(true)
     try {
-      const created = await createPromptTemplate({
+      const created = await api.createPromptTemplate({
         name: newTemplateName,
         description: newTemplateDescription,
         createdBy: 'ui',
@@ -262,7 +263,7 @@ export default function PromptManager() {
 
     setCopying(true)
     try {
-      const copied = await copyPromptTemplate(selectedTemplate.id, {
+      const copied = await api.copyPromptTemplate(selectedTemplate.id, {
         newName: copyName || undefined,
         createdBy: 'ui',
       })
@@ -297,7 +298,7 @@ export default function PromptManager() {
     }
 
     try {
-      await deletePromptTemplate(selectedTemplate.id)
+      await api.deletePromptTemplate(selectedTemplate.id)
       setTemplates((prev) => prev.filter((tpl) => tpl.id !== selectedTemplate.id))
 
       // Select first available template
@@ -333,7 +334,7 @@ export default function PromptManager() {
 
     setBindingSaving(true)
     try {
-      const payload = await upsertPromptBinding({
+      const payload = await api.upsertPromptBinding({
         id: bindingForm.id,
         accountId: bindingForm.accountId,
         promptTemplateId: bindingForm.promptTemplateId,
@@ -361,7 +362,7 @@ export default function PromptManager() {
 
   const handleDeleteBinding = async (bindingId: number) => {
     try {
-      await deletePromptBinding(bindingId)
+      await api.deletePromptBinding(bindingId)
       setBindings((prev) => prev.filter((item) => item.id !== bindingId))
       toast.success('Binding deleted')
     } catch (err) {
@@ -379,6 +380,11 @@ export default function PromptManager() {
   }
 
   const handleAiWriteClick = () => {
+    if (!api.aiPromptChatAvailable) {
+      toast.error('Research prompt AI generation is isolated and will be migrated in a later step')
+      return
+    }
+
     if (!entitlements.canUsePromptGenerator) {
       toast.error('AI Prompt Generator is disabled by local feature configuration')
       return
@@ -399,7 +405,7 @@ export default function PromptManager() {
     if (!variablesRefContent || variablesRefLang !== currentLang) {
       setVariablesRefLoading(true)
       try {
-        const data = await getVariablesReference(currentLang)
+        const data = await api.getVariablesReference(currentLang)
         setVariablesRefContent(data.content)
         setVariablesRefLang(currentLang)
       } catch (err) {
@@ -435,7 +441,9 @@ export default function PromptManager() {
             <CardHeader className="space-y-3">
               <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
                 <div className="flex flex-wrap items-center gap-2">
-                  <CardTitle className="text-base">{t('prompt.templateEditor', 'Prompt Template Editor')}</CardTitle>
+                  <CardTitle className="text-base">
+                    {workspaceLabel ? `${workspaceLabel} · ` : ''}{t('prompt.templateEditor', 'Prompt Template Editor')}
+                  </CardTitle>
                   <Button
                     size="sm"
                     variant="outline"
@@ -484,13 +492,15 @@ export default function PromptManager() {
                     {t('prompt.editAndGenerateHere', 'Prompt editing and AI generation are here')}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {t('prompt.editAndGenerateHint', 'Manual edit: choose or create a template, edit Template Text, then Save Template. AI generator writes into the selected template.')}
+                    {api.aiPromptChatAvailable
+                      ? t('prompt.editAndGenerateHint', 'Manual edit: choose or create a template, edit Template Text, then Save Template. AI generator writes into the selected template.')
+                      : t('prompt.researchIsolationHint', 'This research prompt workspace is isolated from Automation prompts. AI generation will use a research-specific service after migration.')}
                   </p>
                 </div>
                 <Button
                   size="sm"
                   onClick={handleAiWriteClick}
-                  disabled={!selectedTemplate || saving || !entitlements.canUsePromptGenerator}
+                  disabled={!selectedTemplate || saving || !canUseAiPromptGenerator}
                   className="shrink-0 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white border-0 shadow-md hover:shadow-lg transition-all"
                 >
                   ✨ {t('prompt.aiPromptGenerator', 'AI Prompt Generator')}
@@ -573,7 +583,7 @@ export default function PromptManager() {
                 <div className="flex gap-2">
                   <Button
                     onClick={handleAiWriteClick}
-                    disabled={!selectedTemplate || saving || !entitlements.canUsePromptGenerator}
+                    disabled={!selectedTemplate || saving || !canUseAiPromptGenerator}
                     className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white border-0 shadow-lg hover:shadow-xl transition-all"
                   >
                     ✨ {t('prompt.aiWritePrompt', 'AI Write Strategy Prompt')}
@@ -738,6 +748,8 @@ export default function PromptManager() {
           templateKey={selectedTemplate.key}
           templateName={selectedTemplate.name}
           templateText={templateDraft}
+          api={api}
+          loadWatchlistData={api.aiPromptChatAvailable}
         />
       )}
 
@@ -858,7 +870,7 @@ export default function PromptManager() {
                     setVariablesRefModalOpen(false)
                     handleAiWriteClick()
                   }}
-                  disabled={!selectedTemplate || !entitlements.canUsePromptGenerator}
+                  disabled={!selectedTemplate || !canUseAiPromptGenerator}
                   className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white border-0 shadow-md hover:shadow-lg transition-all text-xs"
                 >
                   ✨ {t('prompt.tryAiWrite', 'Try AI Write')}

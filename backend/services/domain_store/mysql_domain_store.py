@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Optional
 
 from sqlalchemy import JSON, Column, Integer, MetaData, String, Table, create_engine, insert, select, update
@@ -14,11 +15,14 @@ def get_domain_store_type() -> str:
 
 
 def get_mysql_domain_database_url() -> str:
+    default_host = "mysql" if Path("/.dockerenv").exists() else "localhost"
+    default_port = "3306" if default_host == "mysql" else os.getenv("ALPHA_TRACE_MYSQL_PORT", "23307")
+    default_url = f"mysql+pymysql://alpha_user:alpha_pass@{default_host}:{default_port}/alpha_trace?charset=utf8mb4"
     return os.getenv(
         "ALPHA_TRACE_MYSQL_DATABASE_URL",
         os.getenv(
             "MYSQL_DATABASE_URL",
-            "mysql+pymysql://alpha_user:alpha_pass@mysql:3306/alpha_trace?charset=utf8mb4",
+            default_url,
         ),
     )
 

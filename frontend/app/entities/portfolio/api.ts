@@ -184,6 +184,9 @@ const asAssetTypes = (values?: string[]): AssetType[] => {
   return (values ?? []).filter((value): value is AssetType => supported.includes(value as AssetType));
 };
 
+const PORTFOLIO_API_TIMEOUT_MS = 8000;
+const PORTFOLIO_RELATION_TIMEOUT_MS = 20000;
+
 const mapBackendHolding = (item: BackendHolding): PortfolioPosition => ({
   assetId: item.assetId,
   symbol: item.symbol,
@@ -306,12 +309,11 @@ export const listPortfoliosAsync = async (params: ListPortfoliosParams = {}, del
         limit: params.limit ?? 100,
         offset: params.offset ?? 0,
       },
-      timeoutMs: 1200,
+      timeoutMs: PORTFOLIO_API_TIMEOUT_MS,
     });
-    const items = response.items.map(mapBackendPortfolio);
-    return items.length > 0 ? items : portfolioMock;
-  } catch {
-    return portfolioMock;
+    return response.items.map(mapBackendPortfolio);
+  } catch (error) {
+    throw error;
   }
 };
 
@@ -320,9 +322,9 @@ export const getPortfolioByIdAsync = async (portfolioId: string, delayMs?: numbe
     return mockDelay(getPortfolioById(portfolioId), delayMs);
   }
   try {
-    return mapBackendPortfolio(await httpClient.get<BackendPortfolioItem>(ENDPOINTS.alphaTracePortfolioDetail(portfolioId), { timeoutMs: 1200 }));
-  } catch {
-    return portfolioMock.find((portfolio) => portfolio.portfolioId === portfolioId);
+    return mapBackendPortfolio(await httpClient.get<BackendPortfolioItem>(ENDPOINTS.alphaTracePortfolioDetail(portfolioId), { timeoutMs: PORTFOLIO_API_TIMEOUT_MS }));
+  } catch (error) {
+    throw error;
   }
 };
 
@@ -331,10 +333,10 @@ export const getPortfolioHoldingsAsync = async (portfolioId: string, delayMs?: n
     return mockDelay(getPortfolioById(portfolioId)?.positions ?? [], delayMs);
   }
   try {
-    const response = await httpClient.get<BackendPortfolioHoldingResponse>(ENDPOINTS.alphaTracePortfolioHoldings(portfolioId), { timeoutMs: 1200 });
+    const response = await httpClient.get<BackendPortfolioHoldingResponse>(ENDPOINTS.alphaTracePortfolioHoldings(portfolioId), { timeoutMs: PORTFOLIO_API_TIMEOUT_MS });
     return response.items.map(mapBackendHolding);
   } catch {
-    return portfolioMock.find((portfolio) => portfolio.portfolioId === portfolioId)?.positions ?? [];
+    return [];
   }
 };
 
@@ -343,10 +345,13 @@ export const getPortfolioRecommendationsAsync = async (portfolioId: string, dela
     return mockDelay(getPortfolioById(portfolioId)?.rebalanceSuggestions ?? [], delayMs);
   }
   try {
-    const response = await httpClient.get<BackendPortfolioRecommendationResponse>(ENDPOINTS.alphaTracePortfolioRecommendations(portfolioId), { timeoutMs: 1200 });
+    const response = await httpClient.get<BackendPortfolioRecommendationResponse>(ENDPOINTS.alphaTracePortfolioRecommendations(portfolioId), {
+      params: { limit: 30 },
+      timeoutMs: PORTFOLIO_RELATION_TIMEOUT_MS,
+    });
     return response.items.map(mapBackendRecommendation);
   } catch {
-    return portfolioMock.find((portfolio) => portfolio.portfolioId === portfolioId)?.rebalanceSuggestions ?? [];
+    return [];
   }
 };
 
@@ -355,7 +360,7 @@ export const getPortfolioAssetsAsync = async (portfolioId: string, delayMs?: num
     return mockDelay([], delayMs);
   }
   try {
-    const response = await httpClient.get<BackendPortfolioAssetResponse>(ENDPOINTS.alphaTracePortfolioAssets(portfolioId), { timeoutMs: 1200 });
+    const response = await httpClient.get<BackendPortfolioAssetResponse>(ENDPOINTS.alphaTracePortfolioAssets(portfolioId), { timeoutMs: PORTFOLIO_API_TIMEOUT_MS });
     return response.items.map(mapBackendAsset);
   } catch {
     return [];
@@ -367,7 +372,7 @@ export const getPortfolioStrategiesAsync = async (portfolioId: string, delayMs?:
     return mockDelay([], delayMs);
   }
   try {
-    const response = await httpClient.get<BackendPortfolioStrategyResponse>(ENDPOINTS.alphaTracePortfolioStrategies(portfolioId), { timeoutMs: 1200 });
+    const response = await httpClient.get<BackendPortfolioStrategyResponse>(ENDPOINTS.alphaTracePortfolioStrategies(portfolioId), { timeoutMs: PORTFOLIO_API_TIMEOUT_MS });
     return response.items.map(mapBackendStrategy);
   } catch {
     return [];
@@ -379,9 +384,12 @@ export const getPortfolioDecisionsAsync = async (portfolioId: string, delayMs?: 
     return mockDelay(getPortfolioDecisions(portfolioId), delayMs);
   }
   try {
-    const response = await httpClient.get<BackendPortfolioDecisionResponse>(ENDPOINTS.alphaTracePortfolioDecisions(portfolioId), { timeoutMs: 1200 });
+    const response = await httpClient.get<BackendPortfolioDecisionResponse>(ENDPOINTS.alphaTracePortfolioDecisions(portfolioId), {
+      params: { limit: 20 },
+      timeoutMs: PORTFOLIO_RELATION_TIMEOUT_MS,
+    });
     return response.items;
   } catch {
-    return decisionsMock.filter((decision) => decision.portfolioId === portfolioId);
+    return [];
   }
 };

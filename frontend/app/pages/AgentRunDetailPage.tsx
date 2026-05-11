@@ -13,8 +13,10 @@ import type {
   AgentTeam,
   ToolCall,
   ToolCallStatus,
+  AgentRunTaskType,
 } from "@/entities/agent/model";
 import type { Evidence, EvidenceType } from "@/entities/evidence/model";
+import type { ResearchArtifactType, ResearchRunType } from "@/entities/research-workspace/taxonomy";
 import { listAssets } from "@/entities/asset/api";
 import {
   cancelAgentRunAsync,
@@ -54,20 +56,20 @@ type ReportSectionId = "market_view" | "bull_view" | "bear_view" | "research_man
 type BackendLogFilter = "alphatrace" | "current_run" | "all";
 
 const REPORT_SECTIONS: Array<{ id: ReportSectionId; label: string }> = [
-  { id: "market_view", label: "Market View" },
-  { id: "bull_view", label: "Bull View" },
-  { id: "bear_view", label: "Bear View" },
-  { id: "research_manager", label: "Research Manager" },
-  { id: "risk_review", label: "Risk Review" },
-  { id: "final_decision", label: "Final Decision" },
+  { id: "market_view", label: "市场观点" },
+  { id: "bull_view", label: "正方观点" },
+  { id: "bear_view", label: "反方观点" },
+  { id: "research_manager", label: "研究汇总" },
+  { id: "risk_review", label: "风险复核" },
+  { id: "final_decision", label: "最终决策" },
 ];
 
 const TRADINGAGENTS_FLOW_STEPS = [
-  { stepId: "market_analyst", label: "Market Analyst", dependsOn: "Start" },
-  { stepId: "research_manager", label: "Research Manager", dependsOn: "Market Analyst" },
-  { stepId: "trader", label: "Trader", dependsOn: "Research Manager" },
-  { stepId: "risk_manager", label: "Risk Manager", dependsOn: "Trader" },
-  { stepId: "portfolio_manager", label: "Portfolio Manager", dependsOn: "Risk Manager" },
+  { stepId: "market_analyst", label: "市场分析员", dependsOn: "开始" },
+  { stepId: "research_manager", label: "研究经理", dependsOn: "市场分析员" },
+  { stepId: "trader", label: "交易观点", dependsOn: "研究经理" },
+  { stepId: "risk_manager", label: "风险经理", dependsOn: "交易观点" },
+  { stepId: "portfolio_manager", label: "组合经理", dependsOn: "风险经理" },
 ] as const;
 
 type TradingAgentsFlowStatus = "pending" | "running" | "completed" | "failed";
@@ -87,11 +89,11 @@ const TEAM_ORDER: AgentTeam[] = [
 ];
 
 const TEAM_LABEL: Record<AgentTeam, string> = {
-  ANALYST_TEAM: "Analyst Team",
-  RESEARCH_TEAM: "Research Team",
-  STRATEGY_TEAM: "Strategy Team",
-  RISK_TEAM: "Risk Team",
-  PORTFOLIO_TEAM: "Portfolio Team",
+  ANALYST_TEAM: "分析团队",
+  RESEARCH_TEAM: "研究团队",
+  STRATEGY_TEAM: "策略团队",
+  RISK_TEAM: "风控团队",
+  PORTFOLIO_TEAM: "组合团队",
 };
 
 const RUN_STATUS_LABEL: Record<AgentRunStatus, string> = {
@@ -116,6 +118,58 @@ const TOOL_STATUS_BADGE: Record<ToolCallStatus, "default" | "secondary" | "outli
   RUNNING: "secondary",
   COMPLETED: "default",
   FAILED: "destructive",
+};
+
+const TASK_TYPE_LABEL: Record<AgentRunTaskType, string> = {
+  SINGLE_ASSET_ANALYSIS: "单资产分析",
+  MULTI_ASSET_COMPARISON: "多资产比较",
+  PORTFOLIO_DIAGNOSTIC: "组合诊断",
+  EVENT_IMPACT_ANALYSIS: "事件影响分析",
+  REBALANCE_SUGGESTION: "调仓建议",
+};
+
+const RESEARCH_RUN_TYPE_LABEL: Record<ResearchRunType, string> = {
+  market_scan: "市场扫描",
+  asset_research: "资产研究",
+  etf_screening: "ETF 筛选",
+  fund_screening: "基金筛选",
+  strategy_generation: "策略生成",
+  portfolio_analysis: "组合分析",
+  risk_review: "风险复核",
+  trade_plan_generation: "交易计划生成",
+  post_trade_review: "交易后复盘",
+};
+
+const RESEARCH_ARTIFACT_TYPE_LABEL: Record<ResearchArtifactType, string> = {
+  market_brief: "市场简报",
+  asset_research_report: "资产研究报告",
+  etf_comparison_table: "ETF 对比表",
+  fund_comparison_table: "基金对比表",
+  strategy_card: "策略卡",
+  portfolio_exposure_report: "组合暴露报告",
+  risk_review_report: "风险复核报告",
+  trade_plan: "交易计划",
+  post_trade_review: "交易后复盘",
+  evidence_bundle: "证据包",
+};
+
+const REVIEW_STATUS_LABEL: Record<NonNullable<AgentRun["decisionTrace"]>["reviewStatus"], string> = {
+  pending: "待复核",
+  approved: "已通过",
+  rejected: "已驳回",
+  needs_revision: "需修订",
+};
+
+const TRACE_STEP_STATUS_LABEL: Record<NonNullable<AgentRun["decisionTrace"]>["steps"][number]["status"], string> = {
+  pending: "待处理",
+  completed: "已完成",
+  needs_review: "需复核",
+};
+
+const TOOL_STATUS_LABEL: Record<ToolCallStatus, string> = {
+  RUNNING: "运行中",
+  COMPLETED: "已完成",
+  FAILED: "失败",
 };
 
 const DECISION_ACTION_LABEL: Record<AgentDecisionAction, string> = {
@@ -146,22 +200,69 @@ const EVIDENCE_TYPE_LABEL: Record<EvidenceType, string> = {
 };
 
 const EVENT_LABEL: Record<AgentEvent["type"], string> = {
-  "agent.started": "agent.started",
-  "agent.completed": "agent.completed",
-  "agent.failed": "agent.failed",
-  "tool.called": "tool.called",
-  "tool.result": "tool.result",
-  "reasoning.chunk": "reasoning.chunk",
-  "report.generated": "report.generated",
-  "debate.message": "debate.message",
-  "risk.warning": "risk.warning",
-  "decision.updated": "decision.updated",
+  "agent.started": "Agent 开始",
+  "agent.completed": "Agent 完成",
+  "agent.failed": "Agent 失败",
+  "tool.called": "工具调用",
+  "tool.result": "工具结果",
+  "reasoning.chunk": "推理输出",
+  "report.generated": "报告生成",
+  "debate.message": "观点讨论",
+  "risk.warning": "风险提示",
+  "decision.updated": "决策更新",
 };
 
 const RISK_LEVEL_BADGE: Record<AgentRun["riskLevel"], "default" | "secondary" | "destructive"> = {
   LOW: "default",
   MEDIUM: "secondary",
   HIGH: "destructive",
+};
+
+const RISK_LEVEL_LABEL: Record<AgentRun["riskLevel"], string> = {
+  LOW: "低",
+  MEDIUM: "中",
+  HIGH: "高",
+};
+
+const RUNTIME_STATUS_LABEL: Record<string, string> = {
+  IDLE: "就绪",
+  QUEUED: "等待中",
+  RUNNING: "运行中",
+  COMPLETED: "已完成",
+  STOPPED: "已停止",
+  ERROR: "错误",
+  FAILED: "失败",
+};
+
+const RUNTIME_EVENT_TYPE_LABEL: Record<string, string> = {
+  "agent.run.started": "任务开始",
+  "agent.run.completed": "任务完成",
+  "agent.run.failed": "任务失败",
+  "agent.started": "Agent 开始",
+  "agent.completed": "Agent 完成",
+  "agent.failed": "Agent 失败",
+  "tool.called": "工具调用",
+  "tool.result": "工具结果",
+  "reasoning.chunk": "推理输出",
+  "report.generated": "报告生成",
+  "debate.message": "观点讨论",
+  "risk.warning": "风险提示",
+  "decision.updated": "决策更新",
+  "evidence.linked": "证据关联",
+  "metric.updated": "指标更新",
+  "live.output.summary": "实时输出汇总",
+  "metric.updated.summary": "指标汇总",
+};
+
+const AGENT_NAME_LABEL: Record<string, string> = {
+  System: "系统",
+  "Market Analyst": "市场分析员",
+  "Bull Researcher": "正方研究员",
+  "Bear Researcher": "反方研究员",
+  "Research Manager": "研究经理",
+  "Risk Manager": "风险经理",
+  "Portfolio Manager": "组合经理",
+  Trader: "交易观点",
 };
 
 const MAX_RUNTIME_EVENTS_IN_MEMORY = 800;
@@ -179,7 +280,17 @@ const formatDateTime = (timestamp?: string): string => {
 const formatPercent = (value: number, digits = 1): string => `${(value * 100).toFixed(digits)}%`;
 
 const formatInteger = (value?: number): string =>
-  typeof value === "number" && Number.isFinite(value) ? Math.round(value).toLocaleString("en-US") : "0";
+  typeof value === "number" && Number.isFinite(value) ? Math.round(value).toLocaleString("zh-CN") : "-";
+
+const tokenTotal = (metrics?: Partial<AgentRun["metrics"]> | null): number | undefined => {
+  if (!metrics) return undefined;
+  if (typeof metrics.totalTokens === "number" && Number.isFinite(metrics.totalTokens) && metrics.totalTokens > 0) {
+    return metrics.totalTokens;
+  }
+  const hasPrompt = typeof metrics.promptTokens === "number" && Number.isFinite(metrics.promptTokens);
+  const hasCompletion = typeof metrics.completionTokens === "number" && Number.isFinite(metrics.completionTokens);
+  return hasPrompt || hasCompletion ? (metrics.promptTokens ?? 0) + (metrics.completionTokens ?? 0) : undefined;
+};
 
 const hasSourceUrl = (url?: string): url is string => Boolean(url && /^https?:\/\//i.test(url));
 
@@ -222,11 +333,25 @@ const isAlphaTraceBackendLogLine = (line: string): boolean =>
   ALPHATRACE_BACKEND_LOG_PATTERNS.some((pattern) => pattern.test(line));
 
 const formatLoadStatus = (status: RealDataStatus): string => {
-  if (status === "loading") return "loading";
-  if (status === "loaded") return "loaded";
-  if (status === "error") return "error";
-  return "idle";
+  if (status === "loading") return "加载中";
+  if (status === "loaded") return "已加载";
+  if (status === "error") return "失败";
+  return "待加载";
 };
+
+const formatRuntimeStatus = (status?: string): string => (status ? RUNTIME_STATUS_LABEL[status] ?? status : "-");
+
+const formatRuntimeEventType = (type?: string): string => (type ? RUNTIME_EVENT_TYPE_LABEL[type] ?? type : "-");
+
+const formatAgentName = (name?: string): string => (name ? AGENT_NAME_LABEL[name] ?? name : "系统");
+
+const formatTaskType = (taskType: AgentRunTaskType | string): string => TASK_TYPE_LABEL[taskType as AgentRunTaskType] ?? taskType;
+
+const formatResearchRunType = (type?: ResearchRunType | string): string =>
+  type ? RESEARCH_RUN_TYPE_LABEL[type as ResearchRunType] ?? type : "-";
+
+const formatArtifactType = (type?: ResearchArtifactType | string): string =>
+  type ? RESEARCH_ARTIFACT_TYPE_LABEL[type as ResearchArtifactType] ?? type : "-";
 
 const getStreamingChunkContent = (event: AgentRuntimeEvent): string => {
   if (event.type !== "reasoning.chunk" && event.type !== "debate.message") return "";
@@ -314,21 +439,21 @@ const formatJsonPreview = (value: unknown): string => JSON.stringify(redactPaylo
 const getToolContractDescription = (toolName: string): string => {
   const normalized = toolName.toLowerCase();
   if (normalized.includes("bocha.search")) {
-    return "External search tool via backend Bocha adapter. API key is backend-only; URL is the canonical source.";
+    return "通过后端 Bocha 适配器执行外部搜索。API Key 仅保存在后端，来源 URL 作为引用依据。";
   }
   if (normalized.includes("evidence.retrieve")) {
-    return "AlphaTrace evidence retrieval over static, run-scoped, and available external evidence items.";
+    return "AlphaTrace 证据检索，会合并静态证据、本次运行证据和可用外部证据。";
   }
   if (normalized.includes("market.context") || normalized.includes("market_data") || normalized.includes("indicator")) {
-    return "AlphaTrace market context/data loader. Current MVP uses static/demo data unless a provider adapter is configured.";
+    return "AlphaTrace 行情上下文加载器。未配置真实数据适配器时，会使用本地或演示数据。";
   }
   if (normalized.startsWith("qwen.") || normalized.includes("llm")) {
-    return "LLM provider call. This is model reasoning/generation, not an external market-data tool.";
+    return "大模型调用，用于推理和生成，不是外部行情数据工具。";
   }
   if (normalized.includes("tradingagents")) {
-    return "TradingAgents PoC runner invocation. Internal graph state is mapped back to AlphaTrace schema.";
+    return "TradingAgents PoC 适配器调用，内部图状态会映射回 AlphaTrace 结构。";
   }
-  return "Runtime tool event emitted by the backend. Inspect args/result for the exact contract used in this run.";
+  return "后端运行时工具事件。可查看参数和结果了解本次实际调用内容。";
 };
 
 interface RuntimeToolActivity {
@@ -369,13 +494,13 @@ const runtimePayload = (event: AgentRuntimeEvent): Record<string, unknown> => {
 };
 
 const STEP_LABEL: Record<string, string> = {
-  evidence_retrieval: "Evidence Retrieval",
-  market_view: "Market View",
-  bull_view: "Bull View",
-  bear_view: "Bear View",
-  research_manager: "Research Manager",
-  risk_review: "Risk Review",
-  final_decision: "Final Decision",
+  evidence_retrieval: "证据检索",
+  market_view: "市场观点",
+  bull_view: "正方观点",
+  bear_view: "反方观点",
+  research_manager: "研究汇总",
+  risk_review: "风险复核",
+  final_decision: "最终决策",
 };
 
 const TIMELINE_KEY_EVENT_TYPES = new Set([
@@ -395,8 +520,8 @@ const TIMELINE_KEY_EVENT_TYPES = new Set([
 ]);
 
 const formatTimelineType = (item: DecisionTimelineItem): string => {
-  if (item.type === "live.output.summary") return "live.output.summary";
-  if (item.type === "metric.updated.summary") return "metric.updated.summary";
+  if (item.type === "live.output.summary") return "实时输出汇总";
+  if (item.type === "metric.updated.summary") return "运行指标汇总";
   return item.type in EVENT_LABEL ? EVENT_LABEL[item.type as AgentEvent["type"]] : item.type;
 };
 
@@ -418,13 +543,13 @@ const summarizeMetricPayload = (payload: Record<string, unknown>, count: number)
   ].filter(Boolean);
 
   return tokenParts.length
-    ? `Runtime metrics aggregated ${count} updates. Latest token estimate: ${tokenParts.join(", ")}.`
-    : `Runtime metrics aggregated ${count} updates. Latest metrics were persisted for this run.`;
+    ? `已汇总 ${count} 次运行指标更新。最新 token 估算：${tokenParts.join(", ")}。`
+    : `已汇总 ${count} 次运行指标更新，并已保存到本次任务。`;
 };
 
 const summarizeRuntimeEvent = (event: AgentRuntimeEvent): string => {
   const payload = runtimePayload(event);
-  const agentName = event.agentName ?? "System";
+  const agentName = event.agentName ?? "系统";
   const toolName = typeof payload.toolName === "string" ? payload.toolName : "runtime.tool";
   const content =
     typeof payload.summary === "string"
@@ -437,33 +562,33 @@ const summarizeRuntimeEvent = (event: AgentRuntimeEvent): string => {
 
   switch (event.type) {
     case "agent.run.started":
-      return "Agent run started.";
+      return "Agent Run 已开始。";
     case "agent.run.completed":
-      return "Agent run completed.";
+      return "Agent Run 已完成。";
     case "agent.run.failed":
-      return content || "Agent run failed.";
+      return content || "Agent Run 失败。";
     case "agent.started":
-      return `${agentName} started.`;
+      return `${agentName} 已开始。`;
     case "agent.completed":
-      return `${agentName} completed.`;
+      return `${agentName} 已完成。`;
     case "agent.failed":
-      return `${agentName} failed: ${content || "Runtime step failed."}`;
+      return `${agentName} 失败：${content || "运行步骤失败。"}`;
     case "tool.called":
-      return `${agentName} called ${toolName}.`;
+      return `${agentName} 调用了 ${toolName}。`;
     case "tool.result":
-      return content || `${agentName} received ${toolName} result.`;
+      return content || `${agentName} 已收到 ${toolName} 的结果。`;
     case "reasoning.chunk":
-      return content || `${agentName} emitted reasoning output.`;
+      return content || `${agentName} 输出了推理内容。`;
     case "debate.message":
-      return content || `${agentName} emitted debate message.`;
+      return content || `${agentName} 输出了讨论观点。`;
     case "risk.warning":
-      return content || `${agentName} emitted risk warning.`;
+      return content || `${agentName} 输出了风险提示。`;
     case "report.generated":
-      return typeof payload.title === "string" ? `${agentName} generated report "${payload.title}".` : `${agentName} generated report.`;
+      return typeof payload.title === "string" ? `${agentName} 已生成报告「${payload.title}」。` : `${agentName} 已生成报告。`;
     case "decision.updated":
-      return typeof payload.action === "string" ? `Decision updated to ${payload.action}.` : "Decision updated.";
+      return typeof payload.action === "string" ? `决策已更新为 ${payload.action}。` : "决策已更新。";
     case "evidence.linked":
-      return content || "Evidence linked to run.";
+      return content || "证据已关联到本次任务。";
     default:
       return content || event.type;
   }
@@ -560,7 +685,7 @@ const buildDecisionTimelineItems = (events: AgentRuntimeEvent[], legacyEvents: A
       type: "live.output.summary",
       agentName: group.event.agentName ?? "System",
       timestamp: group.event.timestamp,
-      summary: `Live output aggregated ${group.count} chunks / ${group.content.length} chars. ${compactText.slice(0, 260)}${compactText.length > 260 ? "..." : ""}`,
+      summary: `已汇总 ${group.count} 段实时输出，共 ${group.content.length} 字符。${compactText.slice(0, 260)}${compactText.length > 260 ? "..." : ""}`,
       stepId,
       stepLabel: STEP_LABEL[stepId],
       count: group.count,
@@ -695,7 +820,7 @@ const getRuntimeToolActivities = (events: AgentRuntimeEvent[]): RuntimeToolActiv
             ? payload.content
             : typeof payload.error === "string"
               ? payload.error
-              : "Runtime tool result received.";
+              : "已收到工具结果。";
       activity.evidenceIds = Array.from(new Set([...activity.evidenceIds, ...toStringList(payload.evidenceIds)]));
       activity.resultPayload = payload;
 
@@ -709,27 +834,27 @@ const getRuntimeToolActivities = (events: AgentRuntimeEvent[]): RuntimeToolActiv
 const summarizeEvent = (event: AgentEvent, agentName: string): string => {
   switch (event.type) {
     case "agent.started":
-      return `${agentName} started`;
+      return `${agentName} 已开始`;
     case "agent.completed":
-      return `${agentName} completed`;
+      return `${agentName} 已完成`;
     case "agent.failed":
-      return `${agentName} failed: ${event.error || "Runtime step failed"}`;
+      return `${agentName} 失败：${event.error || "运行步骤失败"}`;
     case "tool.called":
-      return `${agentName} called ${event.toolName}`;
+      return `${agentName} 调用了 ${event.toolName}`;
     case "tool.result":
-      return `${agentName} received ${event.toolName} result`;
+      return `${agentName} 已收到 ${event.toolName} 结果`;
     case "reasoning.chunk":
       return event.content;
     case "report.generated":
-      return `${agentName} generated report "${event.title}"`;
+      return `${agentName} 已生成报告「${event.title}」`;
     case "debate.message":
       return `${agentName} (${event.stance}) ${event.content}`;
     case "risk.warning":
-      return `${agentName} ${event.level} risk: ${event.content}`;
+      return `${agentName} ${event.level} 风险：${event.content}`;
     case "decision.updated":
-      return `Decision updated to ${DECISION_ACTION_LABEL[event.action]} (${formatPercent(event.confidence, 0)})`;
+      return `决策已更新为 ${DECISION_ACTION_LABEL[event.action]}（${formatPercent(event.confidence, 0)}）`;
     default:
-      return "Event";
+      return "事件";
   }
 };
 
@@ -811,7 +936,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
 
     const loadRun = runId
       ? getAgentRunByIdAsync(runId)
-      : listAgentRunsAsync().then((runs) => runs[0]);
+      : listAgentRunsAsync({ limit: 1 }).then((runs) => runs[0]);
 
     loadRun
       .then((nextRun) => {
@@ -969,8 +1094,9 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
   );
   const smoothLiveReportText = useTypewriterStream(liveReportText, {
     enabled: run?.status === "RUNNING",
-    charsPerTick: 5,
-    intervalMs: 18,
+    charsPerTick: 18,
+    maxCharsPerTick: 96,
+    intervalMs: 16,
   });
 
   useEffect(() => {
@@ -987,13 +1113,15 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
   );
   const smoothBullOutput = useTypewriterStream(debateLiveOutputs.bull, {
     enabled: run?.status === "RUNNING",
-    charsPerTick: 5,
-    intervalMs: 18,
+    charsPerTick: 18,
+    maxCharsPerTick: 96,
+    intervalMs: 16,
   });
   const smoothBearOutput = useTypewriterStream(debateLiveOutputs.bear, {
     enabled: run?.status === "RUNNING",
-    charsPerTick: 5,
-    intervalMs: 18,
+    charsPerTick: 18,
+    maxCharsPerTick: 96,
+    intervalMs: 16,
   });
 
   const reportSections = useMemo(() => {
@@ -1019,12 +1147,12 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
     const failedEvent = [...run.events, ...runtimeEvents]
       .filter((event) => event.type === "agent.run.failed" || event.type === "agent.failed")
       .sort((a, b) => b.sequence - a.sequence)[0];
-    if (!failedEvent) return "Agent Run failed. No structured failure message was returned.";
+    if (!failedEvent) return "任务执行失败，后端未返回结构化失败原因。";
     const payload = runtimePayload(failedEvent);
     return (
       (typeof payload.error === "string" && payload.error) ||
       (typeof payload.summary === "string" && payload.summary) ||
-      "Agent Run failed. Check Runtime Event Stream for details."
+      "任务执行失败，请查看运行事件流获取详情。"
     );
   }, [run, runtimeEvents]);
 
@@ -1048,7 +1176,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
         limit: 400,
         truncated: false,
         lines: [],
-        message: "Mock Mode 不读取后端日志。",
+        message: "模拟模式不读取后端日志。",
       });
       return;
     }
@@ -1076,7 +1204,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
         stderrLines: [],
         events: [],
         result: null,
-        message: "Mock Mode does not expose worker artifacts.",
+        message: "模拟模式不提供 Worker 产物。",
       });
       return;
     }
@@ -1175,7 +1303,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
         }
       },
       onError: (error) => {
-        setRuntimeReplayError(`${error.message} HTTP events fallback will be used when available.`);
+        setRuntimeReplayError(`${error.message}。如果可用，将自动使用 HTTP 事件回退。`);
         setRuntimeReplayStatus("ERROR");
         if (apiMode === "real") {
           void getAgentRunRuntimeEventsAsync(activeRunId)
@@ -1355,75 +1483,78 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="space-y-2">
-              <CardTitle className="text-xl">Agent Run Detail · {run.runId}</CardTitle>
+              <CardTitle className="text-xl">任务详情 · {run.runId}</CardTitle>
               <div className="flex flex-wrap gap-2">
                 {apiMode === "real" ? (
                   <>
-                    <Badge variant={RUN_STATUS_BADGE[run.status]}>Run Status: {run.status}</Badge>
+                    <Badge variant={RUN_STATUS_BADGE[run.status]}>运行状态：{RUN_STATUS_LABEL[run.status]}</Badge>
                     <Badge variant={runtimeReplayStatus === "ERROR" ? "destructive" : runtimeReplayStatus === "RUNNING" ? "secondary" : "outline"}>
-                      Stream: {runtimeReplayStatus === "RUNNING" ? "Connected" : runtimeReplayStatus === "ERROR" ? "Error" : runtimeReplayStatus === "COMPLETED" ? "Closed" : "Ready"}
+                      事件流：{runtimeReplayStatus === "RUNNING" ? "已连接" : runtimeReplayStatus === "ERROR" ? "错误" : runtimeReplayStatus === "COMPLETED" ? "已关闭" : "就绪"}
                     </Badge>
                     <Badge variant={runtimeReplayStatus === "ERROR" ? "destructive" : "outline"}>
-                      Events:{" "}
+                      事件：{" "}
                       {runtimeReplayStatus === "ERROR"
-                        ? "error"
+                        ? "错误"
                         : runtimeEvents.length > 0
-                          ? `${runtimeEvents.length}/${runtimeEventsLoadedCount || runtimeEvents.length} kept`
-                          : "loading"}
+                          ? `保留 ${runtimeEvents.length}/${runtimeEventsLoadedCount || runtimeEvents.length}`
+                          : "加载中"}
                     </Badge>
                     <Badge variant={realDataLoadState.reports === "error" ? "destructive" : "outline"}>
-                      Reports: {formatLoadStatus(realDataLoadState.reports)}
+                      报告：{formatLoadStatus(realDataLoadState.reports)}
                     </Badge>
                     <Badge variant={realDataLoadState.evidence === "error" ? "destructive" : "outline"}>
-                      Evidence: {formatLoadStatus(realDataLoadState.evidence)}
+                      证据：{formatLoadStatus(realDataLoadState.evidence)}
                     </Badge>
                     <Badge variant={realDataLoadState.decision === "error" ? "destructive" : "outline"}>
-                      Decision: {formatLoadStatus(realDataLoadState.decision)}
+                      决策：{formatLoadStatus(realDataLoadState.decision)}
                     </Badge>
                   </>
                 ) : null}
               </div>
               {apiMode === "real" && Object.keys(realDataLoadErrors).length > 0 ? (
                 <div className="space-y-1 text-xs text-destructive">
-                  {realDataLoadErrors.reports ? <p>Reports: {realDataLoadErrors.reports}</p> : null}
-                  {realDataLoadErrors.evidence ? <p>Evidence: {realDataLoadErrors.evidence}</p> : null}
-                  {realDataLoadErrors.decision ? <p>Decision: {realDataLoadErrors.decision}</p> : null}
+                  {realDataLoadErrors.reports ? <p>报告：{realDataLoadErrors.reports}</p> : null}
+                  {realDataLoadErrors.evidence ? <p>证据：{realDataLoadErrors.evidence}</p> : null}
+                  {realDataLoadErrors.decision ? <p>决策：{realDataLoadErrors.decision}</p> : null}
                 </div>
               ) : null}
               {failureMessage ? (
                 <div className="rounded border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive">
-                  <p className="font-medium">Agent task failed</p>
+                  <p className="font-medium">任务执行失败</p>
                   <p className="mt-1 whitespace-pre-wrap">{failureMessage}</p>
                 </div>
               ) : null}
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant={RUN_STATUS_BADGE[run.status]}>{RUN_STATUS_LABEL[run.status]}</Badge>
-              <Badge variant={RISK_LEVEL_BADGE[run.riskLevel]}>风险 {run.riskLevel}</Badge>
-              <Badge variant="outline">{run.taskType}</Badge>
+              <Badge variant={RISK_LEVEL_BADGE[run.riskLevel]}>风险 {RISK_LEVEL_LABEL[run.riskLevel]}</Badge>
+              <Badge variant="outline">{formatTaskType(run.taskType)}</Badge>
+              {run.researchRunType ? <Badge variant="secondary">标准类型：{formatResearchRunType(run.researchRunType)}</Badge> : null}
+              {run.decisionTrace ? <Badge variant="outline">复核：{REVIEW_STATUS_LABEL[run.decisionTrace.reviewStatus]}</Badge> : null}
             </div>
           </div>
         </CardHeader>
         <CardContent className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2 text-xs text-muted-foreground">
           <p>分析目标：{run.target}</p>
           <p>分析资产：{assetLabel}</p>
-          <p>任务类型：{run.taskType}</p>
+          <p>任务类型：{formatTaskType(run.taskType)}</p>
+          <p>标准类型：{formatResearchRunType(run.researchRunType)}</p>
           <p>模型配置：{run.modelName ?? "mock-model-config"}</p>
           <p>开始时间：{formatDateTime(run.startedAt)}</p>
           <p>结束时间：{formatDateTime(run.completedAt)}</p>
           <p>持续时间：{derived?.runDuration}</p>
+          <p>Token 消耗：{formatInteger(tokenTotal(liveMetrics))}</p>
+          <p>复核状态：{run.decisionTrace ? REVIEW_STATUS_LABEL[run.decisionTrace.reviewStatus] : "-"}</p>
+          <p>Trace ID：{run.decisionTrace?.traceId ?? "-"}</p>
           <p>最终建议：{run.finalDecision.summary ?? run.finalDecision.thesis}</p>
         </CardContent>
         <CardContent className="pt-0 flex flex-wrap gap-2">
           <Button size="sm" variant="outline" onClick={goBackOrDashboard}>
             返回上一页
           </Button>
-          <Button size="sm" variant="outline" onClick={() => navigateTo("/dashboard")}>
-            返回 Dashboard
-          </Button>
           {["RUNNING", "QUEUED", "PARTIALLY_COMPLETED"].includes(run.status) ? (
             <Button size="sm" variant="destructive" onClick={handleCancelRun} disabled={isCancellingRun}>
-              {isCancellingRun ? "Cancelling..." : "Cancel Run"}
+              {isCancellingRun ? "正在取消..." : "取消任务"}
             </Button>
           ) : null}
           {run.assetIds.map((assetId) => (
@@ -1442,7 +1573,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
           <Button size="sm" variant="outline" onClick={() => navigateTo("/portfolio", { runId: run.runId, portfolioId: run.portfolioId })}>
             查看组合影响
           </Button>
-          {cancelRunError ? <p className="basis-full text-xs text-destructive">Cancel failed: {cancelRunError}</p> : null}
+          {cancelRunError ? <p className="basis-full text-xs text-destructive">取消失败：{cancelRunError}</p> : null}
         </CardContent>
       </Card>
 
@@ -1450,10 +1581,73 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
         <AgentRunProgressCard progress={runProgress} runStatus={run.status} runtimeStatus={runtimeReplayStatus} />
       ) : null}
 
+      {run.decisionTrace ? (
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <CardTitle className="text-base">Decision Trace / 决策链路</CardTitle>
+                <CardDescription>
+                  标准类型 {formatResearchRunType(run.decisionTrace.researchRunType ?? run.researchRunType)} · Trace {run.decisionTrace.traceId}
+                </CardDescription>
+              </div>
+              <Badge variant="outline">{REVIEW_STATUS_LABEL[run.decisionTrace.reviewStatus]}</Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3 text-xs">
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+              <div className="rounded border bg-muted/20 p-3">
+                <p className="font-medium">核心结论</p>
+                <p className="mt-1 text-muted-foreground">{run.decisionTrace.conclusion || "暂无结构化结论。"}</p>
+              </div>
+              <div className="rounded border bg-muted/20 p-3">
+                <p className="font-medium">支持依据</p>
+                <p className="mt-1 text-muted-foreground">{run.decisionTrace.supportSummary || "暂无结构化支持依据。"}</p>
+              </div>
+              <div className="rounded border bg-muted/20 p-3">
+                <p className="font-medium">风险与待确认</p>
+                <p className="mt-1 text-muted-foreground">{run.decisionTrace.riskSummary || "暂无结构化风险摘要。"}</p>
+              </div>
+            </div>
+            {run.decisionTrace.openQuestions.length ? (
+              <div className="rounded border border-amber-300 bg-amber-50 p-3 text-amber-950">
+                <p className="font-medium">待追问问题</p>
+                <ul className="mt-1 list-disc space-y-1 pl-4">
+                  {run.decisionTrace.openQuestions.map((question, index) => (
+                    <li key={`${run.decisionTrace?.traceId}-question-${index}`}>{question}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+              {run.decisionTrace.steps.map((step, index) => (
+                <div key={step.stepId} className="rounded border p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold">
+                        {index + 1}
+                      </span>
+                      <p className="truncate font-medium">{step.title}</p>
+                    </div>
+                    <Badge variant={step.status === "completed" ? "default" : "secondary"}>{TRACE_STEP_STATUS_LABEL[step.status]}</Badge>
+                  </div>
+                  <p className="mt-1 text-muted-foreground">Agent：{step.agentName ? formatAgentName(step.agentName) : "-"}</p>
+                  <p className="mt-2 line-clamp-4 text-muted-foreground">{step.summary || "暂无步骤摘要。"}</p>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {step.evidenceIds.length ? <Badge variant="outline">证据 {step.evidenceIds.length}</Badge> : null}
+                    {step.artifactIds.length ? <Badge variant="outline">产物 {step.artifactIds.length}</Badge> : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
       {isTradingAgentsRun ? (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">TradingAgents Agent Flow</CardTitle>
+            <CardTitle className="text-base">TradingAgents 执行链路</CardTitle>
           </CardHeader>
           <CardContent className="overflow-x-auto text-xs">
             <div className="flex min-w-max items-stretch gap-2 pr-1">
@@ -1478,7 +1672,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
                       </div>
                       <Badge variant={variant}>{step.status}</Badge>
                     </div>
-                    <p className="text-[11px] text-muted-foreground">depends on: {step.dependsOn}</p>
+                    <p className="text-[11px] text-muted-foreground">依赖：{step.dependsOn}</p>
                     <div className="h-1.5 overflow-hidden rounded bg-muted">
                       <div
                         className={step.status === "failed" ? "h-full rounded bg-red-500" : "h-full rounded bg-blue-500"}
@@ -1501,7 +1695,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-3">
         <Card className="xl:col-span-12">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Agent Progress Board</CardTitle>
+            <CardTitle className="text-base">Agent 进度看板</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="h-2 rounded bg-muted overflow-hidden">
@@ -1512,7 +1706,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
                 <div key={group.team} className="border rounded-md p-2 space-y-2">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-xs font-medium">{TEAM_LABEL[group.team]}</p>
-                    {group.team === "RESEARCH_TEAM" ? <Badge variant="secondary">Parallel Review Track</Badge> : null}
+                    {group.team === "RESEARCH_TEAM" ? <Badge variant="secondary">并行评审</Badge> : null}
                   </div>
                   {group.agents.length === 0 ? (
                     <p className="text-xs text-muted-foreground">暂无该团队 Agent</p>
@@ -1531,14 +1725,14 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
         <div className="xl:col-span-9 flex flex-col gap-3">
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Current Report / Research Report</CardTitle>
+              <CardTitle className="text-base">当前报告 / 投研报告</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-xs">
               {smoothLiveReportText.trim() && (run.status === "RUNNING" || run.status === "FAILED") ? (
                 <div className="rounded border border-blue-500/40 bg-blue-500/5 p-2">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="font-medium">General Live Output</p>
-                    <Badge variant="secondary">{smoothLiveReportText.length}/{liveReportText.length} chars</Badge>
+                    <p className="font-medium">实时输出</p>
+                    <Badge variant="secondary">{smoothLiveReportText.length}/{liveReportText.length} 字符</Badge>
                   </div>
                   <div ref={liveOutputRef} className="mt-2 max-h-64 overflow-auto scroll-smooth">
                     <StructuredReportView text={smoothLiveReportText} />
@@ -1557,7 +1751,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
                       onClick={() => setActiveReportSection(section.id)}
                     >
                       {section.label}
-                      {hasReport ? "" : " · pending"}
+                      {hasReport ? "" : " · 等待中"}
                     </Button>
                   );
                 })}
@@ -1565,13 +1759,16 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
 
               {activeReportSection === "final_decision" ? (
                 <div className="rounded border p-2 bg-muted/20">
-                  <p className="mb-2 font-medium">Final Decision</p>
+                  <p className="mb-2 font-medium">最终决策</p>
                   <StructuredReportView text={run.finalDecision.thesis} compact />
                 </div>
               ) : activeReport ? (
                 <div className="rounded border p-2 bg-muted/20">
                   <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                    <p className="font-medium">{activeReport.title}</p>
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <p className="font-medium">{activeReport.title}</p>
+                      {activeReport.artifactType ? <Badge variant="outline">{formatArtifactType(activeReport.artifactType)}</Badge> : null}
+                    </div>
                     <span className="text-muted-foreground">{formatDateTime(activeReport.createdAt)}</span>
                   </div>
                   <div className="max-h-[34rem] overflow-auto pr-1">
@@ -1580,17 +1777,23 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
                 </div>
               ) : (
                 <div className="rounded border border-dashed p-4 text-center text-muted-foreground">
-                  当前分区暂无最终报告。运行中请查看 Agent DAG 中对应节点的 Live Output。
+                  当前分区暂无最终报告。运行中请查看 Agent 执行链中对应节点的实时输出。
                 </div>
               )}
 
               {derived?.sortedReports.length ? (
                 <details className="rounded border bg-background p-2">
-                  <summary className="cursor-pointer font-medium">All Reports ({derived.sortedReports.length})</summary>
+                  <summary className="cursor-pointer font-medium">全部报告（{derived.sortedReports.length}）</summary>
                   <div className="mt-2 space-y-2">
                     {derived.sortedReports.map((report) => (
                       <div key={report.reportId} className="rounded border p-2">
-                        <p className="font-medium">{report.title}</p>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="font-medium">{report.title}</p>
+                          <div className="flex flex-wrap items-center gap-1">
+                            {report.artifactType ? <Badge variant="outline">{formatArtifactType(report.artifactType)}</Badge> : null}
+                            <span className="text-[11px] text-muted-foreground">{report.reportId}</span>
+                          </div>
+                        </div>
                         <StructuredReportView text={report.summary} className="mt-1" compact />
                       </div>
                     ))}
@@ -1602,15 +1805,15 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Agent Debate Panel</CardTitle>
+              <CardTitle className="text-base">观点讨论面板</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-xs">
               <div className="flex flex-col gap-3">
                 {[
                   {
                     id: "bull_view" as const,
-                    label: "Bull Researcher",
-                    stance: "BULL",
+                    label: "正方研究员",
+                    stance: "正方",
                     liveText: smoothBullOutput,
                     rawLiveText: debateLiveOutputs.bull,
                     reportText: reportSections.get("bull_view")?.summary ?? "",
@@ -1619,8 +1822,8 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
                   },
                   {
                     id: "bear_view" as const,
-                    label: "Bear Researcher",
-                    stance: "BEAR",
+                    label: "反方研究员",
+                    stance: "反方",
                     liveText: smoothBearOutput,
                     rawLiveText: debateLiveOutputs.bear,
                     reportText: reportSections.get("bear_view")?.summary ?? "",
@@ -1635,7 +1838,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
                       <div className="flex items-center justify-between gap-2">
                         <p className="font-medium">{track.label}</p>
                         <div className="flex items-center gap-1">
-                          {isLive ? <Badge variant="secondary">Live</Badge> : null}
+                          {isLive ? <Badge variant="secondary">实时</Badge> : null}
                           <Badge variant={track.badge}>{track.stance}</Badge>
                         </div>
                       </div>
@@ -1650,7 +1853,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
               {derived?.debateMessages.length ? (
                 <details className="rounded border bg-background p-2">
                   <summary className="cursor-pointer font-medium">
-                    Raw Debate Messages ({Math.min(derived.debateMessages.length, MAX_RENDERED_DEBATE_MESSAGES)}/{derived.debateMessages.length})
+                    原始讨论消息（{Math.min(derived.debateMessages.length, MAX_RENDERED_DEBATE_MESSAGES)}/{derived.debateMessages.length}）
                   </summary>
                   <div className="mt-2 space-y-2">
                     {derived.debateMessages.slice(-MAX_RENDERED_DEBATE_MESSAGES).map((message, index) => {
@@ -1680,7 +1883,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Final Decision Card</CardTitle>
+              <CardTitle className="text-base">最终决策卡片</CardTitle>
             </CardHeader>
             <CardContent>
               <FinalDecisionView
@@ -1697,14 +1900,14 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
         <div className="xl:col-span-3 flex flex-col gap-3">
           <Card className="order-2">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Tool Calls Timeline</CardTitle>
+              <CardTitle className="text-base">工具调用时间线</CardTitle>
             </CardHeader>
             <CardContent className="max-h-[24rem] overflow-auto space-y-2 pr-1 text-[11px]">
               {derived?.sortedToolCalls.length || derived?.runtimeToolActivities.length ? (
                 <>
                   {(derived.sortedToolCalls.length + derived.runtimeToolActivities.length > MAX_RENDERED_TOOL_ACTIVITIES) ? (
                     <p className="rounded border bg-muted/30 p-2 text-muted-foreground">
-                      Showing latest {MAX_RENDERED_TOOL_ACTIVITIES} runtime tool activities. Historical events remain available through the API.
+                      当前仅展示最近 {MAX_RENDERED_TOOL_ACTIVITIES} 条工具活动，历史事件仍可通过 API 查看。
                     </p>
                   ) : null}
                   {derived.sortedToolCalls.slice(-MAX_RENDERED_TOOL_ACTIVITIES).map((call: ToolCall) => {
@@ -1713,22 +1916,22 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
                       <div key={call.callId} className="rounded border p-2 space-y-1">
                         <div className="flex items-center justify-between gap-2">
                           <p className="truncate font-medium">{call.toolName}</p>
-                          <Badge variant={TOOL_STATUS_BADGE[call.status]}>{call.status}</Badge>
+                          <Badge variant={TOOL_STATUS_BADGE[call.status]}>{TOOL_STATUS_LABEL[call.status]}</Badge>
                         </div>
-                        <p className="truncate text-muted-foreground">Agent: {agent?.name ?? call.agentId}</p>
+                        <p className="truncate text-muted-foreground">Agent：{agent?.name ?? call.agentId}</p>
                         <details>
-                          <summary className="cursor-pointer text-muted-foreground">details</summary>
+                          <summary className="cursor-pointer text-muted-foreground">详情</summary>
                           <div className="mt-1 space-y-2">
-                            <p className="text-muted-foreground">Contract: {getToolContractDescription(call.toolName)}</p>
-                            {typeof call.args.source === "string" ? <p className="text-muted-foreground">Source: {call.args.source}</p> : null}
-                            {typeof call.args.query === "string" ? <p className="break-words text-muted-foreground">Query: {call.args.query}</p> : null}
-                            <p className="text-muted-foreground">Args: {formatArgsSummary(call.args)}</p>
-                            <p className="text-muted-foreground">Result: {call.summary ?? "执行中或无结果摘要"}</p>
+                            <p className="text-muted-foreground">调用说明：{getToolContractDescription(call.toolName)}</p>
+                            {typeof call.args.source === "string" ? <p className="text-muted-foreground">来源：{call.args.source}</p> : null}
+                            {typeof call.args.query === "string" ? <p className="break-words text-muted-foreground">查询：{call.args.query}</p> : null}
+                            <p className="text-muted-foreground">参数：{formatArgsSummary(call.args)}</p>
+                            <p className="text-muted-foreground">结果：{call.summary ?? "执行中或无结果摘要"}</p>
                             <p className="text-muted-foreground">
                               {formatDateTime(call.startedAt)} {call.completedAt ? `→ ${formatDateTime(call.completedAt)}` : ""}
                             </p>
                             <details>
-                              <summary className="cursor-pointer text-muted-foreground">sanitized args payload</summary>
+                              <summary className="cursor-pointer text-muted-foreground">脱敏参数</summary>
                               <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap rounded bg-muted/40 p-2 font-mono text-[10px] text-muted-foreground">
                                 {formatJsonPreview(call.args)}
                               </pre>
@@ -1758,21 +1961,21 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
                         <p className="truncate font-medium">{activity.toolName}</p>
                         <Badge variant={runtimeToolStatusBadge(activity.status)}>{activity.status}</Badge>
                       </div>
-                      <p className="truncate text-muted-foreground">Agent: {activity.agentName}</p>
+                      <p className="truncate text-muted-foreground">Agent：{activity.agentName}</p>
                       <details>
-                        <summary className="cursor-pointer text-muted-foreground">details</summary>
+                        <summary className="cursor-pointer text-muted-foreground">详情</summary>
                         <div className="mt-1 space-y-2">
-                          <p className="text-muted-foreground">Contract: {getToolContractDescription(activity.toolName)}</p>
-                          <p className="text-muted-foreground">Step: {activity.stepId}</p>
-                          {activity.source ? <p className="text-muted-foreground">Source: {activity.source}</p> : null}
-                          {activity.query ? <p className="break-words text-muted-foreground">Query: {activity.query}</p> : null}
-                          <p className="text-muted-foreground">Args: {formatArgsSummary(activity.args)}</p>
-                          <p className="text-muted-foreground">Result: {activity.summary ?? "执行中，等待 runtime tool result。"}</p>
+                          <p className="text-muted-foreground">调用说明：{getToolContractDescription(activity.toolName)}</p>
+                          <p className="text-muted-foreground">步骤：{STEP_LABEL[activity.stepId] ?? activity.stepId}</p>
+                          {activity.source ? <p className="text-muted-foreground">来源：{activity.source}</p> : null}
+                          {activity.query ? <p className="break-words text-muted-foreground">查询：{activity.query}</p> : null}
+                          <p className="text-muted-foreground">参数：{formatArgsSummary(activity.args)}</p>
+                          <p className="text-muted-foreground">结果：{activity.summary ?? "执行中，等待工具返回结果。"}</p>
                           <p className="text-muted-foreground">
                             {formatDateTime(activity.startedAt)} {activity.completedAt ? `→ ${formatDateTime(activity.completedAt)}` : ""}
                           </p>
                           <details>
-                            <summary className="cursor-pointer text-muted-foreground">sanitized event payload</summary>
+                            <summary className="cursor-pointer text-muted-foreground">脱敏事件内容</summary>
                             <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap rounded bg-muted/40 p-2 font-mono text-[10px] text-muted-foreground">
                               {formatJsonPreview({
                                 called: activity.callPayload,
@@ -1807,7 +2010,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
 
           <Card className="order-1">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Evidence Used</CardTitle>
+              <CardTitle className="text-base">使用证据</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 text-xs">
               {derived?.usedEvidence.length ? (
@@ -1817,9 +2020,16 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
                     <p className="text-muted-foreground">
                       {EVIDENCE_TYPE_LABEL[item.evidenceType]} · {item.sourceName}
                     </p>
+                    <div className="flex flex-wrap gap-1">
+                      {item.sourceApiName ? <Badge variant="outline">API：{item.sourceApiName}</Badge> : null}
+                      {item.snapshotId ? <Badge variant="outline">Snapshot：{item.snapshotId}</Badge> : null}
+                    </div>
                     <p className="text-muted-foreground">
                       质量 {item.qualityScore} · 发布时间 {formatDateTime(item.publishedAt)}
                     </p>
+                    {item.snapshotCapturedAt ? (
+                      <p className="text-muted-foreground">快照时间：{formatDateTime(item.snapshotCapturedAt)}</p>
+                    ) : null}
                     <p className="text-muted-foreground">{item.summary}</p>
                     {hasSourceUrl(item.url) ? (
                       <a
@@ -1854,7 +2064,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
 
           <Card className="order-3">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Data Context</CardTitle>
+              <CardTitle className="text-base">数据上下文</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-2">
               {derived?.dataContext.map((item) => (
@@ -1869,51 +2079,51 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Runtime Metrics</CardTitle>
+          <CardTitle className="text-base">运行指标</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-10 gap-2 text-xs">
           <div className="rounded border p-2">
-            <p className="text-muted-foreground">Tool Calls</p>
+            <p className="text-muted-foreground">工具调用</p>
             <p className="font-medium">{liveMetrics?.toolCalls ?? run.metrics.toolCalls}</p>
           </div>
           <div className="rounded border p-2">
-            <p className="text-muted-foreground">LLM Calls</p>
+            <p className="text-muted-foreground">模型调用</p>
             <p className="font-medium">{liveMetrics?.llmCalls ?? run.metrics.llmCalls}</p>
           </div>
           <div className="rounded border p-2">
-            <p className="text-muted-foreground">Generated Reports</p>
+            <p className="text-muted-foreground">生成报告</p>
             <p className="font-medium">{liveMetrics?.generatedReports ?? run.metrics.generatedReports}</p>
           </div>
           <div className="rounded border p-2">
-            <p className="text-muted-foreground">Prompt Tokens</p>
+            <p className="text-muted-foreground">提示词 Token</p>
             <p className="font-medium">{formatInteger(liveMetrics?.promptTokens)}</p>
           </div>
           <div className="rounded border p-2">
-            <p className="text-muted-foreground">Completion Tokens</p>
+            <p className="text-muted-foreground">生成 Token</p>
             <p className="font-medium">{formatInteger(liveMetrics?.completionTokens)}</p>
           </div>
           <div className="rounded border p-2">
-            <p className="text-muted-foreground">Total Tokens</p>
-            <p className="font-medium">{formatInteger(liveMetrics?.totalTokens)}</p>
+            <p className="text-muted-foreground">总 Token</p>
+            <p className="font-medium">{formatInteger(tokenTotal(liveMetrics))}</p>
           </div>
           <div className="rounded border p-2">
-            <p className="text-muted-foreground">Evidence Items</p>
+            <p className="text-muted-foreground">证据数量</p>
             <p className="font-medium">{derived?.usedEvidence.length ?? 0}</p>
           </div>
           <div className="rounded border p-2">
-            <p className="text-muted-foreground">Duration</p>
+            <p className="text-muted-foreground">耗时</p>
             <p className="font-medium">{derived?.runDuration}</p>
           </div>
           <div className="rounded border p-2">
-            <p className="text-muted-foreground">Agent Count</p>
+            <p className="text-muted-foreground">Agent 数量</p>
             <p className="font-medium">{run.agents.length}</p>
           </div>
           <div className="rounded border p-2">
-            <p className="text-muted-foreground">Completed Agents</p>
+            <p className="text-muted-foreground">完成 Agent</p>
             <p className="font-medium">{derived?.completedAgents}</p>
           </div>
           <div className="rounded border p-2">
-            <p className="text-muted-foreground">Risk Warnings</p>
+            <p className="text-muted-foreground">风险提示</p>
             <p className="font-medium">{derived?.riskWarningCount}</p>
           </div>
         </CardContent>
@@ -1923,13 +2133,13 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
         <CardHeader className="pb-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <CardTitle className="text-base">Runtime Event Stream</CardTitle>
+              <CardTitle className="text-base">运行事件流</CardTitle>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="outline">Runtime Mode: {apiMode === "real" ? "Real API Events" : "Mock Replay"}</Badge>
-              <Badge variant="outline">Transport: {apiMode === "real" ? "sse" : "mock"}</Badge>
+              <Badge variant="outline">运行模式：{apiMode === "real" ? "真实 API 事件" : "模拟回放"}</Badge>
+              <Badge variant="outline">传输：{apiMode === "real" ? "SSE" : "本地模拟"}</Badge>
               <Badge variant={runtimeReplayStatus === "ERROR" ? "destructive" : runtimeReplayStatus === "RUNNING" ? "secondary" : "default"}>
-                {runtimeReplayStatus === "IDLE" ? "Event Stream Ready" : runtimeReplayStatus}
+                {runtimeReplayStatus === "IDLE" ? "事件流就绪" : formatRuntimeStatus(runtimeReplayStatus)}
               </Badge>
             </div>
           </div>
@@ -1937,31 +2147,31 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
         <CardContent className="space-y-3 text-xs">
           <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" variant="outline" onClick={startRuntimeReplay} disabled={runtimeReplayStatus === "RUNNING"}>
-              {apiMode === "real" ? "Start SSE Stream" : "Replay Runtime Events"}
+              {apiMode === "real" ? "启动 SSE 事件流" : "回放运行事件"}
             </Button>
             <Button size="sm" variant="outline" onClick={stopRuntimeReplay} disabled={runtimeReplayStatus !== "RUNNING"}>
-              {apiMode === "real" ? "Stop SSE Stream" : "Stop Replay"}
+              {apiMode === "real" ? "停止 SSE 事件流" : "停止回放"}
             </Button>
             <span className="text-muted-foreground">
-              Events kept: {runtimeEvents.length}/{runtimeEventsLoadedCount || runtimeEvents.length} · Sequence: {runtimeSnapshot?.sequence ?? 0} · Snapshot: {runtimeSnapshot?.status ?? "QUEUED"}
+              已保留事件：{runtimeEvents.length}/{runtimeEventsLoadedCount || runtimeEvents.length} · 序号：{runtimeSnapshot?.sequence ?? 0} · 快照：{formatRuntimeStatus(runtimeSnapshot?.status ?? "QUEUED")}
             </span>
           </div>
           {runtimeReplayError ? <p className="text-destructive">{runtimeReplayError}</p> : null}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
             <div className="rounded border p-2">
-              <p className="text-muted-foreground">Replay Tool Calls</p>
+              <p className="text-muted-foreground">回放工具调用</p>
               <p className="font-medium">{runtimeSnapshot?.toolCalls.length ?? 0}</p>
             </div>
             <div className="rounded border p-2">
-              <p className="text-muted-foreground">Replay Reports</p>
+              <p className="text-muted-foreground">回放报告</p>
               <p className="font-medium">{runtimeSnapshot?.reports.length ?? 0}</p>
             </div>
             <div className="rounded border p-2">
-              <p className="text-muted-foreground">Replay Evidence</p>
+              <p className="text-muted-foreground">回放证据</p>
               <p className="font-medium">{runtimeSnapshot?.evidenceIds.length ?? 0}</p>
             </div>
             <div className="rounded border p-2">
-              <p className="text-muted-foreground">Replay Checkpoints</p>
+              <p className="text-muted-foreground">回放检查点</p>
               <p className="font-medium">{runtimeSnapshot?.checkpoints.length ?? 0}</p>
             </div>
           </div>
@@ -1970,18 +2180,18 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
               runtimeSnapshot.timeline.map((item) => (
                 <div key={item.eventId} className="rounded border-l-4 border-emerald-500 bg-muted/20 p-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <Badge variant="outline">{item.type}</Badge>
+                    <Badge variant="outline">{formatRuntimeEventType(item.type)}</Badge>
                     <span className="text-muted-foreground">{formatDateTime(item.timestamp)}</span>
                   </div>
-                  <p className="mt-1 font-medium">{item.agentName ?? "System"}</p>
+                  <p className="mt-1 font-medium">{formatAgentName(item.agentName)}</p>
                   <p className="text-muted-foreground mt-1">{item.summary}</p>
                 </div>
               ))
             ) : (
               <p className="text-muted-foreground">
                 {apiMode === "real"
-                  ? "点击 Start SSE Stream 后，将逐条展示后端 runtime events。"
-                  : "点击 Replay Runtime Events 后，将按顺序展示 mock runtime event stream。"}
+                  ? "点击启动 SSE 事件流后，将逐条展示后端运行事件。"
+                  : "点击回放运行事件后，将按顺序展示模拟运行事件。"}
               </p>
             )}
           </div>
@@ -1992,10 +2202,10 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
         <CardHeader className="pb-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <CardTitle className="text-base">Worker Runtime Artifacts</CardTitle>
+              <CardTitle className="text-base">Worker 运行产物</CardTitle>
             </div>
             <Button size="sm" variant="outline" onClick={refreshWorkerArtifacts} disabled={isLoadingWorkerArtifacts}>
-              {isLoadingWorkerArtifacts ? "Loading..." : "Refresh Worker"}
+              {isLoadingWorkerArtifacts ? "读取中..." : "刷新 Worker"}
             </Button>
           </div>
         </CardHeader>
@@ -2005,9 +2215,9 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant={workerArtifacts.exists ? "default" : "outline"}>
-                  {workerArtifacts.exists ? "worker artifacts available" : "no worker artifacts"}
+                  {workerArtifacts.exists ? "已找到 Worker 产物" : "暂无 Worker 产物"}
                 </Badge>
-                <span className="truncate text-muted-foreground">WorkDir: {workerArtifacts.workDir}</span>
+                <span className="truncate text-muted-foreground">工作目录：{workerArtifacts.workDir}</span>
               </div>
               {workerArtifacts.message ? <p className="text-muted-foreground">{workerArtifacts.message}</p> : null}
               {Object.keys(workerArtifacts.files).length ? (
@@ -2015,7 +2225,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
                   {Object.entries(workerArtifacts.files).map(([name, file]) => (
                     <div key={name} className="rounded border p-2">
                       <p className="font-medium">{name}</p>
-                      <p className="text-muted-foreground">{file.exists ? "available" : "missing"}</p>
+                      <p className="text-muted-foreground">{file.exists ? "可用" : "缺失"}</p>
                       <p className="text-muted-foreground">{formatFileSize(file.sizeBytes)}</p>
                     </div>
                   ))}
@@ -2023,7 +2233,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
               ) : null}
               <div className="grid gap-3 xl:grid-cols-2">
                 <details className="rounded border p-2" open={Boolean(workerArtifacts.stdoutLines.length)}>
-                  <summary className="cursor-pointer font-medium">stdout.log tail ({workerArtifacts.stdoutLines.length})</summary>
+                  <summary className="cursor-pointer font-medium">标准输出尾部 ({workerArtifacts.stdoutLines.length})</summary>
                   {workerArtifacts.stdoutLines.length ? (
                     <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded bg-slate-950 p-3 text-[11px] leading-relaxed text-slate-100">
                       {workerArtifacts.stdoutLines.join("\n")}
@@ -2033,7 +2243,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
                   )}
                 </details>
                 <details className="rounded border p-2" open={Boolean(workerArtifacts.stderrLines.length)}>
-                  <summary className="cursor-pointer font-medium">stderr.log tail ({workerArtifacts.stderrLines.length})</summary>
+                  <summary className="cursor-pointer font-medium">错误输出尾部 ({workerArtifacts.stderrLines.length})</summary>
                   {workerArtifacts.stderrLines.length ? (
                     <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded bg-slate-950 p-3 text-[11px] leading-relaxed text-rose-100">
                       {workerArtifacts.stderrLines.join("\n")}
@@ -2045,7 +2255,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
               </div>
               <details className="rounded border p-2">
                 <summary className="cursor-pointer font-medium">
-                  Worker JSONL events ({workerArtifacts.events.length}) / result.json
+                  Worker JSONL 事件 ({workerArtifacts.events.length}) / result.json
                 </summary>
                 <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded bg-muted/40 p-3 text-[11px] leading-relaxed">
                   {JSON.stringify(
@@ -2067,7 +2277,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
               </details>
             </div>
           ) : (
-            <p className="text-muted-foreground">点击 Refresh Worker 读取当前 run 的 worker 产物。</p>
+            <p className="text-muted-foreground">点击刷新 Worker 读取当前任务的 Worker 产物。</p>
           )}
         </CardContent>
       </Card>
@@ -2076,10 +2286,10 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
         <CardHeader className="pb-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <CardTitle className="text-base">Backend Runtime Log</CardTitle>
+              <CardTitle className="text-base">后端运行日志</CardTitle>
             </div>
             <Button size="sm" variant="outline" onClick={refreshBackendLogs} disabled={isLoadingBackendLogs}>
-              {isLoadingBackendLogs ? "Loading..." : "Refresh Logs"}
+              {isLoadingBackendLogs ? "读取中..." : "刷新日志"}
             </Button>
           </div>
         </CardHeader>
@@ -2088,20 +2298,20 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
           {backendLogs ? (
             <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-2">
-                <Badge variant={backendLogs.exists ? "default" : "outline"}>{backendLogs.exists ? "available" : "missing"}</Badge>
-                {backendLogs.source ? <Badge variant="outline">source: {backendLogs.source}</Badge> : null}
-                <span className="truncate text-muted-foreground">Path: {backendLogs.path}</span>
-                <span className="text-muted-foreground">Raw Lines: {backendLogs.lines.length}</span>
-                <span className="text-muted-foreground">Visible: {filteredBackendLogLines.length}</span>
+                <Badge variant={backendLogs.exists ? "default" : "outline"}>{backendLogs.exists ? "可用" : "缺失"}</Badge>
+                {backendLogs.source ? <Badge variant="outline">来源：{backendLogs.source}</Badge> : null}
+                <span className="truncate text-muted-foreground">路径：{backendLogs.path}</span>
+                <span className="text-muted-foreground">原始行数：{backendLogs.lines.length}</span>
+                <span className="text-muted-foreground">可见行数：{filteredBackendLogLines.length}</span>
                 {hiddenBackendLogLineCount > 0 ? (
-                  <span className="text-muted-foreground">Hidden legacy/global: {hiddenBackendLogLineCount}</span>
+                  <span className="text-muted-foreground">已隐藏旧日志/全局日志：{hiddenBackendLogLineCount}</span>
                 ) : null}
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 {[
                   { id: "alphatrace" as const, label: "AlphaTrace" },
-                  { id: "current_run" as const, label: "Current Run" },
-                  { id: "all" as const, label: "All Global Logs" },
+                  { id: "current_run" as const, label: "当前任务" },
+                  { id: "all" as const, label: "全部全局日志" },
                 ].map((item) => (
                   <Button
                     key={item.id}
@@ -2116,7 +2326,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
               {backendLogs.message ? <p className="text-muted-foreground">{backendLogs.message}</p> : null}
               {!backendLogs.exists && backendLogs.candidates?.length ? (
                 <details className="rounded border bg-muted/20 p-2 text-muted-foreground">
-                  <summary className="cursor-pointer font-medium text-foreground">Checked log file candidates</summary>
+                  <summary className="cursor-pointer font-medium text-foreground">已检查的日志文件候选</summary>
                   <ul className="mt-2 list-disc space-y-1 pl-5">
                     {backendLogs.candidates.map((candidate) => (
                       <li key={candidate} className="break-all font-mono text-[11px]">
@@ -2132,19 +2342,19 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
                 </pre>
               ) : (
                 <p className="text-muted-foreground">
-                  当前过滤条件下暂无日志内容。可以切换 All Global Logs，或以 Runtime Event Stream 查看当前 run 的结构化过程。
+                  当前过滤条件下暂无日志内容。可以切换全部全局日志，或在运行事件流中查看当前任务的结构化过程。
                 </p>
               )}
             </div>
           ) : (
-            <p className="text-muted-foreground">点击 Refresh Logs 读取后端日志。</p>
+            <p className="text-muted-foreground">点击刷新日志读取后端日志。</p>
           )}
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Agent Timeline</CardTitle>
+          <CardTitle className="text-base">Agent 时间线</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-xs">
           {derived?.timelineItems.length ? (
@@ -2157,11 +2367,11 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
                         {formatTimelineType(item)}
                       </Badge>
                       {item.stepLabel ? <Badge variant="outline">{item.stepLabel}</Badge> : null}
-                      {item.count ? <Badge variant="outline">{item.metricCount ? `${item.count} updates` : `${item.count} chunks`}</Badge> : null}
+                      {item.count ? <Badge variant="outline">{item.metricCount ? `${item.count} 次更新` : `${item.count} 段输出`}</Badge> : null}
                     </div>
                     <span className="text-muted-foreground">{formatDateTime(item.timestamp)}</span>
                   </div>
-                  <p className="mt-1 font-medium">{item.agentName}</p>
+                  <p className="mt-1 font-medium">{formatAgentName(item.agentName)}</p>
                   <p className="text-muted-foreground mt-1 line-clamp-3">{item.summary}</p>
                 </div>
               );
@@ -2175,7 +2385,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
       {derived?.riskWarnings.length ? (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Risk Warnings</CardTitle>
+            <CardTitle className="text-base">风险提示</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-xs">
             {derived.riskWarnings.map((warning, index) => {
@@ -2183,9 +2393,9 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
               return (
                 <div key={`${warning.timestamp}-${index}`} className="rounded border p-2">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="font-medium">{agent?.name ?? warning.agentId}</p>
+                    <p className="font-medium">{formatAgentName(agent?.name ?? warning.agentId)}</p>
                     <Badge variant={warning.level === "HIGH" ? "destructive" : warning.level === "MEDIUM" ? "secondary" : "outline"}>
-                      {warning.level}
+                      {RISK_LEVEL_LABEL[warning.level]}
                     </Badge>
                   </div>
                   <p className="text-muted-foreground mt-1">{warning.content}</p>

@@ -5,6 +5,7 @@ import type {
   AgentDecisionHorizon,
   AgentEvent,
   AgentReport,
+  DecisionTrace,
   AgentRole,
   AgentRun,
   AgentRunMetrics,
@@ -16,6 +17,7 @@ import type {
   ToolCallStatus,
 } from "./model";
 import type { Evidence, EvidenceType } from "../evidence/model";
+import type { ResearchArtifactType, ResearchRunType } from "../research-workspace/taxonomy";
 import { agentRunsMock } from "@/mocks/agent-runs.mock";
 import { evidenceMock } from "@/mocks/evidence.mock";
 import { shouldUseMockData } from "@/shared/api/api-mode";
@@ -31,6 +33,8 @@ export interface ListAgentRunsParams {
   assetId?: string;
   taskType?: AgentRunTaskType;
   portfolioId?: string;
+  limit?: number;
+  offset?: number;
 }
 
 export interface CreateDemoAgentRunPayload {
@@ -46,6 +50,7 @@ export interface SubmitAgentRunPayload {
   portfolioId?: string;
   strategyId?: string;
   taskType: AgentRunTaskType | string;
+  researchRunType?: ResearchRunType;
   question: string;
   horizon?: "short_term" | "medium_term" | "long_term";
   riskPreference?: "conservative" | "balanced" | "aggressive";
@@ -186,7 +191,7 @@ interface BackendAgentRunnerStatusResponse {
 interface BackendSubmitAgentRunResponse {
   runId: string;
   status: string;
-  mode: "stub" | "qwen" | "tradingagents" | "langalpha" | "custom_runner";
+  mode: "stub" | "qwen" | "alphatrace_native" | "tradingagents" | "langalpha" | "custom_runner";
   message: string;
   run: BackendAgentRun;
 }
@@ -203,6 +208,7 @@ interface BackendAgentRun {
   name: string;
   target: string;
   taskType: string;
+  researchRunType?: ResearchRunType | null;
   riskLevel: string;
   status: string;
   assetIds?: string[];
@@ -218,7 +224,8 @@ interface BackendAgentRun {
   events?: BackendRuntimeEvent[];
   evidenceIds?: string[];
   finalDecision?: BackendAgentDecision;
-  metrics?: Partial<AgentRunMetrics>;
+  decisionTrace?: BackendDecisionTrace | null;
+  metrics?: Partial<AgentRunMetrics> & Record<string, unknown>;
 }
 
 interface BackendAgent {
@@ -251,6 +258,7 @@ interface BackendAgentReport {
   title: string;
   summary: string;
   createdAt: string;
+  artifactType?: ResearchArtifactType | string | null;
 }
 
 interface BackendAgentDecision {
@@ -266,12 +274,40 @@ interface BackendAgentDecision {
   observationIndicators?: string[];
 }
 
+interface BackendDecisionTraceStep {
+  stepId: string;
+  title: string;
+  agentName?: string | null;
+  artifactIds?: string[];
+  evidenceIds?: string[];
+  summary?: string;
+  status?: string;
+}
+
+interface BackendDecisionTrace {
+  traceId: string;
+  runId: string;
+  researchRunType?: ResearchRunType | null;
+  artifactIds?: string[];
+  evidenceIds?: string[];
+  conclusion?: string;
+  supportSummary?: string;
+  riskSummary?: string;
+  openQuestions?: string[];
+  reviewStatus?: string;
+  steps?: BackendDecisionTraceStep[];
+  createdAt: string;
+}
+
 interface BackendEvidenceReference {
   evidenceId: string;
   title: string;
   evidenceType: string;
   sourceName: string;
   sourceType?: string;
+  sourceApiName?: string | null;
+  snapshotId?: string | null;
+  snapshotCapturedAt?: string | null;
   qualityScore: number;
   reliabilityScore?: number;
   summary: string;
@@ -304,6 +340,18 @@ const realModeNotImplemented = (operation: string): never => {
 const AGENT_RUN_SUBMIT_TIMEOUT_MS = 150000;
 
 const upperSnake = (value?: string | null): string => (value ?? "").replace(/[-\s]+/g, "_").toUpperCase();
+
+const isEndpointMethodUnavailable = (error: unknown): boolean => {
+  if (typeof error !== "object" || error === null) return false;
+  const record = error as { status?: unknown; code?: unknown; message?: unknown };
+  return (
+    record.status === 404 ||
+    record.status === 405 ||
+    record.code === "HTTP_404" ||
+    record.code === "HTTP_405" ||
+    (typeof record.message === "string" && /method not allowed|not found/i.test(record.message))
+  );
+};
 
 const mapRunStatus = (status: string): AgentRunStatus => {
   const normalized = upperSnake(status);
@@ -376,6 +424,7 @@ const mapAgentRole = (role: string): AgentRole => {
     "LIQUIDITY_ANALYST",
     "CONCENTRATION_ANALYST",
     "SCENARIO_ANALYST",
+    "RISK_ANALYST",
     "PORTFOLIO_MANAGER",
   ];
   return roles.includes(normalized as AgentRole) ? (normalized as AgentRole) : "MARKET_ANALYST";
@@ -395,6 +444,54 @@ const mapDecisionHorizon = (horizon: string): AgentDecisionHorizon => {
     return normalized as AgentDecisionHorizon;
   }
   return "MEDIUM_TERM";
+};
+
+const mapResearchArtifactType = (artifactType?: string | null): ResearchArtifactType | undefined => {
+  const normalized = (artifactType ?? "").trim();
+  const types: ResearchArtifactType[] = [
+    "market_brief",
+    "asset_research_report",
+    "etf_comparison_table",
+    "fund_comparison_table",
+    "strategy_card",
+    "portfolio_exposure_report",
+    "risk_review_report",
+    "trade_plan",
+    "post_trade_review",
+    "evidence_bundle",
+  ];
+  return types.includes(normalized as ResearchArtifactType) ? (normalized as ResearchArtifactType) : undefined;
+};
+
+const mapDecisionTrace = (trace?: BackendDecisionTrace | null): DecisionTrace | undefined => {
+  if (!trace) return undefined;
+  const reviewStatus = ["pending", "approved", "rejected", "needs_revision"].includes(trace.reviewStatus ?? "")
+    ? (trace.reviewStatus as DecisionTrace["reviewStatus"])
+    : "pending";
+  return {
+    traceId: trace.traceId,
+    runId: trace.runId,
+    researchRunType: trace.researchRunType ?? undefined,
+    artifactIds: trace.artifactIds ?? [],
+    evidenceIds: trace.evidenceIds ?? [],
+    conclusion: trace.conclusion ?? "",
+    supportSummary: trace.supportSummary ?? "",
+    riskSummary: trace.riskSummary ?? "",
+    openQuestions: trace.openQuestions ?? [],
+    reviewStatus,
+    steps: (trace.steps ?? []).map((step) => ({
+      stepId: step.stepId,
+      title: step.title,
+      agentName: step.agentName ?? undefined,
+      artifactIds: step.artifactIds ?? [],
+      evidenceIds: step.evidenceIds ?? [],
+      summary: step.summary ?? "",
+      status: ["pending", "completed", "needs_review"].includes(step.status ?? "")
+        ? (step.status as DecisionTrace["steps"][number]["status"])
+        : "completed",
+    })),
+    createdAt: trace.createdAt,
+  };
 };
 
 const mapEvidenceType = (evidenceType: string): EvidenceType => {
@@ -435,6 +532,69 @@ const findAgentIdByName = (agents: Agent[], agentName?: string | null): string =
   return agents.find((agent) => agent.name === agentName)?.agentId ?? agents[0]?.agentId ?? "runtime-agent";
 };
 
+const metricNumber = (metrics: Record<string, unknown> | undefined, keys: string[]): number | undefined => {
+  if (!metrics) return undefined;
+  for (const key of keys) {
+    const value = metrics[key];
+    if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, Math.round(value));
+    if (typeof value === "string" && value.trim()) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) return Math.max(0, Math.round(parsed));
+    }
+  }
+  return undefined;
+};
+
+const metricCost = (metrics: Record<string, unknown> | undefined, keys: string[]): number | undefined => {
+  if (!metrics) return undefined;
+  for (const key of keys) {
+    const value = metrics[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string" && value.trim()) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+  return undefined;
+};
+
+const mapBackendMetrics = (
+  metrics: (Partial<AgentRunMetrics> & Record<string, unknown>) | undefined,
+  fallback: Pick<AgentRunMetrics, "toolCalls" | "generatedReports">,
+): AgentRunMetrics => {
+  const promptTokens = metricNumber(metrics, [
+    "promptTokens",
+    "prompt_tokens",
+    "inputTokens",
+    "input_tokens",
+    "inputTokenCount",
+    "input_token_count",
+  ]);
+  const completionTokens = metricNumber(metrics, [
+    "completionTokens",
+    "completion_tokens",
+    "outputTokens",
+    "output_tokens",
+    "outputTokenCount",
+    "output_token_count",
+  ]);
+  const explicitTotalTokens = metricNumber(metrics, ["totalTokens", "total_tokens", "tokenCount", "token_count"]);
+  const inferredTotalTokens =
+    promptTokens !== undefined || completionTokens !== undefined ? (promptTokens ?? 0) + (completionTokens ?? 0) : undefined;
+  const totalTokens = explicitTotalTokens && explicitTotalTokens > 0 ? explicitTotalTokens : inferredTotalTokens;
+
+  return {
+    llmCalls: metricNumber(metrics, ["llmCalls", "llm_calls", "modelCalls", "model_calls"]) ?? 0,
+    toolCalls: metricNumber(metrics, ["toolCalls", "tool_calls"]) ?? fallback.toolCalls,
+    generatedReports: metricNumber(metrics, ["generatedReports", "generated_reports"]) ?? fallback.generatedReports,
+    durationSeconds: metricNumber(metrics, ["durationSeconds", "duration_seconds"]) ?? 0,
+    promptTokens,
+    completionTokens,
+    totalTokens,
+    estimatedCostUsd: metricCost(metrics, ["estimatedCostUsd", "estimated_cost_usd"]),
+  };
+};
+
 const mapRuntimeEvent = (event: BackendRuntimeEvent): AgentRuntimeEvent => ({
   eventId: event.eventId,
   runId: event.runId,
@@ -459,19 +619,19 @@ const mapRuntimeEventToAgentEvent = (event: BackendRuntimeEvent, agents: Agent[]
     case "agent.completed":
       return { type: "agent.completed", runId: event.runId, agentId, timestamp: event.timestamp };
     case "agent.failed":
-      return { type: "agent.failed", runId: event.runId, agentId, error: stringValue("error") || "Agent failed", timestamp: event.timestamp };
+      return { type: "agent.failed", runId: event.runId, agentId, error: stringValue("error") || "分析角色执行失败", timestamp: event.timestamp };
     case "tool.called":
-      return { type: "tool.called", runId: event.runId, agentId, toolName: stringValue("toolName") || "tool", args: (payload.args as Record<string, unknown>) ?? {}, timestamp: event.timestamp };
+      return { type: "tool.called", runId: event.runId, agentId, toolName: stringValue("toolName") || "research.step", args: (payload.args as Record<string, unknown>) ?? {}, timestamp: event.timestamp };
     case "tool.result":
-      return { type: "tool.result", runId: event.runId, agentId, toolName: stringValue("toolName") || "tool", summary: stringValue("summary") || "Tool result received", evidenceIds, timestamp: event.timestamp };
+      return { type: "tool.result", runId: event.runId, agentId, toolName: stringValue("toolName") || "research.step", summary: stringValue("summary") || "证据或数据步骤已更新", evidenceIds, timestamp: event.timestamp };
     case "reasoning.chunk":
-      return { type: "reasoning.chunk", runId: event.runId, agentId, content: stringValue("content") || "Reasoning updated", timestamp: event.timestamp };
+      return { type: "reasoning.chunk", runId: event.runId, agentId, content: stringValue("content") || "阶段分析已更新", timestamp: event.timestamp };
     case "report.generated":
-      return { type: "report.generated", runId: event.runId, agentId, reportId: stringValue("reportId") || event.eventId, title: stringValue("title") || "Runtime report", timestamp: event.timestamp };
+      return { type: "report.generated", runId: event.runId, agentId, reportId: stringValue("reportId") || event.eventId, title: stringValue("title") || "研究报告", timestamp: event.timestamp };
     case "debate.message":
-      return { type: "debate.message", runId: event.runId, agentId, stance: (upperSnake(stringValue("stance")) as "BULL" | "BEAR" | "NEUTRAL") || "NEUTRAL", content: stringValue("content") || "Debate message", timestamp: event.timestamp };
+      return { type: "debate.message", runId: event.runId, agentId, stance: (upperSnake(stringValue("stance")) as "BULL" | "BEAR" | "NEUTRAL") || "NEUTRAL", content: stringValue("content") || "观点论证已更新", timestamp: event.timestamp };
     case "risk.warning":
-      return { type: "risk.warning", runId: event.runId, agentId, level: (upperSnake(stringValue("level")) as "LOW" | "MEDIUM" | "HIGH") || "MEDIUM", content: stringValue("content") || "Risk warning", timestamp: event.timestamp };
+      return { type: "risk.warning", runId: event.runId, agentId, level: (upperSnake(stringValue("level")) as "LOW" | "MEDIUM" | "HIGH") || "MEDIUM", content: stringValue("content") || "风险提示", timestamp: event.timestamp };
     case "decision.updated":
       return { type: "decision.updated", runId: event.runId, action: mapDecisionAction(stringValue("action")), confidence: typeof payload.confidence === "number" ? payload.confidence : 0, timestamp: event.timestamp };
     default:
@@ -486,13 +646,14 @@ const mapBackendAgentReport = (report: BackendAgentReport, agents: Agent[] = [])
   title: report.title,
   summary: report.summary,
   createdAt: report.createdAt,
+  artifactType: mapResearchArtifactType(report.artifactType),
 });
 
 const mapBackendAgentDecision = (decision?: BackendAgentDecision): AgentDecision => ({
   action: mapDecisionAction(decision?.action ?? "watch"),
   horizon: mapDecisionHorizon(decision?.horizon ?? "medium_term"),
   confidence: decision?.confidence ?? 0,
-  thesis: decision?.thesis ?? "No decision thesis returned by backend stub.",
+  thesis: decision?.thesis ?? "本次任务暂未返回可展示的配置观察。",
   risks: decision?.risks ?? [],
   evidenceIds: decision?.evidenceIds ?? [],
   summary: decision?.summary ?? undefined,
@@ -507,6 +668,9 @@ const mapBackendEvidenceReference = (item: BackendEvidenceReference, runId: stri
   evidenceType: mapEvidenceType(item.evidenceType),
   sourceName: item.sourceName,
   sourceType: item.sourceType,
+  sourceApiName: item.sourceApiName ?? undefined,
+  snapshotId: item.snapshotId ?? undefined,
+  snapshotCapturedAt: item.snapshotCapturedAt ?? undefined,
   url: item.url ?? "#",
   publishedAt: item.publishedAt ?? "",
   collectedAt: item.collectedAt ?? item.publishedAt ?? "",
@@ -549,17 +713,23 @@ const mapBackendAgentRun = (run: BackendAgentRun): AgentRun => {
     .filter((event): event is AgentEvent => Boolean(event));
 
   const decision = mapBackendAgentDecision(run.finalDecision);
+  const decisionTrace = mapDecisionTrace(run.decisionTrace);
+  const metrics = mapBackendMetrics(run.metrics, {
+    toolCalls: toolCalls.length,
+    generatedReports: reports.length,
+  });
 
   return {
     runId: run.runId,
     name: run.name,
     target: run.target,
     taskType: mapTaskType(run.taskType),
+    researchRunType: run.researchRunType ?? undefined,
     riskLevel: mapRiskLevel(run.riskLevel),
     status: mapRunStatus(run.status),
     assetIds: run.assetIds ?? [],
     portfolioId: run.portfolioId ?? undefined,
-    triggeredBy: run.triggeredBy ?? "backend_stub",
+    triggeredBy: run.triggeredBy ?? "research_workspace",
     modelName: run.modelName ?? undefined,
     startedAt: run.startedAt,
     updatedAt: run.updatedAt ?? undefined,
@@ -570,24 +740,21 @@ const mapBackendAgentRun = (run: BackendAgentRun): AgentRun => {
     events,
     evidenceIds: run.evidenceIds ?? [],
     finalDecision: decision,
-    metrics: {
-      llmCalls: run.metrics?.llmCalls ?? 0,
-      toolCalls: run.metrics?.toolCalls ?? toolCalls.length,
-      generatedReports: run.metrics?.generatedReports ?? reports.length,
-      durationSeconds: run.metrics?.durationSeconds ?? 0,
-      estimatedCostUsd: run.metrics?.estimatedCostUsd,
-    },
+    decisionTrace,
+    metrics,
   };
 };
 
-const getMockAgentRuns = (params: ListAgentRunsParams = {}): AgentRun[] =>
-  agentRunsMock.filter((run) => {
+const getMockAgentRuns = (params: ListAgentRunsParams = {}): AgentRun[] => {
+  const filtered = agentRunsMock.filter((run) => {
     const statusPass = !params.status || run.status === params.status;
     const assetPass = !params.assetId || run.assetIds.includes(params.assetId);
     const taskTypePass = !params.taskType || run.taskType === params.taskType;
     const portfolioPass = !params.portfolioId || run.portfolioId === params.portfolioId;
     return statusPass && assetPass && taskTypePass && portfolioPass;
   });
+  return filtered.slice(params.offset ?? 0, (params.offset ?? 0) + (params.limit ?? filtered.length));
+};
 
 export const listAgentRuns = (params: ListAgentRunsParams = {}): AgentRun[] => {
   if (!shouldUseMockData()) {
@@ -663,18 +830,21 @@ export const listAgentRunsAsync = async (params: ListAgentRunsParams = {}, delay
 
   try {
     const response = await httpClient.get<BackendAgentRunListResponse>(ENDPOINTS.alphaTraceAgentRuns, {
-      params: {
-        assetId: params.assetId,
-        portfolioId: params.portfolioId,
-        status: params.status?.toLowerCase(),
-        taskType: params.taskType?.toLowerCase(),
-      },
-      timeoutMs: 1200,
+        params: {
+          assetId: params.assetId,
+          portfolioId: params.portfolioId,
+          status: params.status?.toLowerCase(),
+          taskType: params.taskType?.toLowerCase(),
+          limit: params.limit ?? 20,
+          offset: params.offset ?? 0,
+        },
+      timeoutMs: 10000,
     });
     const items = response.items.map(mapBackendAgentRun);
-    return items.length > 0 ? items : getMockAgentRuns(params);
-  } catch {
-    return getMockAgentRuns(params);
+    return items;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to load real AgentRun list";
+    throw new Error(message);
   }
 };
 
@@ -684,9 +854,9 @@ export const getAgentRunByIdAsync = async (runId: string, delayMs?: number): Pro
   }
 
   try {
-    return mapBackendAgentRun(await httpClient.get<BackendAgentRun>(ENDPOINTS.alphaTraceAgentRunDetail(runId), { timeoutMs: 1200 }));
+    return mapBackendAgentRun(await httpClient.get<BackendAgentRun>(ENDPOINTS.alphaTraceAgentRunDetail(runId), { timeoutMs: 15000 }));
   } catch {
-    return agentRunsMock.find((run) => run.runId === runId);
+    return undefined;
   }
 };
 
@@ -778,9 +948,11 @@ export const createDemoAgentRunAsync = async (
   }
 };
 
-export const submitAgentRunAsync = async (
+const submitAgentRunToEndpointAsync = async (
+  endpoint: string,
   payload: SubmitAgentRunPayload,
   delayMs?: number,
+  fallbackEndpoint?: string,
 ): Promise<AgentRun> => {
   if (shouldUseMockData()) {
     // Mock mode does not submit a real task; it returns a local sample run and leaves the submit contract dormant.
@@ -788,19 +960,20 @@ export const submitAgentRunAsync = async (
       (payload.assetId ? agentRunsMock.find((run) => run.assetIds.includes(payload.assetId as string)) : undefined) ??
       agentRunsMock[0];
     if (!mockRun) {
-      throw new Error("Mock Mode 暂无可用于 Submit Agent Task 的本地样例。");
+      throw new Error("Mock Mode 暂无可用于投研任务提交的本地样例。");
     }
     return mockDelay(mockRun, delayMs);
   }
 
   try {
     const response = await httpClient.post<BackendSubmitAgentRunResponse>(
-      ENDPOINTS.alphaTraceSubmitAgentRun,
+      endpoint,
       {
         assetId: payload.assetId,
         portfolioId: payload.portfolioId,
         strategyId: payload.strategyId,
         taskType: payload.taskType,
+        researchRunType: payload.researchRunType,
         question: payload.question,
         horizon: payload.horizon ?? "medium_term",
         riskPreference: payload.riskPreference ?? "balanced",
@@ -811,9 +984,9 @@ export const submitAgentRunAsync = async (
           includeMarketSnapshot: payload.evidenceScope?.includeMarketSnapshot ?? true,
         },
         runnerConfig: {
-          runnerType: payload.runnerConfig?.runnerType ?? "stub",
-          modelProvider: payload.runnerConfig?.modelProvider ?? "none",
-          modelName: payload.runnerConfig?.modelName ?? "none",
+          runnerType: payload.runnerConfig?.runnerType ?? "qwen",
+          modelProvider: payload.runnerConfig?.modelProvider ?? "qwen",
+          modelName: payload.runnerConfig?.modelName ?? "qwen-plus",
           enableStreaming: payload.runnerConfig?.enableStreaming ?? true,
           extraParams: payload.runnerConfig?.extraParams ?? {},
         },
@@ -822,15 +995,34 @@ export const submitAgentRunAsync = async (
     );
     return mapBackendAgentRun(response.run);
   } catch (error) {
+    if (fallbackEndpoint && isEndpointMethodUnavailable(error)) {
+      return submitAgentRunToEndpointAsync(fallbackEndpoint, payload, delayMs);
+    }
     const message =
       error instanceof Error
         ? error.message
         : typeof error === "object" && error !== null && "message" in error
           ? String((error as { message?: unknown }).message)
-          : "Agent task submit failed";
-    throw new Error(`Failed to submit agent task: ${message}`);
+          : "投研任务提交失败";
+    throw new Error(`投研任务提交失败：${message}`);
   }
 };
+
+export const submitAgentRunAsync = async (
+  payload: SubmitAgentRunPayload,
+  delayMs?: number,
+): Promise<AgentRun> => submitAgentRunToEndpointAsync(ENDPOINTS.alphaTraceSubmitAgentRun, payload, delayMs);
+
+export const submitResearchAssistantAgentRunAsync = async (
+  payload: SubmitAgentRunPayload,
+  delayMs?: number,
+): Promise<AgentRun> =>
+  submitAgentRunToEndpointAsync(
+    ENDPOINTS.researchAssistantSubmitAgentRun,
+    payload,
+    delayMs,
+    ENDPOINTS.alphaTraceSubmitAgentRun,
+  );
 
 export const getAgentRunnerStatusAsync = async (): Promise<AgentRunnerStatusItem[]> => {
   if (shouldUseMockData()) {
@@ -856,7 +1048,7 @@ export const getAgentRunnerStatusAsync = async (): Promise<AgentRunnerStatusItem
       {
         runnerType: "qwen",
         executionMode: "in_process",
-        executionPolicyReason: "Qwen real runner is not called in Mock Mode.",
+        executionPolicyReason: "真实投研任务执行器不会在 Mock Mode 中调用。",
         capabilities: {
           supportedTaskTypes: ["single_asset_analysis", "portfolio_diagnosis"],
           supportsStreaming: true,
@@ -864,17 +1056,17 @@ export const getAgentRunnerStatusAsync = async (): Promise<AgentRunnerStatusItem
           supportsPortfolioContext: true,
           supportsExternalTools: true,
           productionReady: false,
-          notes: "Real API mode only.",
+          notes: "仅真实 API 模式可用。",
         },
         enabled: false,
         available: false,
         status: "mock",
-        message: "Qwen real runner is not called in Mock Mode.",
+        message: "真实投研任务执行器不会在 Mock Mode 中调用。",
       },
       {
         runnerType: "tradingagents",
         executionMode: "subprocess",
-        executionPolicyReason: "TradingAgents PoC uses subprocess isolation in Real API mode.",
+        executionPolicyReason: "旧版自动化 PoC 仅在真实 API 模式中可用。",
         capabilities: {
           supportedTaskTypes: ["single_asset_analysis"],
           supportsStreaming: true,
@@ -882,12 +1074,12 @@ export const getAgentRunnerStatusAsync = async (): Promise<AgentRunnerStatusItem
           supportsPortfolioContext: false,
           supportsExternalTools: true,
           productionReady: false,
-          notes: "Real API PoC only.",
+          notes: "仅旧版 PoC 使用。",
         },
         enabled: false,
         available: false,
         status: "mock",
-        message: "TradingAgents PoC requires Real API mode and local backend 8812.",
+        message: "旧版自动化 PoC 需要真实 API 模式和本地后端。",
       },
       {
         runnerType: "langalpha",
@@ -912,7 +1104,7 @@ export const getAgentRunnerStatusAsync = async (): Promise<AgentRunnerStatusItem
 
   const response = await httpClient.get<BackendAgentRunnerStatusResponse>(
     ENDPOINTS.alphaTraceAgentRunnerStatus,
-    { timeoutMs: 5000 },
+    { timeoutMs: 30000 },
   );
   return response.runners;
 };
@@ -973,7 +1165,7 @@ export const getAgentRunnerCapabilitiesAsync = async (
       taskType: params.taskType,
       requestedRunnerType: params.requestedRunnerType,
     },
-    timeoutMs: 5000,
+    timeoutMs: 30000,
   });
 };
 
@@ -1032,6 +1224,6 @@ export const getAgentRuntimeWorkersAsync = async (): Promise<AgentRuntimeWorkers
   }
 
   return httpClient.get<AgentRuntimeWorkersResponse>(ENDPOINTS.alphaTraceAgentRuntimeWorkers, {
-    timeoutMs: 5000,
+    timeoutMs: 30000,
   });
 };

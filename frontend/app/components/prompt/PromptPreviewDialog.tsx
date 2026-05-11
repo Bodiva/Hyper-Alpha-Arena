@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'react-hot-toast'
 import {
-  previewPrompt,
-  getAccounts,
+  legacyPromptWorkspaceApi,
   getHyperliquidWatchlist,
   getBinanceWatchlist,
   TradingAccount,
   PromptPreviewItem,
+  type PromptWorkspaceApi,
 } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import {
@@ -27,6 +27,8 @@ interface PromptPreviewDialogProps {
   templateKey: string
   templateName: string
   templateText: string
+  api?: PromptWorkspaceApi
+  loadWatchlistData?: boolean
 }
 
 export default function PromptPreviewDialog({
@@ -35,6 +37,8 @@ export default function PromptPreviewDialog({
   templateKey,
   templateName,
   templateText,
+  api = legacyPromptWorkspaceApi,
+  loadWatchlistData = true,
 }: PromptPreviewDialogProps) {
   const [accounts, setAccounts] = useState<TradingAccount[]>([])
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null)
@@ -50,14 +54,16 @@ export default function PromptPreviewDialog({
   useEffect(() => {
     if (open) {
       loadAccounts()
-      loadWatchlists()
+      if (loadWatchlistData) {
+        loadWatchlists()
+      }
     }
-  }, [open, templateKey])
+  }, [open, templateKey, loadWatchlistData])
 
   const loadAccounts = async () => {
     setLoading(true)
     try {
-      const list = await getAccounts()
+      const list = await api.getAccounts()
       const aiAccounts = list.filter((acc) => acc.account_type === 'AI')
       setAccounts(aiAccounts)
       if (aiAccounts.length > 0 && selectedAccountId === null) {
@@ -114,7 +120,7 @@ export default function PromptPreviewDialog({
 
     setGenerating(true)
     try {
-      const result = await previewPrompt({
+      const result = await api.previewPrompt({
         templateText: templateText,
         promptTemplateKey: templateKey,
         accountIds: [selectedAccountId],

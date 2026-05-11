@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from functools import lru_cache
 from typing import Any, Dict, List, Optional
 
 from schemas.alpha_trace_asset import AlphaTraceAssetItem
+from schemas.alpha_trace_decision import AlphaTraceDecisionItem
 from schemas.alpha_trace_portfolio import (
     AlphaTracePortfolioHolding,
     AlphaTracePortfolioItem,
@@ -10,6 +12,7 @@ from schemas.alpha_trace_portfolio import (
 )
 from schemas.alpha_trace_strategy import AlphaTraceStrategyItem
 from services.asset_store.asset_store import get_static_asset_store
+from services.decision_store.decision_store import get_agent_run_decision_store
 from services.domain_store import get_domain_store_type, get_mysql_domain_store
 from services.portfolio_store.static_portfolio_seed import get_static_portfolio_seed
 from services.strategy_store.strategy_store import get_static_strategy_store
@@ -83,7 +86,15 @@ class StaticPortfolioStore:
 
     def get_portfolio_recommendations(self, portfolio_id: str) -> List[AlphaTraceRebalanceRecommendation]:
         portfolio = self.get_portfolio(portfolio_id)
-        return portfolio.rebalanceRecommendations if portfolio else []
+        if not portfolio:
+            return []
+        recommendations = list(portfolio.rebalanceRecommendations)
+        existing_ids = {item.recommendationId for item in recommendations}
+        for item in self._decision_recommendations(portfolio):
+            if item.recommendationId not in existing_ids:
+                recommendations.append(item)
+                existing_ids.add(item.recommendationId)
+        return recommendations
 
     def get_portfolio_assets(self, portfolio_id: str, limit: int = 50) -> List[AlphaTraceAssetItem]:
         portfolio = self.get_portfolio(portfolio_id)
@@ -124,10 +135,80 @@ class StaticPortfolioStore:
         portfolio = self.get_portfolio(portfolio_id)
         if not portfolio:
             return []
-        # Decision Store is intentionally not introduced in Task 35.
-        return []
+        return [item.model_dump(mode="json") for item in self._portfolio_decisions(portfolio, limit=limit)]
+
+    def _portfolio_decisions(self, portfolio: AlphaTracePortfolioItem, limit: int = 50) -> List[AlphaTraceDecisionItem]:
+        decision_store = get_agent_run_decision_store()
+        seen: set[str] = set()
+        items: List[AlphaTraceDecisionItem] = []
+
+        def add(next_items: List[AlphaTraceDecisionItem]) -> None:
+            for item in next_items:
+                if item.decisionId in seen:
+                    continue
+                seen.add(item.decisionId)
+                items.append(item)
+
+        add(decision_store.list_decisions(portfolio_id=portfolio.portfolioId, limit=limit, offset=0))
+        asset_ids = list(portfolio.relatedAssetIds)
+        asset_ids.extend(holding.assetId for holding in portfolio.holdings)
+        for asset_id in dict.fromkeys(asset_ids):
+            if len(items) >= limit:
+                break
+            add(decision_store.list_decisions(asset_id=asset_id, limit=limit, offset=0))
+
+        items.sort(key=lambda item: item.createdAt, reverse=True)
+        return items[:limit]
+
+    def _decision_recommendations(self, portfolio: AlphaTracePortfolioItem) -> List[AlphaTraceRebalanceRecommendation]:
+        holding_by_asset = {holding.assetId: holding for holding in portfolio.holdings}
+        related_assets = set(portfolio.relatedAssetIds) | set(holding_by_asset)
+        items: List[AlphaTraceRebalanceRecommendation] = []
+        for decision in self._portfolio_decisions(portfolio, limit=20):
+            asset_id = next((asset_id for asset_id in decision.assetIds if asset_id in related_assets), None)
+            if not asset_id:
+                continue
+            action = self._recommendation_action(decision.action)
+            holding = holding_by_asset.get(asset_id)
+            from_weight = holding.weight if holding else 0
+            delta = 0.03 if decision.confidence >= 0.7 else 0.015
+            if action == "INCREASE":
+                to_weight = min(0.6, from_weight + delta)
+            elif action == "DECREASE":
+                to_weight = max(0, from_weight - delta)
+            else:
+                to_weight = from_weight
+            reason = decision.thesis.splitlines()[0].strip() if decision.thesis else "来自 Agent Run 的组合关联决策。"
+            items.append(
+                AlphaTraceRebalanceRecommendation(
+                    recommendationId=f"rec_{portfolio.portfolioId}_{decision.decisionId}",
+                    action=action,
+                    assetId=asset_id,
+                    fromWeight=from_weight,
+                    toWeight=to_weight,
+                    reason=reason[:220],
+                    priority="HIGH" if decision.confidence >= 0.75 else "MEDIUM",
+                    expectedImpact=f"关联决策：{decision.action}，置信度 {round(decision.confidence * 100)}%。",
+                    riskImpact="需结合组合集中度、回撤和流动性约束复核。",
+                    relatedEvidenceIds=decision.evidenceIds,
+                    evidenceIds=decision.evidenceIds,
+                    relatedDecisionIds=[decision.decisionId],
+                    status="PENDING",
+                )
+            )
+        return items
+
+    @staticmethod
+    def _recommendation_action(action: str) -> str:
+        normalized = (action or "").upper()
+        if normalized in {"BUY", "OVERWEIGHT", "LONG", "INCREASE"}:
+            return "INCREASE"
+        if normalized in {"SELL", "UNDERWEIGHT", "SHORT", "REDUCE", "DECREASE", "AVOID"}:
+            return "DECREASE"
+        return "HOLD"
 
 
+@lru_cache(maxsize=1)
 def get_static_portfolio_store() -> StaticPortfolioStore:
     if get_domain_store_type() == "mysql":
         return MysqlPortfolioStore()

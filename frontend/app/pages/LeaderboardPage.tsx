@@ -10,12 +10,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { listAssetsAsync } from "@/entities/asset/api";
-import { listLeaderboardAsync } from "@/entities/strategy/api";
-import type { LeaderboardItem } from "@/entities/strategy/model";
+import { listClickHouseRankingsAsync, listLeaderboardAsync } from "@/entities/strategy/api";
+import type { ClickHouseRankingItem, ClickHouseRankingType, LeaderboardItem } from "@/entities/strategy/model";
 import { getApiMode } from "@/shared/api/api-mode";
 import { getCurrentHashQueryParams, navigateTo } from "@/shared/lib/navigation";
 import ResearchWorkspaceNav from "@/shared/ui/ResearchWorkspaceNav";
+import "./LeaderboardPage.css";
 
 type AssetFilter = "ALL" | "ETF" | "FUND" | "FUTURE" | "MULTI_ASSET";
 type StyleFilter =
@@ -30,6 +30,7 @@ type StyleFilter =
   | "风险平价";
 type RunModeFilter = "ALL" | "BACKTEST" | "PAPER" | "LIVE";
 type TimeRangeFilter = "1M" | "3M" | "6M" | "1Y" | "ALL";
+type RankingTab = ClickHouseRankingType;
 
 interface RankedLeaderboardItem extends LeaderboardItem {
   compositeScore: number;
@@ -39,6 +40,11 @@ interface RankedLeaderboardItem extends LeaderboardItem {
 }
 
 const ASSET_FILTERS: AssetFilter[] = ["ALL", "ETF", "FUND", "FUTURE", "MULTI_ASSET"];
+const RANKING_TABS: Array<{ key: RankingTab; label: string; description: string }> = [
+  { key: "manager", label: "基金经理排行", description: "按任期收益、年化收益、在管规模和基金数量综合排序" },
+  { key: "fund", label: "基金排行", description: "按近一年收益、规模、回撤和净值覆盖排序" },
+  { key: "etf", label: "ETF 排行", description: "按交易型开放式基金近一年收益、规模和回撤排序" },
+];
 const STYLE_FILTERS: StyleFilter[] = [
   "ALL",
   "红利防御",
@@ -98,6 +104,27 @@ function formatPercent(value: number): string {
   return `${value.toFixed(1)}%`;
 }
 
+function formatRatioPercent(value?: number): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "-";
+  return `${(value * 100).toFixed(1)}%`;
+}
+
+function formatAum(value?: number): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) return "-";
+  if (value >= 100_000_000) return `${(value / 100_000_000).toFixed(1)} 亿`;
+  if (value >= 10_000) return `${(value / 10_000).toFixed(1)} 万`;
+  return value.toLocaleString("zh-CN");
+}
+
+function formatManagedFundsTooltip(funds?: ClickHouseRankingItem["managedFunds"]): string {
+  if (!funds || funds.length === 0) {
+    return "暂无在管基金明细";
+  }
+  return funds
+    .map((fund, index) => `${index + 1}. ${fund.name || "-"} (${fund.code || "-"}) · ${formatAum(fund.scale ?? undefined)}`)
+    .join("\n");
+}
+
 function formatRuntimePercent(value?: number): string {
   return `${((value ?? 0) * 100).toFixed(0)}%`;
 }
@@ -115,23 +142,24 @@ export default function LeaderboardPage() {
   const apiMode = getApiMode();
   const isRealMode = apiMode === "real";
   const [leaderboardItems, setLeaderboardItems] = useState<LeaderboardItem[]>([]);
-  const [assets, setAssets] = useState<Awaited<ReturnType<typeof listAssetsAsync>>>([]);
+  const [clickHouseRankings, setClickHouseRankings] = useState<Record<RankingTab, ClickHouseRankingItem[]>>({
+    manager: [],
+    fund: [],
+    etf: [],
+  });
+  const [activeRankingTab, setActiveRankingTab] = useState<RankingTab>("manager");
   const [isLoadingLeaderboard, setIsLoadingLeaderboard] = useState(true);
   const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
 
   const initialRouteParams = useMemo(() => getCurrentHashQueryParams(), []);
-  const linkedAssetId = initialRouteParams.get("assetId") ?? undefined;
   const linkedStrategyId = initialRouteParams.get("strategyId") ?? undefined;
   const routeAssetType = initialRouteParams.get("assetType");
 
   const linkedAssetType = useMemo(() => {
     const fromRoute = routeAssetType as AssetFilter | null;
     if (fromRoute && ASSET_FILTERS.includes(fromRoute)) return fromRoute;
-    if (!linkedAssetId) return null;
-    const type = assets.find((asset) => asset.id === linkedAssetId)?.assetType;
-    if (!type) return null;
-    return type === "INDEX" ? "MULTI_ASSET" : (type as Exclude<AssetFilter, "ALL">);
-  }, [assets, linkedAssetId, routeAssetType]);
+    return null;
+  }, [routeAssetType]);
 
   const [assetFilter, setAssetFilter] = useState<AssetFilter>(linkedAssetType ?? "ALL");
   const [styleFilter, setStyleFilter] = useState<StyleFilter>("ALL");
@@ -145,17 +173,25 @@ export default function LeaderboardPage() {
       setIsLoadingLeaderboard(true);
       setLeaderboardError(null);
       try {
-        const [nextLeaderboard, nextAssets] = await Promise.all([
+        const [nextLeaderboard, nextRankings] = await Promise.all([
           listLeaderboardAsync({ strategyId: linkedStrategyId }),
-          listAssetsAsync({ limit: 200 }),
+          Promise.all([
+            listClickHouseRankingsAsync({ rankingType: "manager", limit: 80 }),
+            listClickHouseRankingsAsync({ rankingType: "fund", limit: 80 }),
+            listClickHouseRankingsAsync({ rankingType: "etf", limit: 80 }),
+          ]),
         ]);
         if (cancelled) return;
         setLeaderboardItems(nextLeaderboard);
-        setAssets(nextAssets);
+        setClickHouseRankings({
+          manager: nextRankings[0],
+          fund: nextRankings[1],
+          etf: nextRankings[2],
+        });
       } catch (error) {
         if (cancelled) return;
         setLeaderboardItems([]);
-        setAssets([]);
+        setClickHouseRankings({ manager: [], fund: [], etf: [] });
         setLeaderboardError(error instanceof Error ? error.message : String(error));
       } finally {
         if (!cancelled) setIsLoadingLeaderboard(false);
@@ -266,10 +302,11 @@ export default function LeaderboardPage() {
   const totalTraderCount = new Set(rankedData.map((item) => item.traderId)).size;
   const strategyCount = rankedData.length;
   const coverageTypes = new Set(rankedData.map((item) => item.assetCategory));
-  const avgEvidenceScore =
-    rankedData.length === 0 ? 0 : rankedData.reduce((sum, item) => sum + item.evidenceScore, 0) / rankedData.length;
-  const avgRiskScore =
-    rankedData.length === 0 ? 0 : rankedData.reduce((sum, item) => sum + item.riskScore, 0) / rankedData.length;
+  const activeRankingRows = clickHouseRankings[activeRankingTab];
+  const topManager = clickHouseRankings.manager[0] ?? null;
+  const topFund = clickHouseRankings.fund[0] ?? null;
+  const topEtf = clickHouseRankings.etf[0] ?? null;
+  const topActiveRanking = activeRankingRows[0] ?? null;
 
   const returnRank = [...rankedData].sort((a, b) => b.totalReturn - a.totalReturn);
   const drawdownRank = [...rankedData].sort((a, b) => a.maxDrawdown - b.maxDrawdown);
@@ -283,33 +320,48 @@ export default function LeaderboardPage() {
   const volatilityMax = rankedData.length ? Math.max(...rankedData.map((item) => item.volatility)) : 1;
 
   return (
-    <div className="flex flex-col gap-4 h-full overflow-auto">
+    <div className="leaderboard-page">
       <ResearchWorkspaceNav />
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="leaderboard-content">
+      <section className="leaderboard-hero">
+        <div>
+          <h1>投研排行</h1>
+          <p>汇总基金经理、基金、ETF 与 Agent 策略表现，便于快速比较收益、回撤、规模和评分。</p>
+        </div>
+        <div className="leaderboard-hero-metrics">
+          <span>榜单 {activeRankingRows.length}</span>
+          <span>策略 {strategyCount}</span>
+          <span>交易员 {totalTraderCount}</span>
+        </div>
+      </section>
+
+      <div className="leaderboard-summary-grid grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>AI 交易员数量</CardDescription>
-            <CardTitle className="text-lg">{totalTraderCount}</CardTitle>
+            <CardDescription>基金经理</CardDescription>
+            <CardTitle className="text-lg">{clickHouseRankings.manager.length}</CardTitle>
+            <p className="text-xs text-muted-foreground">{topManager?.managerName ?? "-"}</p>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>策略数量</CardDescription>
+            <CardDescription>基金</CardDescription>
+            <CardTitle className="text-lg">{clickHouseRankings.fund.length}</CardTitle>
+            <p className="text-xs text-muted-foreground">{topFund?.name ?? "-"}</p>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>ETF</CardDescription>
+            <CardTitle className="text-lg">{clickHouseRankings.etf.length}</CardTitle>
+            <p className="text-xs text-muted-foreground">{topEtf?.name ?? "-"}</p>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Agent 策略</CardDescription>
             <CardTitle className="text-lg">{strategyCount}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>覆盖资产类型</CardDescription>
-            <CardTitle className="text-lg">{coverageTypes.size}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>平均证据/风控评分</CardDescription>
-            <CardTitle className="text-lg">
-              {avgEvidenceScore.toFixed(1)} / {avgRiskScore.toFixed(1)}
-            </CardTitle>
+            <p className="text-xs text-muted-foreground">{totalTraderCount} 个交易员 · {coverageTypes.size} 类资产</p>
           </CardHeader>
         </Card>
       </div>
@@ -323,12 +375,167 @@ export default function LeaderboardPage() {
       {leaderboardError ? (
         <Card className="border-destructive/40">
           <CardContent className="py-4 text-sm text-destructive">
-            Leaderboard API 加载失败：{leaderboardError}
+            排行数据加载失败：{leaderboardError}
           </CardContent>
         </Card>
       ) : null}
 
-      <Card>
+      <Card className="leaderboard-main-card">
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-base">投研排行</CardTitle>
+              <CardDescription>
+                基金经理按任期收益、年化收益、在管规模和基金数量排序；基金和 ETF 按收益、规模与回撤排序。
+              </CardDescription>
+            </div>
+            {topActiveRanking ? (
+              <Badge variant="default">
+                当前第一：{topActiveRanking.managerName ?? topActiveRanking.name} · {topActiveRanking.score.toFixed(1)}
+              </Badge>
+            ) : (
+              <Badge variant="secondary">暂无排行数据</Badge>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="leaderboard-tab-strip flex flex-wrap gap-2">
+            {RANKING_TABS.map((tab) => (
+              <Button
+                key={tab.key}
+                size="sm"
+                variant={activeRankingTab === tab.key ? "default" : "outline"}
+                onClick={() => setActiveRankingTab(tab.key)}
+                title={tab.description}
+              >
+                {tab.label}
+              </Button>
+            ))}
+          </div>
+          {activeRankingRows.length === 0 ? (
+            <div className="rounded border border-dashed p-6 text-center text-sm text-muted-foreground">
+              暂无可用于排行的数据。
+            </div>
+          ) : activeRankingTab === "manager" ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>排名</TableHead>
+                  <TableHead>基金经理</TableHead>
+                  <TableHead>代表基金</TableHead>
+                  <TableHead>基金公司</TableHead>
+                  <TableHead>在管基金</TableHead>
+                  <TableHead>在管规模</TableHead>
+                  <TableHead>任期收益</TableHead>
+                  <TableHead>年化收益</TableHead>
+                  <TableHead>规模加权收益</TableHead>
+                  <TableHead>综合分</TableHead>
+                  <TableHead>说明</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {activeRankingRows.map((manager) => (
+                  <TableRow key={manager.managerCode ?? `${manager.managerName}-${manager.rank}`}>
+                    <TableCell>{manager.rank}</TableCell>
+                    <TableCell className="font-medium">{manager.managerName ?? "-"}</TableCell>
+                    <TableCell>
+                      <div className="space-y-1">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => navigateTo("/assets", { assetId: `ck_fund_${manager.representativeFundCode ?? ""}` })}
+                          disabled={!manager.representativeFundCode}
+                        >
+                          {manager.representativeFundName ?? "-"}
+                        </Button>
+                        <p className="text-xs text-muted-foreground">{manager.representativeFundCode ?? "-"}</p>
+                      </div>
+                    </TableCell>
+                    <TableCell>{manager.fundCompany ?? "-"}</TableCell>
+                    <TableCell>
+                      <span
+                        className="cursor-help underline decoration-dotted underline-offset-4"
+                        title={formatManagedFundsTooltip(manager.managedFunds)}
+                      >
+                        {manager.activeFundCount ?? 0}
+                      </span>
+                    </TableCell>
+                    <TableCell>{formatAum(manager.activeScale)}</TableCell>
+                    <TableCell className={(manager.averageTenureRoi ?? 0) >= 0 ? "text-emerald-600" : "text-red-500"}>
+                      {formatRatioPercent(manager.averageTenureRoi)}
+                    </TableCell>
+                    <TableCell className={(manager.averageAnnualizedRoi ?? 0) >= 0 ? "text-emerald-600" : "text-red-500"}>
+                      {formatRatioPercent(manager.averageAnnualizedRoi)}
+                    </TableCell>
+                    <TableCell className={(manager.scaleWeightedRoi ?? 0) >= 0 ? "text-emerald-600" : "text-red-500"}>
+                      {formatRatioPercent(manager.scaleWeightedRoi)}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={manager.score >= 80 ? "default" : "secondary"}>{manager.score.toFixed(1)}</Badge>
+                    </TableCell>
+                    <TableCell className="max-w-[360px] text-xs text-muted-foreground">{manager.rationale}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>排名</TableHead>
+                  <TableHead>{activeRankingTab === "etf" ? "ETF" : "基金"}</TableHead>
+                  <TableHead>基金公司</TableHead>
+                  <TableHead>类型</TableHead>
+                  <TableHead>规模</TableHead>
+                  <TableHead>最新净值/收盘</TableHead>
+                  <TableHead>近一年收益</TableHead>
+                  <TableHead>回撤</TableHead>
+                  <TableHead>基金经理</TableHead>
+                  <TableHead>综合分</TableHead>
+                  <TableHead>要点</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {activeRankingRows.map((fund) => (
+                  <TableRow key={fund.code ?? `${fund.name}-${fund.rank}`}>
+                    <TableCell>{fund.rank}</TableCell>
+                    <TableCell>
+                      <div className="space-y-1">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => navigateTo("/assets", { assetId: `ck_fund_${fund.code ?? ""}` })}
+                          disabled={!fund.code}
+                        >
+                          {fund.name ?? "-"}
+                        </Button>
+                        <p className="text-xs text-muted-foreground">{fund.code ?? "-"} · {fund.latestDate ?? "-"}</p>
+                      </div>
+                    </TableCell>
+                    <TableCell>{fund.fundCompany ?? "-"}</TableCell>
+                    <TableCell>{fund.fundType ?? fund.assetType ?? "-"}</TableCell>
+                    <TableCell>{formatAum(fund.scale)}</TableCell>
+                    <TableCell>{typeof fund.latestNav === "number" ? fund.latestNav.toFixed(4) : "-"}</TableCell>
+                    <TableCell className={(fund.return1y ?? 0) >= 0 ? "text-emerald-600" : "text-red-500"}>
+                      {formatRatioPercent(fund.return1y)}
+                    </TableCell>
+                    <TableCell className={(fund.drawdown ?? 0) <= -0.1 ? "text-red-500" : "text-emerald-600"}>
+                      {formatRatioPercent(fund.drawdown)}
+                    </TableCell>
+                    <TableCell>{fund.representativeManager ?? "-"}</TableCell>
+                    <TableCell>
+                      <Badge variant={fund.score >= 80 ? "default" : "secondary"}>{fund.score.toFixed(1)}</Badge>
+                    </TableCell>
+                    <TableCell className="max-w-[360px] text-xs text-muted-foreground">{fund.rationale}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="leaderboard-filter-card">
         <CardHeader className="pb-3">
           <CardTitle className="text-base">筛选条件</CardTitle>
         </CardHeader>
@@ -408,7 +615,7 @@ export default function LeaderboardPage() {
         </Card>
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
+          <div className="leaderboard-highlight-grid grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
             <Card>
               <CardHeader className="pb-2">
                 <CardDescription>{isRealMode ? "最高运行质量" : "最高累计收益"}</CardDescription>
@@ -463,7 +670,7 @@ export default function LeaderboardPage() {
             </Card>
           </div>
 
-          <Card>
+          <Card className="leaderboard-main-card">
             <CardHeader className="pb-3">
               <CardTitle className="text-base">
                 {isRealMode ? "Agent Runtime 质量排行榜" : "策略排行榜（综合评分排序）"}
@@ -570,7 +777,7 @@ export default function LeaderboardPage() {
           </Card>
 
           {isRealMode ? (
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
+            <div className="leaderboard-chart-grid grid grid-cols-1 xl:grid-cols-3 gap-3">
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base">运行质量对比</CardTitle>
@@ -641,7 +848,7 @@ export default function LeaderboardPage() {
               </Card>
             </div>
           ) : (
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
+            <div className="leaderboard-chart-grid grid grid-cols-1 xl:grid-cols-3 gap-3">
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base">收益对比</CardTitle>
@@ -723,7 +930,7 @@ export default function LeaderboardPage() {
             </div>
           )}
 
-          <Card>
+          <Card className="leaderboard-main-card">
             <CardHeader>
               <CardTitle className="text-base">策略详情概览（当前第 1 名）</CardTitle>
             </CardHeader>
@@ -774,6 +981,7 @@ export default function LeaderboardPage() {
           </Card>
         </>
       )}
+      </div>
     </div>
   );
 }

@@ -390,6 +390,108 @@ export async function previewPrompt(
   return response.json()
 }
 
+export interface PromptWorkspaceApi {
+  getPromptTemplates: () => Promise<PromptListResponse>
+  updatePromptTemplate: (key: string, payload: PromptTemplateUpdateRequest) => Promise<PromptTemplate>
+  createPromptTemplate: (payload: PromptTemplateCreateRequest) => Promise<PromptTemplate>
+  copyPromptTemplate: (templateId: number, payload: PromptTemplateCopyRequest) => Promise<PromptTemplate>
+  deletePromptTemplate: (templateId: number) => Promise<void>
+  updatePromptTemplateName: (templateId: number, payload: PromptTemplateNameUpdateRequest) => Promise<PromptTemplate>
+  upsertPromptBinding: (payload: PromptBindingUpsertRequest) => Promise<PromptBinding>
+  deletePromptBinding: (bindingId: number) => Promise<void>
+  getVariablesReference: (lang?: string) => Promise<VariablesReferenceResponse>
+  previewPrompt: (payload: PromptPreviewRequest) => Promise<PromptPreviewResponse>
+  getAccounts: (options?: { include_hidden?: boolean }) => Promise<TradingAccount[]>
+  aiPromptChatAvailable: boolean
+}
+
+const createPromptWorkspaceApi = (basePath: string, options?: { researchAccounts?: boolean; aiPromptChatAvailable?: boolean }): PromptWorkspaceApi => ({
+  getPromptTemplates: async () => {
+    const response = await apiRequest(`${basePath}/prompts`)
+    return response.json()
+  },
+  updatePromptTemplate: async (key, payload) => {
+    const response = await apiRequest(`${basePath}/prompts/${encodeURIComponent(key)}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    })
+    return response.json()
+  },
+  createPromptTemplate: async (payload) => {
+    const response = await apiRequest(`${basePath}/prompts`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+    return response.json()
+  },
+  copyPromptTemplate: async (templateId, payload) => {
+    const response = await apiRequest(`${basePath}/prompts/${templateId}/copy`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+    return response.json()
+  },
+  deletePromptTemplate: async (templateId) => {
+    await apiRequest(`${basePath}/prompts/${templateId}`, { method: 'DELETE' })
+  },
+  updatePromptTemplateName: async (templateId, payload) => {
+    const response = await apiRequest(`${basePath}/prompts/${templateId}/name`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    })
+    return response.json()
+  },
+  upsertPromptBinding: async (payload) => {
+    const response = await apiRequest(`${basePath}/prompts/bindings`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+    return response.json()
+  },
+  deletePromptBinding: async (bindingId) => {
+    await apiRequest(`${basePath}/prompts/bindings/${bindingId}`, { method: 'DELETE' })
+  },
+  getVariablesReference: async (lang = 'en') => {
+    const response = await apiRequest(`${basePath}/prompts/variables-reference?lang=${lang}`)
+    return response.json()
+  },
+  previewPrompt: async (payload) => {
+    const response = await apiRequest(`${basePath}/prompts/preview`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+    return response.json()
+  },
+  getAccounts: async (accountOptions) => {
+    if (options?.researchAccounts) {
+      const response = await apiRequest(`${basePath}/traders`)
+      return response.json()
+    }
+    return getAccounts(accountOptions)
+  },
+  aiPromptChatAvailable: options?.aiPromptChatAvailable ?? true,
+})
+
+export const legacyPromptWorkspaceApi: PromptWorkspaceApi = {
+  getPromptTemplates,
+  updatePromptTemplate,
+  createPromptTemplate,
+  copyPromptTemplate,
+  deletePromptTemplate,
+  updatePromptTemplateName,
+  upsertPromptBinding,
+  deletePromptBinding,
+  getVariablesReference,
+  previewPrompt,
+  getAccounts,
+  aiPromptChatAvailable: true,
+}
+
+export const researchPromptWorkspaceApi: PromptWorkspaceApi = createPromptWorkspaceApi(
+  '/alpha-trace/research-workbench',
+  { researchAccounts: true, aiPromptChatAvailable: false },
+)
+
 
 export async function loginUser(username: string, password: string): Promise<UserAuthResponse> {
   const response = await apiRequest('/users/login', {

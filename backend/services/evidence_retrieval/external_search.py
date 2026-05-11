@@ -88,14 +88,9 @@ class ExternalEvidenceSearch:
         if env_key:
             return env_key
         try:
-            from database.connection import SessionLocal
-            from services.hyper_ai_tool_registry import get_tool_api_key
+            from services.system_config_store import get_mysql_system_config_store
 
-            db = SessionLocal()
-            try:
-                return get_tool_api_key(db, "bocha")
-            finally:
-                db.close()
+            return get_mysql_system_config_store().get_tool_api_key("bocha")
         except Exception:
             return None
 
@@ -106,10 +101,30 @@ class ExternalEvidenceSearch:
             "portfolio_diagnosis": "组合 资产配置 风险暴露 调仓建议 投研证据",
             "portfolio_diagnostic": "组合 资产配置 风险暴露 调仓建议 投研证据",
             "rebalance_suggestion": "调仓建议 组合 风险 资产配置",
+            "dashboard_market_overview": "财经新闻 市场收评 A股 美股 港股 新浪财经 东方财富 财联社 证券时报",
         }
         suffix = context_terms.get(task_type, "ETF 基金 期货 投研 证据")
-        parts = [question.strip(), asset_id or "", suffix]
+        parts = [question.strip(), ExternalEvidenceSearch._asset_search_terms(asset_id), suffix]
         return " ".join(part for part in parts if part).strip()
+
+    @staticmethod
+    def _asset_search_terms(asset_id: str | None) -> str:
+        if not asset_id:
+            return ""
+        try:
+            from services.asset_store.asset_store import get_static_asset_store
+
+            asset = get_static_asset_store().get_asset(asset_id)
+        except Exception:
+            asset = None
+        if not asset:
+            return asset_id
+        profile = asset.profile if isinstance(asset.profile, dict) else {}
+        terms = [asset.name, asset.symbol, *asset.aliases]
+        tracking_index = str(profile.get("trackingIndex") or "")
+        if tracking_index:
+            terms.append(tracking_index)
+        return " ".join(str(term) for term in terms if term)
 
     @staticmethod
     def _search_url() -> str:

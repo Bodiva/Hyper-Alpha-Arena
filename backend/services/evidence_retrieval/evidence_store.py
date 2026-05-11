@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import lru_cache
 from typing import Iterable, List, Optional
 
 from schemas.alpha_trace_evidence import AlphaTraceEvidenceItem, AlphaTraceExtractedField
@@ -96,6 +97,7 @@ class StaticEvidenceStore:
         )
 
 
+@lru_cache(maxsize=1)
 def get_static_evidence_store() -> StaticEvidenceStore:
     if get_domain_store_type() == "mysql":
         return MysqlEvidenceStore()

@@ -32,6 +32,19 @@ class AgentRunDecisionStore:
         limit: int = 100,
         offset: int = 0,
     ) -> List[AlphaTraceDecisionItem]:
+        page_loader = getattr(self._store, "list_runs_with_decisions_page", None)
+        if callable(page_loader):
+            runs, _ = page_loader(
+                asset_id=asset_id,
+                portfolio_id=portfolio_id,
+                run_id=run_id,
+                action=action,
+                horizon=horizon,
+                limit=limit,
+                offset=offset,
+            )
+            return [self._map_run_to_decision(run) for run in runs if run.finalDecision]
+
         decisions: List[AlphaTraceDecisionItem] = []
         for run in self._store.list_runs():
             if run_id and run.runId != run_id:
@@ -60,6 +73,19 @@ class AgentRunDecisionStore:
         action: Optional[str] = None,
         horizon: Optional[str] = None,
     ) -> int:
+        page_loader = getattr(self._store, "list_runs_with_decisions_page", None)
+        if callable(page_loader):
+            _, total = page_loader(
+                asset_id=asset_id,
+                portfolio_id=portfolio_id,
+                run_id=run_id,
+                action=action,
+                horizon=horizon,
+                limit=1,
+                offset=0,
+            )
+            return total
+
         return len(
             self.list_decisions(
                 asset_id=asset_id,

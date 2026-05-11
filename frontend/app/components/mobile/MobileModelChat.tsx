@@ -1,9 +1,26 @@
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, Loader2 } from 'lucide-react'
+import { ArrowLeft, Database, Loader2, Send } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 import { getArenaModelChat, getModelChatSnapshots, ArenaModelChatEntry, ModelChatSnapshots } from '@/lib/api'
+import {
+  listDatasetBindingsAsync,
+  listImportedFileBatchesAsync,
+  type DatasetBinding,
+  type ImportedFileBatch,
+} from '@/entities/data-source/api'
+import { submitAgentRunAsync } from '@/entities/agent/api'
+import { navigateTo } from '@/shared/lib/navigation'
 import { useTradingMode } from '@/contexts/TradingModeContext'
 import { getModelLogo } from '@/components/portfolio/logoAssets'
 import { formatDateTime } from '@/lib/dateTime'
@@ -16,7 +33,14 @@ export default function MobileModelChat() {
   const { t } = useTranslation()
   const { tradingMode } = useTradingMode()
   const [entries, setEntries] = useState<ArenaModelChatEntry[]>([])
+  const [datasets, setDatasets] = useState<ImportedFileBatch[]>([])
+  const [datasetBindings, setDatasetBindings] = useState<DatasetBinding[]>([])
+  const [selectedDatasetId, setSelectedDatasetId] = useState<string>('')
+  const [question, setQuestion] = useState('')
+  const [submittingQuestion, setSubmittingQuestion] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadingDatasets, setLoadingDatasets] = useState(true)
   const [expandedChat, setExpandedChat] = useState<number | null>(null)
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({})
   const snapshotCache = useRef<Map<number, ModelChatSnapshots>>(new Map())
@@ -28,6 +52,32 @@ export default function MobileModelChat() {
       loadEntries()
     }
   }, [tradingMode])
+
+  useEffect(() => {
+    let cancelled = false
+    setLoadingDatasets(true)
+    Promise.all([listImportedFileBatchesAsync(), listDatasetBindingsAsync({ activeOnly: true })])
+      .then(([batchResponse, bindingResponse]) => {
+        if (cancelled) return
+        const nextDatasets = batchResponse.items || []
+        setDatasets(nextDatasets)
+        setDatasetBindings(bindingResponse.items || [])
+        setSelectedDatasetId((current) => current || nextDatasets[0]?.importId || '')
+      })
+      .catch((error) => {
+        if (cancelled) return
+        console.error('Failed to load ClickHouse datasets:', error)
+        setDatasets([])
+        setDatasetBindings([])
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingDatasets(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const loadEntries = async () => {
     setLoading(true)
@@ -82,6 +132,59 @@ export default function MobileModelChat() {
     return 'bg-orange-100 text-orange-800'
   }
 
+  const selectedDataset = datasets.find((item) => item.importId === selectedDatasetId)
+  const selectedBinding = datasetBindings.find((item) => item.datasetId === selectedDatasetId)
+  const selectedAssetSymbol = selectedBinding?.dataSymbol || selectedBinding?.assetSymbol || selectedDataset?.assetSymbol
+
+  const submitResearchQuestion = async () => {
+    const trimmedQuestion = question.trim()
+    if (!trimmedQuestion || submittingQuestion) return
+
+    setSubmittingQuestion(true)
+    setSubmitError(null)
+    try {
+      const run = await submitAgentRunAsync({
+        assetId: selectedBinding?.assetId || 'asset_etf_510300',
+        portfolioId: 'portfolio_etf_core_001',
+        strategyId: 'strategy_etf_rotation_001',
+        taskType: 'single_asset_analysis',
+        question: trimmedQuestion,
+        horizon: 'medium_term',
+        riskPreference: 'balanced',
+        evidenceScope: {
+          includeNews: true,
+          includeReports: true,
+          includeMacro: true,
+          includeMarketSnapshot: true,
+        },
+        runnerConfig: {
+          runnerType: 'qwen',
+          modelProvider: 'qwen',
+          modelName: 'qwen-plus',
+          enableStreaming: true,
+          extraParams: {
+            enableResearchTools: true,
+            ...(selectedDatasetId
+              ? {
+                  dataContext: {
+                    source: 'catalog',
+                    datasetId: selectedDatasetId,
+                    assetSymbol: selectedAssetSymbol,
+                  },
+                }
+              : {}),
+          },
+        },
+      })
+      setQuestion('')
+      navigateTo(`/agent-lab/runs/${encodeURIComponent(run.runId)}`)
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : '提交投研任务失败')
+    } finally {
+      setSubmittingQuestion(false)
+    }
+  }
+
   // Detail view for full content
   if (detailEntry) {
     const { entry, section } = detailEntry
@@ -113,6 +216,60 @@ export default function MobileModelChat() {
   // List view with accordion interaction
   return (
     <div className="flex flex-col h-full pb-16">
+      <div className="shrink-0 border-b bg-background p-3 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <Database className="h-4 w-4 text-primary" />
+            <span className="text-sm font-semibold">投研数据源</span>
+            <Badge variant="outline">ClickHouse</Badge>
+          </div>
+          <span className="text-[11px] text-muted-foreground">K 线保持原逻辑</span>
+        </div>
+        <Select value={selectedDatasetId || '__none__'} onValueChange={(value) => setSelectedDatasetId(value === '__none__' ? '' : value)}>
+          <SelectTrigger className="h-9 bg-background">
+            <SelectValue placeholder={loadingDatasets ? '正在读取 ClickHouse 数据...' : '选择 ClickHouse 数据集'} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__none__">不绑定数据集</SelectItem>
+            {datasets.map((dataset) => (
+              <SelectItem key={dataset.importId} value={dataset.importId}>
+                {dataset.assetSymbol || dataset.assetName || dataset.sourceName} · {dataset.rows} 行
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <div className="rounded-md border bg-muted/25 p-2 text-[11px] text-muted-foreground">
+          {selectedDataset ? (
+            <div className="space-y-1">
+              <p className="break-all text-foreground">{selectedDataset.importId}</p>
+              <p>
+                {selectedDataset.minTradeDate || '-'} 至 {selectedDataset.maxTradeDate || '-'} · {selectedDataset.fileName}
+              </p>
+            </div>
+          ) : (
+            <p>{loadingDatasets ? '正在读取数据目录...' : '当前未绑定数据集，提交时仅使用默认准备数据和 Bocha。'}</p>
+          )}
+        </div>
+        <div className="space-y-2">
+          <Textarea
+            value={question}
+            onChange={(event) => setQuestion(event.target.value)}
+            className="min-h-[76px] resize-none text-sm"
+            placeholder="输入投研问题，会使用上面选择的 ClickHouse 数据集提交给 Agent..."
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                event.preventDefault()
+                void submitResearchQuestion()
+              }
+            }}
+          />
+          {submitError ? <p className="text-xs text-destructive">{submitError}</p> : null}
+          <Button className="w-full gap-2" onClick={() => void submitResearchQuestion()} disabled={submittingQuestion || !question.trim()}>
+            {submittingQuestion ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            {submittingQuestion ? '提交中' : '提交投研对话'}
+          </Button>
+        </div>
+      </div>
       {loading ? (
         <div className="flex items-center justify-center py-8">
           <Loader2 className="w-6 h-6 animate-spin" />

@@ -16,6 +16,7 @@ export interface AgentRunProgressStep {
   stepId: AgentRunStepId;
   label: string;
   status: AgentRunStepStatus;
+  progress?: number;
   startedAt?: string;
   completedAt?: string;
   summary?: string;
@@ -37,13 +38,13 @@ export interface AgentRunProgressSummary {
 }
 
 const STEP_DEFINITIONS: Array<Pick<AgentRunProgressStep, "stepId" | "label">> = [
-  { stepId: "evidence_retrieval", label: "Evidence Retrieval" },
-  { stepId: "market_view", label: "Market View" },
-  { stepId: "bull_view", label: "Bull View" },
-  { stepId: "bear_view", label: "Bear View" },
-  { stepId: "research_manager", label: "Research Manager" },
-  { stepId: "risk_review", label: "Risk Review" },
-  { stepId: "final_decision", label: "Final Decision" },
+  { stepId: "evidence_retrieval", label: "证据检索" },
+  { stepId: "market_view", label: "市场观点" },
+  { stepId: "bull_view", label: "正方观点" },
+  { stepId: "bear_view", label: "反方观点" },
+  { stepId: "research_manager", label: "研究汇总" },
+  { stepId: "risk_review", label: "风险复核" },
+  { stepId: "final_decision", label: "最终决策" },
 ];
 
 const normalize = (value: unknown): string => String(value ?? "").toLowerCase();
@@ -53,6 +54,15 @@ const payloadRecord = (event: AgentRuntimeEvent): Record<string, unknown> => {
     return event.payload as Record<string, unknown>;
   }
   return {};
+};
+
+const clampPercent = (value: number): number => Math.max(0, Math.min(100, Math.round(value)));
+
+const payloadProgress = (event: AgentRuntimeEvent): number | undefined => {
+  const payload = payloadRecord(event);
+  const value = payload.progress;
+  if (typeof value === "number" && Number.isFinite(value)) return clampPercent(value <= 1 ? value * 100 : value);
+  return undefined;
 };
 
 const payloadText = (event: AgentRuntimeEvent): string => {
@@ -79,6 +89,7 @@ const markStarted = (step: AgentRunProgressStep, event: AgentRuntimeEvent, summa
   }
   step.startedAt = step.startedAt ?? event.timestamp;
   step.summary = summary ?? step.summary;
+  step.progress = Math.max(step.progress ?? 0, payloadProgress(event) ?? 15);
 };
 
 const markCompleted = (step: AgentRunProgressStep, event?: AgentRuntimeEvent, summary?: string): void => {
@@ -86,6 +97,7 @@ const markCompleted = (step: AgentRunProgressStep, event?: AgentRuntimeEvent, su
   step.startedAt = step.startedAt ?? event?.timestamp;
   step.completedAt = step.completedAt ?? event?.timestamp;
   step.summary = summary ?? step.summary;
+  step.progress = 100;
 };
 
 const markReportFallback = (stepsById: Map<AgentRunStepId, AgentRunProgressStep>, reports: AgentReport[]): void => {
@@ -245,7 +257,7 @@ const buildTimelineFromEvents = (events: AgentRuntimeEvent[]): AgentRuntimeTimel
       type: "live.output",
       timestamp: group.event.timestamp,
       agentName: group.event.agentName,
-      summary: `${stepLabel ? `${stepLabel}: ` : ""}Live output streamed ${group.count} chunks / ${group.contentLength} chars.${compactTail ? ` Latest: ${compactTail}` : ""}`,
+      summary: `${stepLabel ? `${stepLabel}：` : ""}已接收 ${group.count} 段实时输出，共 ${group.contentLength} 字符。${compactTail ? ` 最新内容：${compactTail}` : ""}`,
     });
   });
 
@@ -257,7 +269,7 @@ const buildTimelineFromEvents = (events: AgentRuntimeEvent[]): AgentRuntimeTimel
       type: "metric.updated.summary",
       timestamp: group.event.timestamp,
       agentName: group.event.agentName,
-      summary: `${stepLabel ? `${stepLabel}: ` : ""}Runtime metrics aggregated ${group.count} updates.`,
+      summary: `${stepLabel ? `${stepLabel}：` : ""}已汇总 ${group.count} 次运行指标更新。`,
     });
   });
 
@@ -314,7 +326,7 @@ export const buildAgentRunProgress = ({
     const payload = payloadRecord(event);
 
     if (event.type === "agent.run.failed" || event.type === "agent.failed") {
-      failureMessage = typeof payload.error === "string" ? payload.error : payloadText(event) || "Agent run failed.";
+      failureMessage = typeof payload.error === "string" ? payload.error : payloadText(event) || "Agent Run 失败。";
       const runningStep = steps.find((step) => step.status === "running") ?? steps.find((step) => step.status === "pending");
       if (runningStep) {
         runningStep.status = "failed";
@@ -325,49 +337,49 @@ export const buildAgentRunProgress = ({
 
     const evidenceStep = stepsById.get("evidence_retrieval");
     if (evidenceStep && (text.includes("evidence.retrieve") || event.type === "evidence.linked")) {
-      markStarted(evidenceStep, event, "Evidence retrieval in progress");
+      markStarted(evidenceStep, event, "正在检索证据");
       if (event.type === "tool.result" || event.type === "evidence.linked") {
-        markCompleted(evidenceStep, event, "Evidence linked");
+        markCompleted(evidenceStep, event, "证据已关联");
       }
     }
 
     const marketStep = stepsById.get("market_view");
     if (marketStep && (text.includes("market view") || text.includes("market analyst"))) {
-      markStarted(marketStep, event, "Market view in progress");
-      if (event.type === "report.generated") markCompleted(marketStep, event, "Market View generated");
+      markStarted(marketStep, event, "正在生成市场观点");
+      if (event.type === "report.generated") markCompleted(marketStep, event, "市场观点已生成");
     }
 
     const bullStep = stepsById.get("bull_view");
     if (bullStep && (text.includes("bull view") || text.includes("bull researcher") || text.includes("stance bull"))) {
-      markStarted(bullStep, event, "Bull view in progress");
-      if (event.type === "report.generated" || event.type === "debate.message") markCompleted(bullStep, event, "Bull View generated");
+      markStarted(bullStep, event, "正在生成正方观点");
+      if (event.type === "report.generated" || event.type === "debate.message") markCompleted(bullStep, event, "正方观点已生成");
     }
 
     const bearStep = stepsById.get("bear_view");
     if (bearStep && (text.includes("bear view") || text.includes("bear researcher") || text.includes("stance bear"))) {
-      markStarted(bearStep, event, "Bear view in progress");
-      if (event.type === "report.generated" || event.type === "debate.message") markCompleted(bearStep, event, "Bear View generated");
+      markStarted(bearStep, event, "正在生成反方观点");
+      if (event.type === "report.generated" || event.type === "debate.message") markCompleted(bearStep, event, "反方观点已生成");
     }
 
     const researchManagerStep = stepsById.get("research_manager");
     if (researchManagerStep && (text.includes("research manager") || text.includes("research synthesis"))) {
-      markStarted(researchManagerStep, event, "Research synthesis in progress");
+      markStarted(researchManagerStep, event, "正在汇总研究观点");
       if (event.type === "report.generated" || event.type === "agent.completed") {
-        markCompleted(researchManagerStep, event, "Research Manager synthesis generated");
+        markCompleted(researchManagerStep, event, "研究汇总已生成");
       }
     }
 
     const riskStep = stepsById.get("risk_review");
     if (riskStep && (text.includes("risk review") || text.includes("risk analyst") || event.type === "risk.warning")) {
-      markStarted(riskStep, event, "Risk review in progress");
-      if (event.type === "report.generated" || event.type === "risk.warning") markCompleted(riskStep, event, "Risk Review generated");
+      markStarted(riskStep, event, "正在复核风险");
+      if (event.type === "report.generated" || event.type === "risk.warning") markCompleted(riskStep, event, "风险复核已生成");
     }
 
     const decisionStep = stepsById.get("final_decision");
     if (decisionStep && (text.includes("final decision") || text.includes("portfolio manager") || event.type === "decision.updated")) {
-      markStarted(decisionStep, event, "Final decision in progress");
+      markStarted(decisionStep, event, "正在形成最终决策");
       if (event.type === "decision.updated" || event.type === "agent.run.completed") {
-        markCompleted(decisionStep, event, "Final decision updated");
+        markCompleted(decisionStep, event, "最终决策已更新");
       }
     }
 
@@ -384,7 +396,8 @@ export const buildAgentRunProgress = ({
       step.liveOutput = liveOutput;
       if (step.status === "pending") {
         step.status = "running";
-        step.summary = `Streaming ${step.label}`;
+        step.summary = `正在输出${step.label}`;
+        step.progress = Math.max(step.progress ?? 0, 25);
       }
     }
   });
@@ -394,13 +407,13 @@ export const buildAgentRunProgress = ({
   if (decision) {
     const decisionStep = stepsById.get("final_decision");
     if (decisionStep && decisionStep.status !== "completed") {
-      markCompleted(decisionStep, undefined, decision.summary ?? "Final decision available");
+      markCompleted(decisionStep, undefined, decision.summary ?? "最终决策可用");
     }
   }
 
   if (runStatus === "COMPLETED" && decision) {
     steps.forEach((step) => {
-      if (step.status !== "completed") markCompleted(step, undefined, step.summary ?? "Completed");
+      if (step.status !== "completed") markCompleted(step, undefined, step.summary ?? "已完成");
     });
   }
 
@@ -408,19 +421,28 @@ export const buildAgentRunProgress = ({
     const runningStep = steps.find((step) => step.status === "running") ?? steps.find((step) => step.status === "pending");
     if (runningStep) {
       runningStep.status = "failed";
-      runningStep.summary = failureMessage ?? runningStep.summary ?? "Agent run failed.";
+      runningStep.summary = failureMessage ?? runningStep.summary ?? "Agent Run 失败。";
     }
-    failureMessage = failureMessage ?? "Agent run failed.";
+    failureMessage = failureMessage ?? "Agent Run 失败。";
   }
 
   if (runStatus === "RUNNING" && !steps.some((step) => step.status === "running" || step.status === "failed")) {
     const nextStep = steps.find((step) => step.status === "pending");
-    if (nextStep) nextStep.status = "running";
+    if (nextStep) {
+      nextStep.status = "running";
+      nextStep.progress = Math.max(nextStep.progress ?? 0, 10);
+    }
   }
 
   const completedCount = steps.filter((step) => step.status === "completed").length;
   const totalSteps = steps.length;
-  const percent = totalSteps > 0 ? Math.round((completedCount / totalSteps) * 100) : 0;
+  const progressTotal = steps.reduce((sum, step) => {
+    if (step.status === "completed") return sum + 100;
+    if (step.status === "failed") return sum + (step.progress ?? 100);
+    if (step.status === "running") return sum + Math.max(step.progress ?? 10, 10);
+    return sum;
+  }, 0);
+  const percent = totalSteps > 0 ? Math.round(progressTotal / totalSteps) : 0;
   const hasFailed = steps.some((step) => step.status === "failed") || runStatus === "FAILED";
   const latestTimeline = sortedEvents.length ? buildTimelineFromEvents(sortedEvents) : buildTimelineFromSnapshot(timeline);
   const recentEvents = latestTimeline.slice(-20).reverse();
@@ -435,10 +457,10 @@ export const buildAgentRunProgress = ({
     completedCount,
     totalSteps,
     percent: hasFailed ? Math.min(percent, 99) : percent,
-    currentStep: failedStep?.label ?? runningStep?.label ?? pendingStep?.label ?? "Completed",
+    currentStep: failedStep?.label ?? runningStep?.label ?? pendingStep?.label ?? "已完成",
     lastCompletedStep: lastCompleted?.label ?? "-",
     latestEvent,
-    latestEventText: latestEvent?.summary ?? "No runtime event yet",
+    latestEventText: latestEvent?.summary ?? "暂无运行事件",
     hasFailed,
     failureMessage,
     recentEvents,

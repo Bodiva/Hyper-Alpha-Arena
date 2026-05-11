@@ -22,6 +22,9 @@ export interface Evidence {
   evidenceType: EvidenceType;
   sourceName: string;
   sourceType?: string;
+  sourceApiName?: string;
+  snapshotId?: string;
+  snapshotCapturedAt?: string;
   url: string;
   publishedAt: string;
   collectedAt: string;

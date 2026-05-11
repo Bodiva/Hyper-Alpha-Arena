@@ -36,6 +36,9 @@ interface BackendAssetItem {
   tags: string[];
   description: string;
   updatedAt: string;
+  metrics?: Record<string, unknown>;
+  riskLevel?: string;
+  liquidityLevel?: string;
   profile: unknown;
 }
 
@@ -106,6 +109,47 @@ export interface AlphaTraceMarketSnapshot {
   collectedAt: string;
 }
 
+export interface AlphaTraceMarketKline {
+  assetId: string;
+  symbol: string;
+  period: string;
+  timestamp: number;
+  datetime: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  amount: number;
+  source: string;
+}
+
+export interface AlphaTraceFundManagerProfile {
+  managerCode: string;
+  managerName: string;
+  status: string;
+  currentFund: Record<string, unknown>;
+  basic: Record<string, unknown>;
+  career: Record<string, unknown>;
+  styleSignals: string[];
+  performance: Record<string, unknown>;
+  managedFunds: Array<Record<string, unknown>>;
+  externalSearch: {
+    status: string;
+    query: string;
+    message?: string | null;
+    items: Array<Record<string, unknown>>;
+  };
+}
+
+export interface AlphaTraceFundManagerProfileResponse {
+  assetId: string;
+  symbol: string;
+  managers: AlphaTraceFundManagerProfile[];
+  source: string;
+  collectedAt: string;
+}
+
 export interface AlphaTraceMarketIndicator {
   assetId: string;
   symbol: string;
@@ -123,6 +167,14 @@ interface BackendMarketIndicatorResponse {
   symbol: string;
   items: AlphaTraceMarketIndicator[];
   total: number;
+}
+
+interface BackendMarketKlineResponse {
+  assetId: string;
+  symbol: string;
+  period: string;
+  count: number;
+  items: AlphaTraceMarketKline[];
 }
 
 const toExtractedFields = (fields: BackendEvidenceItem["extractedFields"]): Evidence["extractedFields"] => {
@@ -164,6 +216,9 @@ const mapBackendAsset = (item: BackendAssetItem): Asset => {
     tags: item.tags,
     description: item.description,
     updatedAt: item.updatedAt,
+    metrics: item.metrics,
+    riskLevel: item.riskLevel,
+    liquidityLevel: item.liquidityLevel,
   };
 
   if (item.assetType === "ETF") {
@@ -260,12 +315,11 @@ export const listAssetsAsync = async (params: ListAssetsParams = {}, delayMs?: n
         limit: params.limit ?? 100,
         offset: params.offset ?? 0,
       },
-      timeoutMs: 1200,
+      timeoutMs: 15000,
     });
-    const items = response.items.map(mapBackendAsset);
-    return items.length > 0 ? items : listAssetsFromMock(params);
-  } catch {
-    return listAssetsFromMock(params);
+    return response.items.map(mapBackendAsset);
+  } catch (error) {
+    throw error instanceof Error ? error : new Error("Failed to load ClickHouse assets.");
   }
 };
 
@@ -275,9 +329,9 @@ export const getAssetByIdAsync = async (assetId: string, delayMs?: number): Prom
   }
 
   try {
-    return mapBackendAsset(await httpClient.get<BackendAssetItem>(ENDPOINTS.alphaTraceAssetDetail(assetId), { timeoutMs: 1200 }));
+    return mapBackendAsset(await httpClient.get<BackendAssetItem>(ENDPOINTS.alphaTraceAssetDetail(assetId), { timeoutMs: 15000 }));
   } catch {
-    return getAssetByIdFromMock(assetId);
+    return undefined;
   }
 };
 
@@ -287,10 +341,10 @@ export const getAssetEvidenceAsync = async (assetId: string, delayMs?: number): 
   }
 
   try {
-    const response = await httpClient.get<BackendAssetEvidenceResponse>(ENDPOINTS.alphaTraceAssetEvidence(assetId), { timeoutMs: 1200 });
+    const response = await httpClient.get<BackendAssetEvidenceResponse>(ENDPOINTS.alphaTraceAssetEvidence(assetId), { timeoutMs: 15000 });
     return response.items.map(mapBackendEvidence);
   } catch {
-    return evidenceMock.filter((evidence) => evidence.relatedAssetIds.includes(assetId));
+    return [];
   }
 };
 
@@ -305,7 +359,31 @@ export const getAssetMarketSnapshotAsync = async (assetId: string): Promise<Alph
   if (shouldUseMockData()) {
     return mockDelay(undefined);
   }
-  return httpClient.get<AlphaTraceMarketSnapshot>(ENDPOINTS.alphaTraceMarketSnapshot(assetId), { timeoutMs: 10000 });
+  return httpClient.get<AlphaTraceMarketSnapshot>(ENDPOINTS.alphaTraceMarketSnapshot(assetId), { timeoutMs: 20000 });
+};
+
+export const getAssetFundManagersAsync = async (
+  assetId: string,
+  includeExternal = false,
+): Promise<AlphaTraceFundManagerProfileResponse | undefined> => {
+  if (shouldUseMockData()) {
+    return mockDelay(undefined);
+  }
+  return httpClient.get<AlphaTraceFundManagerProfileResponse>(ENDPOINTS.alphaTraceFundManagers(assetId), {
+    params: { include_external: includeExternal },
+    timeoutMs: includeExternal ? 25000 : 20000,
+  });
+};
+
+export const getAssetMarketKlinesAsync = async (assetId: string, limit = 1500): Promise<AlphaTraceMarketKline[]> => {
+  if (shouldUseMockData()) {
+    return mockDelay([]);
+  }
+  const response = await httpClient.get<BackendMarketKlineResponse>(ENDPOINTS.alphaTraceMarketKlines(assetId), {
+    params: { period: "1d", limit },
+    timeoutMs: 10000,
+  });
+  return response.items;
 };
 
 export const getAssetMarketIndicatorsAsync = async (assetId: string): Promise<AlphaTraceMarketIndicator[]> => {

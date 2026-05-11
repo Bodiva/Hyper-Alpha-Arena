@@ -10,7 +10,7 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
     ports:
-      - "127.0.0.1:${ALPHA_TRACE_MYSQL_PORT:-3307}:3306"
+      - "127.0.0.1:${ALPHA_TRACE_MYSQL_PORT:-23307}:3306"
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-ualpha_user", "-palpha_pass"]
       interval: 10s
@@ -29,8 +29,8 @@ services:
     volumes:
       - clickhouse_data:/var/lib/clickhouse
     ports:
-      - "127.0.0.1:${ALPHA_TRACE_CLICKHOUSE_HTTP_PORT:-8123}:8123"
-      - "127.0.0.1:${ALPHA_TRACE_CLICKHOUSE_NATIVE_PORT:-9000}:9000"
+      - "127.0.0.1:${ALPHA_TRACE_CLICKHOUSE_HTTP_PORT:-28123}:8123"
+      - "127.0.0.1:${ALPHA_TRACE_CLICKHOUSE_NATIVE_PORT:-29000}:9000"
     healthcheck:
       test: ["CMD", "clickhouse-client", "--user", "alpha_user", "--password", "alpha_pass", "--query", "SELECT 1"]
       interval: 10s
@@ -48,6 +48,8 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-25532}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U alpha_user -d alpha_arena"]
       interval: 10s
@@ -68,6 +70,7 @@ services:
         ALL_PROXY: ${ALL_PROXY-}
     container_name: hyper-arena-app
     environment:
+      BACKEND_PORT: ${BACKEND_PORT:-8802}
       # Database connection
       DATABASE_URL: postgresql://alpha_user:alpha_pass@postgres:5432/alpha_arena
       SNAPSHOT_DATABASE_URL: postgresql://alpha_user:alpha_pass@postgres:5432/alpha_snapshots
@@ -100,6 +103,18 @@ services:
       ALPHA_TRACE_CLICKHOUSE_PASSWORD: ${ALPHA_TRACE_CLICKHOUSE_PASSWORD:-alpha_pass}
       ALPHA_TRACE_ETF_INDEX_VALUATION_TABLE: ${ALPHA_TRACE_ETF_INDEX_VALUATION_TABLE:-alpha_trace.etf_index_valuation_daily}
       ALPHA_TRACE_FILE_IMPORT_DIR: ${ALPHA_TRACE_FILE_IMPORT_DIR:-/app/data/test}
+      # Lixinger Open API. Keep tokens on the backend/container only.
+      ALPHATRACE_LIXINGER_TOKEN: ${ALPHATRACE_LIXINGER_TOKEN:-}
+      LIXINGER_TOKEN: ${LIXINGER_TOKEN:-}
+      ALPHATRACE_LIXINGER_BASE_URL: ${ALPHATRACE_LIXINGER_BASE_URL:-https://open.lixinger.com/api}
+      ALPHATRACE_LIXINGER_TIMEOUT_SECONDS: ${ALPHATRACE_LIXINGER_TIMEOUT_SECONDS:-20}
+      # OpenClaw gateway integration for the market dashboard chat box.
+      OPENCLAW_WS_URL: ${OPENCLAW_WS_URL:-}
+      OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:-}
+      OPENCLAW_GATEWAY_PASSWORD: ${OPENCLAW_GATEWAY_PASSWORD:-}
+      OPENCLAW_SESSION_KEY: ${OPENCLAW_SESSION_KEY:-agent:main:main}
+      OPENCLAW_DEVICE_KEY_PATH: ${OPENCLAW_DEVICE_KEY_PATH:-/app/data/openclaw-device-key.pem}
+      OPENCLAW_CHAT_TIMEOUT_SECONDS: ${OPENCLAW_CHAT_TIMEOUT_SECONDS:-90}
       # AlphaTrace backend log tail for AgentRunDetail diagnostics.
       ALPHATRACE_BACKEND_LOG_PATH: ${ALPHATRACE_BACKEND_LOG_PATH:-/app/logs/backend-runtime.log}
       # Explicitly disable all proxy settings in container
@@ -111,7 +126,7 @@ services:
       NO_PROXY: ""
       no_proxy: ""
     ports:
-      - "127.0.0.1:8802:8802"
+      - "127.0.0.1:${BACKEND_PORT:-8802}:${BACKEND_PORT:-8802}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -137,6 +152,7 @@ services:
       - ./backend/config:/app/backend/config
       - ./backend/database:/app/backend/database
       - ./backend/factors:/app/backend/factors
+      - ./backend/integrations:/app/backend/integrations
       - ./backend/program_trader:/app/backend/program_trader
       - ./backend/repositories:/app/backend/repositories
       - ./backend/routes:/app/backend/routes

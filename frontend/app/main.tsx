@@ -33,6 +33,7 @@ import SignalManager from '@/components/signal/SignalManager'
 import AttributionAnalysis from '@/components/analytics/AttributionAnalysis'
 import FactorLibrary from '@/components/factor/FactorLibrary'
 import TraderManagement from '@/components/trader/TraderManagement'
+import ResearchTraderManagement from '@/components/trader/ResearchTraderManagement'
 import { HyperliquidPage } from '@/components/hyperliquid'
 import HyperliquidView from '@/components/hyperliquid/HyperliquidView'
 import KlinesView from '@/components/klines/KlinesView'
@@ -42,8 +43,10 @@ import MobilePrograms from '@/components/mobile/MobilePrograms'
 import ProgramTrader from '@/components/program/ProgramTrader'
 import LegacySettingsPage from '@/components/settings/SettingsPage'
 import { SplashScreen, HyperAiOnboarding, HyperAiPage } from '@/components/hyper-ai'
+import ResearchHyperAiPage from '@/components/hyper-ai/ResearchHyperAiPage'
 import ArenaAssets from '@/components/arena/ArenaAssets'
 import DashboardPage from '@/pages/DashboardPage'
+import DashboardTestPage from '@/pages/DashboardTestPage'
 import AssetResearchPage from '@/pages/AssetResearchPage'
 import AssetDetailPage from '@/pages/AssetDetailPage'
 import AgentLabPage from '@/pages/AgentLabPage'
@@ -55,8 +58,13 @@ import PortfolioWorkspacePage from '@/pages/PortfolioWorkspacePage'
 import EvidenceCenterPage from '@/pages/EvidenceCenterPage'
 import DataSourcesPage from '@/pages/DataSourcesPage'
 import DataImportPage from '@/pages/DataImportPage'
+import DataCatalogPage from '@/pages/DataCatalogPage'
+import LixingerDataPage from '@/pages/LixingerDataPage'
 import DecisionAttributionPage from '@/pages/DecisionAttributionPage'
+import RuntimeLogsPage from '@/pages/RuntimeLogsPage'
 import WorkbenchSettingsPage from '@/pages/SettingsPage'
+import ResearchRuntimeConfigPage from '@/pages/ResearchRuntimeConfigPage'
+import ResearchAssistantLabPage from '@/pages/ResearchAssistantLabPage'
 import { createHashUrl, parseAlphaTraceRoute } from '@/shared/lib/navigation'
 // Remove CallbackPage import - handle inline
 import { AIDecision, getAccounts, checkMainnetAccounts, approveBuilder, type UnauthorizedAccount } from '@/lib/api'
@@ -98,22 +106,32 @@ interface Trade { id: number; order_id: number; account_id: number; symbol: stri
 
 const PAGE_TITLES: Record<string, string> = {
   'hyper-ai': 'Hyper AI',
+  'research-hyper-ai': 'Research Assistant',
+  'research-assistant-lab': 'Research Assistant',
+  'research-runtime-config': 'Research Assistant Config',
   dashboard: 'Dashboard',
+  'dashboard-test': 'Market Dashboard',
   'asset-research': 'Asset Research',
   'asset-detail': 'Asset Detail',
   'agent-lab': 'Agent Lab',
   'agent-run-detail': 'Agent Run Detail',
+  'research-ai-traders': 'Research AI Traders',
   'strategy-lab': 'Strategy Lab',
   'strategy-radar': 'Strategy Radar',
+  'research-prompts': 'Research Assistant Config',
   leaderboard: 'Leaderboard',
   'portfolio-workspace': 'Portfolio Workspace',
   'evidence-center': 'Evidence Center',
   'data-sources': 'Data Sources',
+  'data-catalog': 'Data Catalog',
   'data-import': 'Data Import',
+  'lixinger-data': 'Lixinger Data',
+  'clickhouse-data': 'ClickHouse Data',
   'decision-attribution': 'Decision Attribution',
+  'runtime-logs': 'Research Runtime Logs',
   'settings-workbench': 'Settings',
   comprehensive: 'Dashboard',
-  'system-logs': 'System Logs',
+  'system-logs': 'Automation Runtime Logs',
   'prompt-management': 'Prompt Templates',
   'program-trader': 'Programs',
   'signal-management': 'Signal System',
@@ -129,28 +147,38 @@ const PAGE_TITLES: Record<string, string> = {
 
 const PAGE_TITLES_ZH: Record<string, string> = {
   'hyper-ai': 'Hyper AI',
+  'research-hyper-ai': '投研助手',
+  'research-assistant-lab': '投研助手',
+  'research-runtime-config': '投研助手配置',
   dashboard: 'Dashboard',
+  'dashboard-test': '市场看板',
   'asset-research': '资产研究',
   'asset-detail': '资产详情',
-  'agent-lab': 'Agent Lab',
-  'agent-run-detail': 'Agent Run',
+  'agent-lab': 'Agent 实验室',
+  'agent-run-detail': '任务详情',
+  'research-ai-traders': '投研 AI 交易员',
   'strategy-lab': '策略实验',
   'strategy-radar': '策略雷达',
+  'research-prompts': '投研助手配置',
   leaderboard: '排行榜',
   'portfolio-workspace': '组合',
   'evidence-center': '证据',
   'data-sources': '数据源',
+  'data-catalog': '数据中心',
   'data-import': '数据导入',
+  'lixinger-data': '理杏仁',
+  'clickhouse-data': 'ClickHouse',
   'decision-attribution': '归因',
+  'runtime-logs': '投研运行日志',
   'settings-workbench': '设置',
   comprehensive: 'Dashboard',
-  'system-logs': '系统日志',
-  'prompt-management': 'Prompt',
-  'program-trader': 'Programs',
+  'system-logs': '自动化运行日志',
+  'prompt-management': '提示词',
+  'program-trader': '程序',
   'signal-management': '信号',
   attribution: '归因分析',
   'factor-library': '因子库',
-  'trader-management': 'AI Trader',
+  'trader-management': 'AI 交易员',
   hyperliquid: '手动交易',
   klines: 'K 线',
   'model-chat': 'Model Chat',
@@ -172,7 +200,54 @@ const resolvePathToRoute = (pathname: string): RouteTarget | null => {
   const normalizedPath = normalizePath(pathname)
 
   if (normalizedPath === '/dashboard') return { page: 'dashboard' }
+  if (normalizedPath === '/dashboard-test' || normalizedPath === '/dashboard/test') return { page: 'dashboard' }
   if (normalizedPath === '/assets') return { page: 'asset-research' }
+  if (normalizedPath === '/hyper-ai' || normalizedPath === '/hyperai') return { page: 'hyper-ai' }
+  if (
+    normalizedPath === '/research/assistant' ||
+    normalizedPath === '/research/research-assistant' ||
+    normalizedPath === '/research/hyper-ai' ||
+    normalizedPath === '/research/hyperai'
+  ) {
+    return { page: 'research-assistant-lab' }
+  }
+  if (normalizedPath === '/research/assistant-legacy' || normalizedPath === '/research/hyper-ai-legacy') {
+    return { page: 'research-hyper-ai' }
+  }
+  if (
+    normalizedPath === '/research/assistant-lab' ||
+    normalizedPath === '/research/workbench-lab' ||
+    normalizedPath === '/research/chat-lab'
+  ) {
+    return { page: 'research-assistant-lab' }
+  }
+  if (normalizedPath === '/research/ai-traders' || normalizedPath === '/research/traders') {
+    return { page: 'research-ai-traders' }
+  }
+  if (
+    normalizedPath === '/research/runtime-config' ||
+    normalizedPath === '/research/runtime' ||
+    normalizedPath === '/research/capabilities'
+  ) {
+    return { page: 'research-runtime-config' }
+  }
+  if (normalizedPath === '/research/prompts' || normalizedPath === '/research/prompt-templates') {
+    return { page: 'research-prompts' }
+  }
+  if (
+    normalizedPath === '/ai-traders' ||
+    normalizedPath === '/traders' ||
+    normalizedPath === '/trader-management'
+  ) {
+    return { page: 'trader-management' }
+  }
+  if (
+    normalizedPath === '/prompts' ||
+    normalizedPath === '/prompt-templates' ||
+    normalizedPath === '/prompt-management'
+  ) {
+    return { page: 'prompt-management' }
+  }
   if (normalizedPath === '/agent-lab') return { page: 'agent-lab' }
   if (normalizedPath === '/strategy-lab') return { page: 'strategy-lab' }
   if (normalizedPath === '/strategy-radar') return { page: 'strategy-radar' }
@@ -182,10 +257,24 @@ const resolvePathToRoute = (pathname: string): RouteTarget | null => {
   if (normalizedPath === '/data-sources' || normalizedPath === '/data-source' || normalizedPath === '/datasource') {
     return { page: 'data-sources' }
   }
+  if (normalizedPath === '/data-catalog' || normalizedPath === '/data-center' || normalizedPath === '/catalog') {
+    return { page: 'data-catalog' }
+  }
   if (normalizedPath === '/data-import' || normalizedPath === '/data-imports') {
     return { page: 'data-import' }
   }
+  if (normalizedPath === '/lixinger' || normalizedPath === '/lixinger-data' || normalizedPath === '/data/lixinger') {
+    return { page: 'lixinger-data' }
+  }
+  if (
+    normalizedPath === '/clickhouse' ||
+    normalizedPath === '/clickhouse-data' ||
+    normalizedPath === '/data/clickhouse'
+  ) {
+    return { page: 'data-catalog', query: 'tab=clickhouse' }
+  }
   if (normalizedPath === '/decision-attribution') return { page: 'decision-attribution' }
+  if (normalizedPath === '/runtime-logs' || normalizedPath === '/logs') return { page: 'runtime-logs' }
   if (normalizedPath === '/settings') return { page: 'settings-workbench' }
 
   const assetDetailMatch = normalizedPath.match(/^\/assets\/([^/]+)$/)
@@ -239,11 +328,14 @@ const getUnknownHashFallback = (hash: string, pathname: string): RouteTarget => 
     [
       'dashboard',
       'assets',
+      'research',
       'agent-lab',
       'strategy-lab',
       'strategy-radar',
       'evidence',
       'decision-attribution',
+      'runtime-logs',
+      'logs',
       'portfolio',
       'leaderboard',
       'data-sources',
@@ -251,6 +343,10 @@ const getUnknownHashFallback = (hash: string, pathname: string): RouteTarget => 
       'datasource',
       'data-import',
       'data-imports',
+      'lixinger',
+      'lixinger-data',
+      'clickhouse',
+      'clickhouse-data',
       'settings',
     ].some((prefix) => normalizedHash === prefix || normalizedHash.startsWith(`${prefix}/`))
 
@@ -263,18 +359,27 @@ const getUnknownHashFallback = (hash: string, pathname: string): RouteTarget => 
 
 const ALPHA_TRACE_PAGE_KEYS = new Set([
   'dashboard',
+  'dashboard-test',
   'asset-research',
   'asset-detail',
+  'research-hyper-ai',
+  'research-assistant-lab',
+  'research-runtime-config',
   'agent-lab',
   'agent-run-detail',
+  'research-ai-traders',
   'strategy-lab',
   'strategy-radar',
+  'research-prompts',
   'leaderboard',
   'portfolio-workspace',
   'evidence-center',
   'data-sources',
   'data-import',
+  'lixinger-data',
+  'clickhouse-data',
   'decision-attribution',
+  'runtime-logs',
   'settings-workbench',
 ])
 
@@ -991,6 +1096,14 @@ function App() {
   const routeParams = new URLSearchParams(routeQuery)
   const selectedAssetId = routeParams.get('assetId') ?? undefined
   const selectedRunId = routeParams.get('runId') ?? undefined
+  const researchConfigTabParam = routeParams.get('tab')
+  const researchConfigInitialTab =
+    researchConfigTabParam === 'prompts' ||
+    researchConfigTabParam === 'templates' ||
+    researchConfigTabParam === 'runtime' ||
+    researchConfigTabParam === 'agent'
+      ? researchConfigTabParam
+      : undefined
 
   const renderMainContent = () => {
     const refreshData = () => {
@@ -1004,15 +1117,31 @@ function App() {
 
     return (
       <main className={`flex-1 overflow-hidden flex flex-col min-h-0 min-w-0 ${
-        currentPage === 'hyper-ai' || currentPage === 'strategy-radar' ? 'bg-background' : 'bg-muted/30 p-3 md:p-5'
+        currentPage === 'hyper-ai' || currentPage === 'research-hyper-ai' || currentPage === 'research-assistant-lab' || currentPage === 'strategy-radar' ? 'bg-background' : 'bg-muted/30 p-3 md:p-5'
       }`}>
 
         {currentPage === 'hyper-ai' && (
           <HyperAiPage />
         )}
 
+        {currentPage === 'research-hyper-ai' && (
+          <ResearchHyperAiPage />
+        )}
+
+        {currentPage === 'research-assistant-lab' && (
+          <ResearchAssistantLabPage />
+        )}
+
+        {currentPage === 'research-runtime-config' && (
+          <ResearchRuntimeConfigPage initialTab={researchConfigInitialTab} />
+        )}
+
         {currentPage === 'dashboard' && (
           <DashboardPage onNavigate={handleRouteNavigate} />
+        )}
+
+        {currentPage === 'dashboard-test' && (
+          <DashboardTestPage />
         )}
 
         {currentPage === 'asset-research' && (
@@ -1059,12 +1188,24 @@ function App() {
           <DataSourcesPage />
         )}
 
+        {currentPage === 'data-catalog' && (
+          <DataCatalogPage />
+        )}
+
         {currentPage === 'data-import' && (
           <DataImportPage />
         )}
 
+        {currentPage === 'lixinger-data' && (
+          <LixingerDataPage />
+        )}
+
         {currentPage === 'decision-attribution' && (
           <DecisionAttributionPage />
+        )}
+
+        {currentPage === 'runtime-logs' && (
+          <RuntimeLogsPage />
         )}
 
         {currentPage === 'settings-workbench' && (
@@ -1116,6 +1257,10 @@ function App() {
           <PromptManager />
         )}
 
+        {currentPage === 'research-prompts' && (
+          <ResearchRuntimeConfigPage initialTab="prompts" />
+        )}
+
         {currentPage === 'program-trader' && (
           <>
             {/* Mobile: MobilePrograms, Desktop: ProgramTrader */}
@@ -1142,6 +1287,10 @@ function App() {
 
         {currentPage === 'trader-management' && (
           <TraderManagement />
+        )}
+
+        {currentPage === 'research-ai-traders' && (
+          <ResearchTraderManagement />
         )}
 
         {currentPage === 'hyperliquid' && (

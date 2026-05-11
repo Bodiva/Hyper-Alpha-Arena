@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import JSON, Column, Float, Integer, MetaData, String, Table, Text, create_engine, delete, insert, select, update
+from sqlalchemy import JSON, Column, Float, Integer, MetaData, String, Table, Text, create_engine, delete, func, insert, select, update
 from sqlalchemy.engine import Engine
 
 from schemas.alpha_trace_agent_runtime import (
@@ -18,11 +19,14 @@ from services.agent_runtime_status_machine import normalize_agent_status_for_run
 
 
 def _default_mysql_url() -> str:
+    default_host = "mysql" if Path("/.dockerenv").exists() else "localhost"
+    default_port = "3306" if default_host == "mysql" else os.getenv("ALPHA_TRACE_MYSQL_PORT", "23307")
+    default_url = f"mysql+pymysql://alpha_user:alpha_pass@{default_host}:{default_port}/alpha_trace?charset=utf8mb4"
     return os.getenv(
         "ALPHA_TRACE_MYSQL_DATABASE_URL",
         os.getenv(
             "MYSQL_DATABASE_URL",
-            "mysql+pymysql://alpha_user:alpha_pass@mysql:3306/alpha_trace?charset=utf8mb4",
+            default_url,
         ),
     )
 
@@ -169,6 +173,95 @@ class MysqlAgentRunStore:
             if run_id in payload_by_id
         ]
 
+    def list_runs_page(
+        self,
+        asset_id: Optional[str] = None,
+        portfolio_id: Optional[str] = None,
+        strategy_id: Optional[str] = None,
+        status: Optional[str] = None,
+        task_type: Optional[str] = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[List[AgentRun], int]:
+        conditions = []
+        if asset_id:
+            conditions.append(self.runs.c.asset_id == asset_id)
+        if portfolio_id:
+            conditions.append(self.runs.c.portfolio_id == portfolio_id)
+        if strategy_id:
+            conditions.append(self.runs.c.strategy_id == strategy_id)
+        if status:
+            conditions.append(self.runs.c.status == status)
+        if task_type:
+            conditions.append(self.runs.c.task_type == task_type)
+
+        count_query = select(func.count()).select_from(self.runs)
+        page_query = (
+            select(self.runs.c.payload_json)
+            .order_by(self.runs.c.created_at.desc())
+            .limit(max(1, limit))
+            .offset(max(0, offset))
+        )
+        if conditions:
+            count_query = count_query.where(*conditions)
+            page_query = page_query.where(*conditions)
+
+        with self.engine.begin() as conn:
+            total = int(conn.execute(count_query).scalar_one() or 0)
+            rows = conn.execute(page_query).fetchall()
+        return [AgentRun.model_validate(_json_payload(row.payload_json)) for row in rows], total
+
+    def list_runs_with_decisions_page(
+        self,
+        asset_id: Optional[str] = None,
+        portfolio_id: Optional[str] = None,
+        run_id: Optional[str] = None,
+        action: Optional[str] = None,
+        horizon: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> tuple[List[AgentRun], int]:
+        joined = self.runs.join(self.decisions, self.runs.c.run_id == self.decisions.c.run_id)
+        conditions = []
+        if asset_id:
+            conditions.append(self.runs.c.asset_id == asset_id)
+        if portfolio_id:
+            conditions.append(self.runs.c.portfolio_id == portfolio_id)
+        if run_id:
+            conditions.append(self.runs.c.run_id == run_id)
+        if action:
+            conditions.append(self.decisions.c.action == action)
+        if horizon:
+            conditions.append(self.decisions.c.horizon == horizon)
+
+        count_query = select(func.count()).select_from(joined)
+        page_query = (
+            select(self.runs.c.run_id)
+            .select_from(joined)
+            .order_by(self.runs.c.created_at.desc())
+            .limit(max(1, limit))
+            .offset(max(0, offset))
+        )
+        if conditions:
+            count_query = count_query.where(*conditions)
+            page_query = page_query.where(*conditions)
+
+        with self.engine.begin() as conn:
+            total = int(conn.execute(count_query).scalar_one() or 0)
+            id_rows = conn.execute(page_query).fetchall()
+            run_ids = [row.run_id for row in id_rows]
+            if not run_ids:
+                return [], total
+            payload_rows = conn.execute(
+                select(self.runs.c.run_id, self.runs.c.payload_json).where(self.runs.c.run_id.in_(run_ids))
+            ).fetchall()
+        payload_by_id = {row.run_id: row.payload_json for row in payload_rows}
+        return [
+            AgentRun.model_validate(_json_payload(payload_by_id[run_id]))
+            for run_id in run_ids
+            if run_id in payload_by_id
+        ], total
+
     def update_run_status(self, run_id: str, status: str, timestamp: Optional[str] = None) -> None:
         run = self.get_run(run_id)
         if not run:
@@ -187,6 +280,36 @@ class MysqlAgentRunStore:
         self.save_run(next_run)
 
     def append_event(self, run_id: str, event: AgentRuntimeEvent) -> None:
+        is_streaming_chunk = event.type == "reasoning.chunk" and bool(event.payload.get("streaming"))
+        is_metric_update = event.type == "metric.updated"
+        with self.engine.begin() as conn:
+            self._upsert_with_conn(
+                conn,
+                self.events,
+                {"event_id": event.eventId},
+                {
+                    "run_id": run_id,
+                    "sequence": event.sequence,
+                    "type": event.type,
+                    "timestamp": event.timestamp,
+                    "agent_name": event.agentName,
+                    "team": event.team,
+                    "payload_json": event.model_dump(mode="json"),
+                },
+            )
+            if is_streaming_chunk or is_metric_update:
+                conn.execute(
+                    update(self.runs)
+                    .where(self.runs.c.run_id == run_id)
+                    .values(updated_at=event.timestamp)
+                )
+                conn.execute(
+                    update(self.run_metrics)
+                    .where(self.run_metrics.c.run_id == run_id)
+                    .values(updated_at=event.timestamp)
+                )
+                return
+
         run = self.get_run(run_id)
         if run and event.eventId not in {item.eventId for item in run.events}:
             next_run = run.model_copy(
@@ -196,19 +319,6 @@ class MysqlAgentRunStore:
                 }
             )
             self._save_run_payload(next_run)
-        self._upsert(
-            self.events,
-            {"event_id": event.eventId},
-            {
-                "run_id": run_id,
-                "sequence": event.sequence,
-                "type": event.type,
-                "timestamp": event.timestamp,
-                "agent_name": event.agentName,
-                "team": event.team,
-                "payload_json": event.model_dump(mode="json"),
-            },
-        )
 
     def get_events(self, run_id: str) -> List[AgentRuntimeEvent]:
         with self.engine.begin() as conn:
@@ -285,6 +395,38 @@ class MysqlAgentRunStore:
                 select(self.evidence_refs.c.payload_json).where(self.evidence_refs.c.run_id == run_id)
             ).fetchall()
         return [EvidenceReference.model_validate(_json_payload(row.payload_json)) for row in rows]
+
+    def list_evidence_refs_page(
+        self,
+        evidence_type: Optional[str] = None,
+        limit: int = 300,
+        offset: int = 0,
+    ) -> List[tuple[EvidenceReference, str, str]]:
+        joined = self.evidence_refs.join(self.runs, self.evidence_refs.c.run_id == self.runs.c.run_id)
+        query = (
+            select(
+                self.evidence_refs.c.run_id,
+                self.evidence_refs.c.payload_json,
+                self.runs.c.updated_at,
+                self.runs.c.created_at,
+            )
+            .select_from(joined)
+            .order_by(self.runs.c.created_at.desc())
+            .limit(max(1, limit))
+            .offset(max(0, offset))
+        )
+        if evidence_type:
+            query = query.where(self.evidence_refs.c.evidence_type == evidence_type)
+        with self.engine.begin() as conn:
+            rows = conn.execute(query).fetchall()
+        return [
+            (
+                EvidenceReference.model_validate(_json_payload(row.payload_json)),
+                row.run_id,
+                row.updated_at or row.created_at,
+            )
+            for row in rows
+        ]
 
     def save_decision(self, run_id: str, decision: AgentDecision) -> None:
         run = self.get_run(run_id)

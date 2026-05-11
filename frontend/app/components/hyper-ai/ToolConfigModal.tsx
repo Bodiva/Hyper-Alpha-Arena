@@ -18,6 +18,7 @@ interface ConfigField {
   label_zh?: string
   required: boolean
   placeholder?: string
+  default_value?: string
 }
 
 export interface ToolInfo {
@@ -59,11 +60,17 @@ export default function ToolConfigModal({
 
   useEffect(() => {
     if (open) {
-      setValues({})
+      const nextValues: Record<string, string> = {}
+      tool?.config_fields.forEach((field) => {
+        if (field.default_value && field.type !== 'secret') {
+          nextValues[field.key] = field.default_value
+        }
+      })
+      setValues(nextValues)
       setError(null)
       setSuccess(false)
     }
-  }, [open])
+  }, [open, tool])
 
   if (!tool) return null
 

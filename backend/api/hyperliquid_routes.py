@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 from typing import Optional, List
 import logging
+import os
 import time
 
 from database.connection import get_db
@@ -1226,6 +1227,14 @@ def get_trading_mode(db: Session = Depends(get_db)):
 
     Returns the current trading environment (testnet or mainnet) that all AI Traders use.
     """
+    if os.getenv("ALPHA_TRACE_DOMAIN_STORE", "").strip().lower() == "mysql":
+        return {
+            'success': True,
+            'mode': 'testnet',
+            'description': 'Testnet (paper trading)',
+            'source': 'alphatrace_mysql_profile',
+        }
+
     from services.hyperliquid_environment import get_global_trading_mode
 
     try:
@@ -1253,6 +1262,14 @@ def set_trading_mode(
     WARNING: Switching to mainnet will use real funds for all AI Traders.
     This change affects all active AI Traders immediately.
     """
+    if os.getenv("ALPHA_TRACE_DOMAIN_STORE", "").strip().lower() == "mysql":
+        return {
+            'success': True,
+            'mode': request.mode,
+            'description': 'Testnet (paper trading)' if request.mode == 'testnet' else 'Mainnet (real funds)',
+            'source': 'alphatrace_mysql_profile',
+        }
+
     from database.models import SystemConfig
 
     try:

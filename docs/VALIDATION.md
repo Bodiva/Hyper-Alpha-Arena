@@ -3438,3 +3438,34 @@ Expected:
 - Agent Lab keeps demo/stub/qwen/native/tradingagents quick actions.
 - Agent Lab keeps runner capability and runtime worker diagnostics in an advanced section.
 - Simplification means simpler layout and interaction, not reduced function.
+
+## M234 Validation - ClickHouse AgentRun Projection Write Path
+
+Required checks:
+
+```powershell
+python -m py_compile backend/services/clickhouse_business_store.py backend/services/clickhouse_agent_run_projection.py backend/services/clickhouse_agent_run_writer.py backend/services/clickhouse_schema_catalog.py backend/api/alpha_trace_agent_runtime_routes.py
+```
+
+Direct smoke:
+
+```powershell
+$env:PYTHONPATH="backend"
+# Build a minimal AgentRun projection and pass a FakeStore with
+# ensure_agent_runtime_projection_tables/delete_run_projection_rows/insert_json_each_row.
+# Expected: 4 deleted table/run pairs and 4 inserted rows across runtime_events,
+# reports, evidence_refs, and decisions.
+```
+
+Optional runtime check when ClickHouse is available:
+
+```powershell
+Invoke-RestMethod -Method Post "http://127.0.0.1:8805/api/alpha-trace/agent-runs/<runId>/clickhouse-projection/write?replaceExisting=true"
+```
+
+Expected:
+
+- Write endpoint returns per-table row counts.
+- ClickHouse unavailable returns HTTP 503 with a clear detail message.
+- Preview endpoint remains side-effect free.
+```

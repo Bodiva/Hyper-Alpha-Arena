@@ -7,9 +7,9 @@ import type { LeaderboardItem, Strategy, StrategyLifecycleStatus, StrategyType }
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { getStrategyAssetsAsync, getStrategyEvidenceAsync, listLeaderboard, listStrategiesAsync } from "@/entities/strategy/api";
-import { listAssets } from "@/entities/asset/api";
-import { listEvidence } from "@/entities/evidence/api";
+import { listLeaderboard, listStrategiesAsync } from "@/entities/strategy/api";
+import { listAssets, listAssetsAsync } from "@/entities/asset/api";
+import { listEvidence, listEvidenceAsync } from "@/entities/evidence/api";
 import { listDecisions } from "@/entities/decision/api";
 import { listPortfolios } from "@/entities/portfolio/api";
 import { getApiMode } from "@/shared/api/api-mode";
@@ -179,12 +179,12 @@ export default function StrategyLabPage() {
         let nextEvidence: Evidence[] = [];
 
         if (apiMode === "real") {
-          const [assetGroups, evidenceGroups] = await Promise.all([
-            Promise.all(nextStrategies.map((strategy) => getStrategyAssetsAsync(strategy.strategyId).catch(() => []))),
-            Promise.all(nextStrategies.map((strategy) => getStrategyEvidenceAsync(strategy.strategyId).catch(() => []))),
+          const [assetItems, evidenceItems] = await Promise.all([
+            listAssetsAsync({ limit: 100 }),
+            listEvidenceAsync({ limit: 100 }),
           ]);
-          nextAssets = uniqueById(assetGroups.flat(), (asset) => asset.id);
-          nextEvidence = uniqueById(evidenceGroups.flat(), (item) => item.id);
+          nextAssets = uniqueById(assetItems, (asset) => asset.id);
+          nextEvidence = uniqueById(evidenceItems, (item) => item.id);
         } else {
           nextAssets = listAssets();
           nextEvidence = listEvidence();

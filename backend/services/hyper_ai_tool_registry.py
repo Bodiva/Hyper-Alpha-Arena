@@ -8,6 +8,8 @@ implement validate_<tool_name> + execute_<tool_name> functions.
 
 import json
 import logging
+import re
+import hashlib
 from typing import Dict, Optional, Tuple
 
 from sqlalchemy.orm import Session
@@ -91,6 +93,53 @@ def get_tool_configs(db: Session) -> dict:
     return configs
 
 
+def get_custom_tool_registry(configs: dict) -> Dict[str, dict]:
+    """Build frontend metadata for user-defined API tools stored in config JSON."""
+    tools: Dict[str, dict] = {}
+    for name, cfg in configs.items():
+        if not isinstance(cfg, dict) or not cfg.get("custom"):
+            continue
+        display_name = str(cfg.get("display_name") or name).strip()
+        display_name_zh = str(cfg.get("display_name_zh") or display_name).strip()
+        api_url = str(cfg.get("api_url") or "").strip()
+        tools[name] = {
+            "display_name": display_name,
+            "display_name_zh": display_name_zh,
+            "description": str(cfg.get("description") or "User-defined external API."),
+            "description_zh": str(cfg.get("description_zh") or "用户自定义外部 API。"),
+            "icon": "wrench",
+            "config_fields": [
+                {
+                    "key": "display_name",
+                    "type": "text",
+                    "label": "Name",
+                    "label_zh": "名称",
+                    "required": True,
+                    "placeholder": display_name,
+                    "default_value": display_name,
+                },
+                {
+                    "key": "api_url",
+                    "type": "text",
+                    "label": "API URL",
+                    "label_zh": "API 地址",
+                    "required": True,
+                    "placeholder": api_url or "https://api.example.com/v1/search",
+                    "default_value": api_url,
+                },
+                {
+                    "key": "api_key",
+                    "type": "secret",
+                    "label": "API Key",
+                    "label_zh": "API 密钥",
+                    "required": False,
+                    "placeholder": "输入新密钥以更新",
+                },
+            ],
+        }
+    return tools
+
+
 def save_tool_configs(db: Session, configs: dict):
     """Write tool_configs JSON to HyperAiProfile."""
     from database.models import HyperAiProfile
@@ -100,6 +149,13 @@ def save_tool_configs(db: Session, configs: dict):
         db.add(profile)
     profile.tool_configs = json.dumps(configs)
     db.commit()
+
+
+def normalize_custom_tool_name(value: str) -> str:
+    slug = re.sub(r"[^A-Za-z0-9_]+", "_", value.strip().lower()).strip("_")
+    if not slug:
+        slug = hashlib.sha1(value.strip().encode("utf-8")).hexdigest()[:10]
+    return f"custom_{slug or 'api'}"
 
 
 def get_tool_api_key(db: Session, tool_name: str) -> Optional[str]:
@@ -140,6 +196,37 @@ def set_tool_api_key(db: Session, tool_name: str, api_key: str):
         get_mysql_system_config_store().set_tool_api_key(tool_name, api_key)
     except Exception as exc:
         logger.warning("Failed to persist AlphaTrace MySQL tool config; legacy profile was saved: %s", exc)
+
+
+def set_custom_tool_config(
+    db: Session,
+    tool_name: str,
+    *,
+    display_name: str,
+    api_url: str,
+    api_key: Optional[str] = None,
+):
+    """Create or update a user-defined API tool."""
+    from utils.encryption import encrypt_private_key
+
+    configs = get_tool_configs(db)
+    current = configs.get(tool_name, {}) if isinstance(configs.get(tool_name), dict) else {}
+    current.update(
+        {
+            "custom": True,
+            "display_name": display_name,
+            "display_name_zh": display_name,
+            "description": f"User-defined API endpoint: {api_url}",
+            "description_zh": f"用户自定义 API：{api_url}",
+            "api_url": api_url,
+            "enabled": True,
+            "source": "user_custom",
+        }
+    )
+    if api_key:
+        current["api_key_encrypted"] = encrypt_private_key(api_key)
+    configs[tool_name] = current
+    save_tool_configs(db, configs)
 
 
 def remove_tool_config(db: Session, tool_name: str):

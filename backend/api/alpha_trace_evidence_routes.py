@@ -21,7 +21,7 @@ def _agent_run_evidence_to_api_item(
     runtime_metadata: dict[str, Any] | None = None,
 ) -> AlphaTraceEvidenceItem:
     extracted_fields = evidence.extractedFields or {}
-    source_type = str(extracted_fields.get("sourceType") or ("bocha_search" if evidence.evidenceId.startswith("ev_bocha_") else "agent_run"))
+    source_type = str(evidence.sourceType or extracted_fields.get("sourceType") or ("bocha_search" if evidence.evidenceId.startswith("ev_bocha_") else "agent_run"))
     source_label = "Bocha Web Search" if source_type == "bocha_search" else "Agent Run Evidence"
     published_at = evidence.publishedAt or evidence.collectedAt or fallback_timestamp
     collected_at = evidence.collectedAt or evidence.publishedAt or fallback_timestamp
@@ -31,6 +31,9 @@ def _agent_run_evidence_to_api_item(
         title=evidence.title,
         sourceName=evidence.sourceName,
         sourceType=source_type,
+        sourceApiName=evidence.sourceApiName,
+        snapshotId=evidence.snapshotId or evidence.evidenceId,
+        snapshotCapturedAt=evidence.snapshotCapturedAt or published_at,
         evidenceType=evidence.evidenceType,
         relatedAssetIds=evidence.relatedAssetIds,
         publishedAt=published_at,
@@ -60,6 +63,20 @@ def _agent_run_evidence_to_api_item(
             ),
             **(runtime_metadata or {}),
         },
+    )
+
+
+def _truncate_text(value: str, limit: int = 360) -> str:
+    return value if len(value) <= limit else f"{value[:limit].rstrip()}..."
+
+
+def _compact_evidence_item(item: AlphaTraceEvidenceItem) -> AlphaTraceEvidenceItem:
+    return item.model_copy(
+        update={
+            "summary": _truncate_text(item.summary),
+            "extractedFields": [],
+            "metadata": {},
+        }
     )
 
 
@@ -116,6 +133,29 @@ def _list_run_scoped_evidence(
     limit: int = 300,
 ) -> list[AlphaTraceEvidenceItem]:
     store = get_agent_run_store()
+    page_loader = getattr(store, "list_evidence_refs_page", None)
+    if callable(page_loader):
+        items: list[AlphaTraceEvidenceItem] = []
+        seen: set[str] = set()
+        page_limit = min(1000, max(limit * 20, 100))
+        for evidence, run_id, fallback_timestamp in page_loader(evidence_type=evidence_type, limit=page_limit, offset=0):
+            if evidence.evidenceId in seen:
+                continue
+            item = _agent_run_evidence_to_api_item(
+                evidence=evidence,
+                run_id=run_id,
+                fallback_timestamp=fallback_timestamp,
+                used_by_decision_ids=[],
+                runtime_metadata=None,
+            )
+            if not _matches_filters(item, asset_id, evidence_type, source_type, keyword, min_quality_score):
+                continue
+            seen.add(item.evidenceId)
+            items.append(item)
+            if len(items) >= limit:
+                return items
+        return items
+
     items: list[AlphaTraceEvidenceItem] = []
     seen: set[str] = set()
     runs = sorted(store.list_runs(), key=lambda run: run.startedAt, reverse=True)
@@ -174,6 +214,7 @@ def list_alpha_trace_evidence(
     keyword: Optional[str] = Query(None),
     limit: int = Query(100, ge=1, le=500),
     minQualityScore: Optional[int] = Query(None, ge=0, le=100),
+    compact: bool = Query(False),
 ):
     store = get_static_evidence_store()
     items = store.list_evidence(
@@ -199,6 +240,8 @@ def list_alpha_trace_evidence(
         key=lambda item: (item.collectedAt or item.publishedAt or "", item.qualityScore, item.reliabilityScore),
         reverse=True,
     )[:limit]
+    if compact:
+        merged_items = [_compact_evidence_item(item) for item in merged_items]
     return EvidenceListResponse(items=merged_items, total=len(merged_items), limit=limit, offset=0)
 
 

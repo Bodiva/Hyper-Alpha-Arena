@@ -17,6 +17,9 @@ class AlphaTraceEvidenceItem(BaseModel):
     title: str
     sourceName: str
     sourceType: str
+    sourceApiName: Optional[str] = None
+    snapshotId: Optional[str] = None
+    snapshotCapturedAt: Optional[str] = None
     evidenceType: str
     relatedAssetIds: List[str] = Field(default_factory=list)
     publishedAt: str
@@ -45,4 +48,3 @@ class EvidenceSearchResponse(BaseModel):
     assetId: Optional[str] = None
     taskType: Optional[str] = None
     limit: int
-

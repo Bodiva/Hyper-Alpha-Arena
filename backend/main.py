@@ -16,8 +16,10 @@ from dotenv import load_dotenv
 
 from decimal import Decimal
 
-# Load environment variables from .env file
+# Load environment variables from both backend cwd and repository root.
+# Local dev often starts uvicorn from backend/, while docker/start-dev pass envs explicitly.
 load_dotenv()
+load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
 
 from database.connection import engine, Base, SessionLocal
 from database.models import TradingConfig, User, Account, SystemConfig, AccountAssetSnapshot
@@ -37,7 +39,10 @@ def _env_bool(name: str, default: bool) -> bool:
 
 def _is_alphatrace_only_profile() -> bool:
     profile = os.getenv("ALPHATRACE_BACKEND_PROFILE", "").strip().lower()
-    return profile in {"alphatrace", "alphatrace-only", "alpha_trace", "alpha-trace"}
+    return (
+        profile in {"alphatrace", "alphatrace-only", "alpha_trace", "alpha-trace"}
+        or os.getenv("ALPHA_TRACE_DOMAIN_STORE", "").strip().lower() == "mysql"
+    )
 
 
 def _frontend_watcher_enabled() -> bool:
@@ -306,9 +311,32 @@ def on_startup():
 
     _start_runtime_monitor()
     print("Runtime monitor started")
+    try:
+        from api.alpha_trace_dashboard_routes import start_dashboard_test_bocha_refresh_scheduler
 
-    # Create tables
-    Base.metadata.create_all(bind=engine)
+        start_dashboard_test_bocha_refresh_scheduler()
+        print("[startup] Dashboard market cache refresh scheduler started")
+    except Exception as e:
+        print(f"[startup] Dashboard market cache refresh scheduler failed (non-fatal): {e}")
+    try:
+        from services.clickhouse_leaderboard_store import start_clickhouse_leaderboard_cache_scheduler
+
+        start_clickhouse_leaderboard_cache_scheduler()
+        print("[startup] AlphaTrace leaderboard cache refresh scheduler started")
+    except Exception as e:
+        print(f"[startup] AlphaTrace leaderboard cache refresh scheduler failed (non-fatal): {e}")
+
+    if os.environ.get("ALPHA_TRACE_DOMAIN_STORE", "").lower() == "mysql" and os.environ.get("ENABLE_LEGACY_POSTGRES_STARTUP") != "true":
+        print("[startup] Legacy PostgreSQL startup tasks skipped by AlphaTrace MySQL profile")
+        return
+
+    # Create tables. In AlphaTrace local mode, dashboard/market-data routes can run
+    # without the legacy PostgreSQL database; don't block the whole API on it.
+    try:
+        Base.metadata.create_all(bind=engine)
+    except Exception as e:
+        print(f"[startup] Primary database unavailable; legacy DB startup tasks skipped: {e}")
+        return
 
     # Run all migrations (idempotent - safe to run every startup)
     try:
@@ -774,7 +802,9 @@ from api.system_routes import router as system_router
 from api.binance_routes import router as binance_router
 from api.ai_stream_routes import router as ai_stream_router
 from api.hyper_ai_routes import router as hyper_ai_router
+from api.research_ai_routes import router as research_ai_router
 from api.bot_routes import router as bot_router
+from api.openclaw_chat_routes import router as openclaw_chat_router
 from api.factor_routes import router as factor_router
 from api.news_routes import router as news_router
 from api.market_intelligence_routes import router as market_intelligence_router
@@ -787,7 +817,11 @@ from api.alpha_trace_decision_routes import router as alpha_trace_decision_route
 from api.alpha_trace_leaderboard_routes import router as alpha_trace_leaderboard_router
 from api.alpha_trace_market_data_routes import router as alpha_trace_market_data_router
 from api.alpha_trace_data_source_routes import router as alpha_trace_data_source_router
+from api.alpha_trace_lixinger_routes import router as alpha_trace_lixinger_router
 from api.alpha_trace_tool_skill_routes import router as alpha_trace_tool_skill_router
+from api.alpha_trace_dashboard_routes import router as alpha_trace_dashboard_router
+from api.alpha_trace_research_workbench_routes import router as alpha_trace_research_workbench_router
+from api.alpha_trace_research_workspace_routes import router as alpha_trace_research_workspace_router
 from routes.program_routes import router as program_router
 # Removed: AI account routes merged into account_routes (unified AI trader accounts)
 
@@ -818,7 +852,9 @@ app.include_router(system_router)
 app.include_router(binance_router)
 app.include_router(ai_stream_router)
 app.include_router(hyper_ai_router)
+app.include_router(research_ai_router)
 app.include_router(bot_router)
+app.include_router(openclaw_chat_router)
 app.include_router(factor_router)
 app.include_router(news_router)
 app.include_router(market_intelligence_router)
@@ -831,7 +867,11 @@ app.include_router(alpha_trace_decision_router)
 app.include_router(alpha_trace_leaderboard_router)
 app.include_router(alpha_trace_market_data_router)
 app.include_router(alpha_trace_data_source_router)
+app.include_router(alpha_trace_lixinger_router)
 app.include_router(alpha_trace_tool_skill_router)
+app.include_router(alpha_trace_dashboard_router)
+app.include_router(alpha_trace_research_workbench_router)
+app.include_router(alpha_trace_research_workspace_router)
 # app.include_router(ai_account_router, prefix="/api")  # Removed - merged into account_router
 
 # Strategy route aliases for frontend compatibility

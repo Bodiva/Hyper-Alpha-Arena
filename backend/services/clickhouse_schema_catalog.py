@@ -78,7 +78,7 @@ def get_clickhouse_schema_catalog() -> ClickHouseSchemaCatalog:
             ClickHouseTableDescriptor(
                 table_name="alpha_trace_runtime_events",
                 domain="agent_runtime",
-                status="planned",
+                status="implemented",
                 source_contracts=("AgentRuntimeEvent",),
                 columns=common
                 + (
@@ -96,7 +96,7 @@ def get_clickhouse_schema_catalog() -> ClickHouseSchemaCatalog:
             ClickHouseTableDescriptor(
                 table_name="alpha_trace_agent_reports",
                 domain="agent_runtime",
-                status="planned",
+                status="implemented",
                 source_contracts=("AgentReport",),
                 columns=common
                 + (
@@ -113,7 +113,7 @@ def get_clickhouse_schema_catalog() -> ClickHouseSchemaCatalog:
             ClickHouseTableDescriptor(
                 table_name="alpha_trace_evidence_refs",
                 domain="evidence",
-                status="planned",
+                status="implemented",
                 source_contracts=("EvidenceReference", "AgentArtifact"),
                 columns=common
                 + (
@@ -134,7 +134,7 @@ def get_clickhouse_schema_catalog() -> ClickHouseSchemaCatalog:
             ClickHouseTableDescriptor(
                 table_name="alpha_trace_decisions",
                 domain="decision",
-                status="planned",
+                status="implemented",
                 source_contracts=("AgentDecision",),
                 columns=common
                 + (

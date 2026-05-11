@@ -6,6 +6,10 @@ from typing import Iterable, List, Tuple
 from schemas.alpha_trace_agent_runtime import EvidenceReference
 from services.evidence_retrieval.external_search import ExternalEvidenceSearch, ExternalSearchResult
 from services.evidence_retrieval.static_evidence_seed import EvidenceItem, get_static_evidence_seed
+from services.lixinger_clickhouse_context_service import (
+    LixingerClickHouseContextError,
+    build_lixinger_clickhouse_evidence_items,
+)
 
 
 TASK_TYPE_HINTS = {
@@ -30,6 +34,13 @@ QUESTION_HINTS = [
     "波动",
     "宏观",
     "估值",
+    "分位",
+    "净值",
+    "持仓",
+    "成分",
+    "理杏仁",
+    "ClickHouse",
+    "CK",
     "红利",
     "成长",
     "商品",
@@ -60,6 +71,17 @@ class EvidenceRetriever:
         preferred_types = TASK_TYPE_HINTS.get(task_type, set())
         all_items = list(self._seed)
 
+        try:
+            all_items.extend(
+                build_lixinger_clickhouse_evidence_items(
+                    asset_id=asset_id,
+                    question=question,
+                    limit=max(3, min(limit, 8)),
+                )
+            )
+        except LixingerClickHouseContextError:
+            pass
+
         self.last_external_search = None
         if include_external:
             external_result = ExternalEvidenceSearch().search(asset_id=asset_id, question=question, task_type=task_type, limit=limit)
@@ -81,6 +103,8 @@ class EvidenceRetriever:
 
             if item.evidenceType in preferred_types:
                 score += 12
+            if item.sourceType in {"clickhouse_lixinger", "lixinger_local_sync"}:
+                score += 28
             if item.sourceType == "bocha_search":
                 score += 10
 
@@ -108,12 +132,31 @@ class EvidenceRetriever:
         return list(terms)
 
 
+def _default_source_api_name(item: EvidenceItem) -> str:
+    source_text = f"{item.sourceName} {item.sourceType}".lower()
+    if item.sourceApiName:
+        return item.sourceApiName
+    if "bocha" in source_text:
+        return "bocha.web.search"
+    if "lixinger" in source_text or "理杏仁" in source_text:
+        return "lixinger.local_sync"
+    if "clickhouse" in source_text or "catalog" in source_text:
+        return "alphatrace.clickhouse_catalog"
+    if "static" in source_text:
+        return "alphatrace.static_seed"
+    return item.sourceType or "unknown"
+
+
 def to_evidence_reference(item: EvidenceItem) -> EvidenceReference:
     return EvidenceReference(
         evidenceId=item.evidenceId,
         title=item.title,
         evidenceType=item.evidenceType,
         sourceName=item.sourceName,
+        sourceType=item.sourceType,
+        sourceApiName=item.sourceApiName or _default_source_api_name(item),
+        snapshotId=item.snapshotId or item.evidenceId,
+        snapshotCapturedAt=item.snapshotCapturedAt or item.publishedAt,
         qualityScore=item.qualityScore,
         reliabilityScore=item.reliabilityScore,
         summary=item.summary,

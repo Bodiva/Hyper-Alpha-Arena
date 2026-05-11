@@ -49,7 +49,7 @@ def _config_action_items(config: dict[str, dict[str, Any]]) -> list[dict[str, st
             {
                 "area": "bocha",
                 "severity": "optional",
-                "message": str(bocha.get("message") or "Bocha search is not configured; static evidence fallback remains available."),
+                "message": str(bocha.get("message") or "Bocha search is not configured; external evidence search is unavailable."),
             }
         )
     tradingagents_metadata = tradingagents.get("metadata") or {}

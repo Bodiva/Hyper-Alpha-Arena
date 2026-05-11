@@ -1,9 +1,11 @@
 """Bot Integration API Routes - Manage Telegram/Discord bot configurations"""
 import asyncio
 import json
+import os
+import secrets
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
-from typing import Optional
+from typing import Any, Optional
 from sqlalchemy.orm import Session
 
 from database.connection import get_db
@@ -64,7 +66,7 @@ def get_bot_config_endpoint(platform: str, db: Session = Depends(get_db)):
 def save_bot_config_endpoint(request: BotConfigRequest, db: Session = Depends(get_db)):
     """Save or update bot configuration."""
     # Validate platform - allow known platforms (new platforms should be added here)
-    known_platforms = ["telegram", "discord", "whatsapp", "wechat"]
+    known_platforms = ["telegram", "discord", "openclaw", "whatsapp", "wechat"]
     if request.platform not in known_platforms:
         raise HTTPException(status_code=400, detail=f"Invalid platform. Must be one of: {', '.join(known_platforms)}")
 
@@ -242,6 +244,210 @@ def _get_tool_label(tool_name: str, lang: str) -> str:
         return labels.get(lang, labels["en"])
     # Fallback: humanize the function name
     return tool_name.replace("_", " ").title()
+
+
+def _coerce_message_content(value: Any) -> str:
+    """Extract plain text from common chat payload content shapes."""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, list):
+        parts: list[str] = []
+        for item in value:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                text = item.get("text") or item.get("content") or item.get("value")
+                if text:
+                    parts.append(str(text))
+        return "\n".join(part.strip() for part in parts if part and str(part).strip()).strip()
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def _extract_openclaw_text(payload: dict[str, Any]) -> str:
+    for key in ("message", "text", "input", "content", "query", "prompt"):
+        text = _coerce_message_content(payload.get(key))
+        if text:
+            return text
+
+    messages = payload.get("messages")
+    if isinstance(messages, list):
+        for message in reversed(messages):
+            if not isinstance(message, dict):
+                continue
+            role = str(message.get("role") or "").lower()
+            if role and role not in {"user", "human"}:
+                continue
+            text = _coerce_message_content(message.get("content"))
+            if text:
+                return text
+
+    return ""
+
+
+def _extract_openclaw_sender(payload: dict[str, Any]) -> dict[str, str]:
+    user = payload.get("user") if isinstance(payload.get("user"), dict) else {}
+    metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+
+    user_id = (
+        payload.get("user_id")
+        or payload.get("userId")
+        or user.get("id")
+        or user.get("user_id")
+        or metadata.get("user_id")
+        or metadata.get("userId")
+    )
+    username = payload.get("username") or user.get("username") or user.get("name") or metadata.get("username")
+    display_name = payload.get("display_name") or payload.get("displayName") or user.get("display_name") or user.get("name")
+
+    return {
+        "user_id": str(user_id or username or "openclaw-user"),
+        "username": str(username or ""),
+        "display_name": str(display_name or username or "OpenClaw User"),
+    }
+
+
+def _extract_openclaw_chat_id(payload: dict[str, Any], sender: dict[str, str]) -> str:
+    metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+    chat_id = (
+        payload.get("chat_id")
+        or payload.get("chatId")
+        or payload.get("conversation_id")
+        or payload.get("conversationId")
+        or payload.get("thread_id")
+        or payload.get("threadId")
+        or payload.get("channel_id")
+        or payload.get("channelId")
+        or metadata.get("chat_id")
+        or metadata.get("conversation_id")
+        or sender["user_id"]
+    )
+    return str(chat_id or "openclaw-chat")
+
+
+def _get_openclaw_expected_token(db: Session) -> Optional[str]:
+    env_token = os.getenv("ALPHATRACE_OPENCLAW_BRIDGE_TOKEN", "").strip()
+    if env_token:
+        return env_token
+    return get_decrypted_bot_token(db, "openclaw")
+
+
+def _get_openclaw_presented_token(request: Request) -> str:
+    auth = request.headers.get("authorization") or request.headers.get("Authorization") or ""
+    if auth.lower().startswith("bearer "):
+        return auth[7:].strip()
+    return (
+        request.headers.get("x-openclaw-token")
+        or request.headers.get("X-OpenClaw-Token")
+        or request.headers.get("x-hyper-alpha-token")
+        or ""
+    ).strip()
+
+
+def _authorize_openclaw_request(request: Request, db: Session) -> None:
+    expected = _get_openclaw_expected_token(db)
+    if not expected:
+        raise HTTPException(
+            status_code=503,
+            detail="OpenClaw bridge token is not configured. Set ALPHATRACE_OPENCLAW_BRIDGE_TOKEN or call /api/bot/openclaw/connect.",
+        )
+
+    presented = _get_openclaw_presented_token(request)
+    if not presented or not secrets.compare_digest(presented, expected):
+        raise HTTPException(status_code=401, detail="Invalid OpenClaw bridge token.")
+
+
+async def _process_openclaw_message_internal(payload: dict[str, Any]) -> dict[str, Any]:
+    """Process one OpenClaw-originated message through the existing Hyper AI bot conversation."""
+    from database.connection import SessionLocal
+    from database.models import BotChatBinding, HyperAiConversation
+    from services.hyper_ai_service import stream_chat_response
+    from sqlalchemy import func
+
+    text = _extract_openclaw_text(payload)
+    if not text:
+        raise HTTPException(status_code=400, detail="Missing message text in OpenClaw payload.")
+
+    sender = _extract_openclaw_sender(payload)
+    chat_id = _extract_openclaw_chat_id(payload, sender)
+
+    def process_ai_sync() -> dict[str, Any]:
+        db_session = SessionLocal()
+        try:
+            binding = db_session.query(BotChatBinding).filter(
+                BotChatBinding.platform == "openclaw",
+                BotChatBinding.chat_id == chat_id,
+            ).first()
+            if not binding:
+                binding = BotChatBinding(
+                    platform="openclaw",
+                    chat_id=chat_id,
+                    username=sender["username"],
+                    display_name=sender["display_name"],
+                )
+                db_session.add(binding)
+            else:
+                binding.username = sender["username"] or binding.username
+                binding.display_name = sender["display_name"] or binding.display_name
+                binding.last_message_at = func.current_timestamp()
+                binding.is_active = True
+            db_session.commit()
+
+            conv = db_session.query(HyperAiConversation).filter(
+                HyperAiConversation.is_bot_conversation == True
+            ).first()
+            if not conv:
+                conv = HyperAiConversation(title="Hyper AI Bot", is_bot_conversation=True, bot_platform="openclaw")
+                db_session.add(conv)
+                db_session.commit()
+                db_session.refresh(conv)
+
+            lang = _get_ui_language(db_session)
+            full_response = ""
+            tool_calls: list[str] = []
+            error_message = ""
+
+            for event in stream_chat_response(db_session, conv.id, text):
+                event_type = None
+                data_str = None
+                for line in event.split("\n"):
+                    if line.startswith("event: "):
+                        event_type = line[7:].strip()
+                    elif line.startswith("data: "):
+                        data_str = line[6:]
+
+                if not data_str:
+                    continue
+
+                try:
+                    data = json.loads(data_str)
+                except json.JSONDecodeError:
+                    continue
+
+                if event_type == "tool_call" and data.get("name"):
+                    tool_calls.append(str(data["name"]))
+                elif event_type == "content":
+                    full_response += str(data.get("text") or "")
+                elif event_type in {"error", "interrupted"}:
+                    error_message = str(data.get("message") or data.get("error") or "Unknown error")
+
+            progress = [_get_tool_label(name, lang) for name in tool_calls]
+            return {
+                "ok": not bool(error_message),
+                "reply": full_response if not error_message else f"Error: {error_message}",
+                "conversation_id": conv.id,
+                "chat_id": chat_id,
+                "source": "openclaw",
+                "tool_calls": tool_calls,
+                "progress": progress,
+                "error": error_message or None,
+            }
+        finally:
+            db_session.close()
+
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, process_ai_sync)
 
 
 # ============================================================================
@@ -715,3 +921,108 @@ def get_discord_status(db: Session = Depends(get_db)):
         "config": config,
         "gateway_running": gateway_running,
     }
+
+
+# ============================================================================
+# OpenClaw-specific endpoints
+# ============================================================================
+
+class OpenClawConnectRequest(BaseModel):
+    bridge_token: str
+    agent_id: Optional[str] = None
+
+
+@router.post("/openclaw/connect")
+async def connect_openclaw_bridge(
+    request: OpenClawConnectRequest,
+    db: Session = Depends(get_db),
+):
+    """Save the shared secret used by OpenClaw to call the Hyper AI bridge webhook."""
+    token = request.bridge_token.strip()
+    if len(token) < 16:
+        raise HTTPException(status_code=400, detail="bridge_token must be at least 16 characters.")
+
+    save_bot_config(
+        db=db,
+        platform="openclaw",
+        bot_token=token,
+        bot_username="OpenClaw",
+        bot_app_id=(request.agent_id or "openclaw")[:50],
+    )
+    update_bot_status(db, "openclaw", "connected")
+    config = get_bot_config(db, "openclaw")
+
+    from database.models import HyperAiConversation
+
+    bot_conv = db.query(HyperAiConversation).filter(
+        HyperAiConversation.is_bot_conversation == True
+    ).first()
+    if not bot_conv:
+        bot_conv = HyperAiConversation(
+            title="Hyper AI Bot",
+            is_bot_conversation=True,
+            bot_platform="openclaw",
+        )
+        db.add(bot_conv)
+        db.commit()
+        db.refresh(bot_conv)
+
+    return {
+        "success": True,
+        "config": config,
+        "webhook_path": "/api/bot/openclaw/webhook",
+        "auth": "Authorization: Bearer <bridge_token>",
+        "conversation_id": bot_conv.id,
+    }
+
+
+@router.post("/openclaw/disconnect")
+async def disconnect_openclaw_bridge(db: Session = Depends(get_db)):
+    """Disable the OpenClaw bridge token stored in the database."""
+    token = get_decrypted_bot_token(db, "openclaw")
+    if not token and not os.getenv("ALPHATRACE_OPENCLAW_BRIDGE_TOKEN", "").strip():
+        raise HTTPException(status_code=404, detail="OpenClaw bridge is not configured")
+
+    if token:
+        delete_bot_config(db, "openclaw")
+    return {"success": True}
+
+
+@router.get("/openclaw/status")
+def get_openclaw_status(db: Session = Depends(get_db)):
+    """Get OpenClaw bridge configuration status without exposing the shared secret."""
+    config = get_bot_config(db, "openclaw")
+    env_configured = bool(os.getenv("ALPHATRACE_OPENCLAW_BRIDGE_TOKEN", "").strip())
+    return {
+        "config": config,
+        "configured": bool(config and config.get("has_token")) or env_configured,
+        "env_token_configured": env_configured,
+        "webhook_path": "/api/bot/openclaw/webhook",
+    }
+
+
+@router.post("/openclaw/webhook")
+async def openclaw_webhook(request: Request, db: Session = Depends(get_db)):
+    """
+    Receive a message forwarded by OpenClaw and return the Hyper AI reply.
+
+    Accepted payload shapes are intentionally permissive so an ECS-side OpenClaw
+    connector can post either {message, chat_id, user} or OpenAI-style
+    {messages: [{role, content}]}.
+    """
+    _authorize_openclaw_request(request, db)
+
+    try:
+        payload = await request.json()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload.") from exc
+
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="OpenClaw webhook payload must be a JSON object.")
+
+    result = await _process_openclaw_message_internal(payload)
+    if result.get("ok"):
+        update_bot_status(db, "openclaw", "connected")
+    else:
+        update_bot_status(db, "openclaw", "error", result.get("error"))
+    return result

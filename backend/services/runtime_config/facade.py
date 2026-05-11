@@ -104,7 +104,7 @@ class RuntimeConfigFacade:
             configured=False,
             available=False,
             source="missing",
-            message="Bocha API key is not configured; evidence retrieval will fall back to static/MySQL evidence.",
+            message="Bocha API key is not configured; external evidence search is unavailable until another source is configured.",
             metadata={},
         )
 

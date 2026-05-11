@@ -24,6 +24,9 @@ export interface AssetBase {
   tags: string[];
   description: string;
   updatedAt: string;
+  metrics?: Record<string, unknown>;
+  riskLevel?: string;
+  liquidityLevel?: string;
 }
 
 export interface ETFProfile {

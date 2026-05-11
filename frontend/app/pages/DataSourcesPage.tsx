@@ -161,7 +161,7 @@ export default function DataSourcesPage() {
       try {
         const [sources, evidence, assetList] = await Promise.all([
           listDataSourcesAsync(),
-          listEvidenceAsync({ limit: 100 }),
+          listEvidenceAsync({ limit: 50 }),
           listAssetsAsync({ limit: 100 }),
         ]);
         if (cancelled) return;

@@ -1,0 +1,676 @@
+"""
+Research AI Routes - API endpoints for Research AI main agent
+
+Endpoints:
+- GET  /api/research-ai/providers - List available LLM providers
+- GET  /api/research-ai/profile - Get user profile and LLM config status
+- POST /api/research-ai/profile/llm - Save LLM configuration (with connection test)
+- POST /api/research-ai/test-connection - Test LLM connection without saving
+- POST /api/research-ai/profile/preferences - Save trading preferences
+- GET  /api/research-ai/conversations - List conversations
+- POST /api/research-ai/conversations - Create new conversation
+- GET  /api/research-ai/conversations/{id}/messages - Get conversation messages
+- POST /api/research-ai/chat - Start chat (returns task_id for polling)
+- POST /api/research-ai/agent-runs/submit - Submit an independent Research Assistant AgentRun
+- GET  /api/research-ai/skills - List all skills with enabled status
+- PUT  /api/research-ai/skills/{name}/toggle - Enable/disable a skill
+- GET  /api/research-ai/tools - List external tools with config status
+- PUT  /api/research-ai/tools/{tool_name}/config - Save tool configuration
+- DELETE /api/research-ai/tools/{tool_name}/config - Remove tool configuration
+"""
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
+from typing import Optional, List, Dict, Any
+import os
+from sqlalchemy.orm import Session
+
+from database.connection import get_db
+from database.models import ResearchAiConversation
+from schemas.alpha_trace_agent_runtime import SubmitAgentRunRequest, SubmitAgentRunResponse
+from services.alpha_trace_agent_runtime_service import submit_agent_run
+from services.agent_runners.registry import (
+    AgentRunnerConfigurationError,
+    AgentRunnerExecutionError,
+    AgentRunnerNotImplementedError,
+)
+from services.research_ai_service import (
+    get_or_create_profile,
+    get_llm_config,
+    save_llm_config,
+    test_llm_connection,
+    get_or_create_conversation,
+    get_conversation_messages,
+    start_chat_task,
+    start_onboarding_chat_task,
+    start_insight_task,
+)
+from services.research_ai_llm_providers import get_all_providers, get_provider
+from services.ai_stream_service import get_buffer_manager
+
+router = APIRouter(prefix="/api/research-ai", tags=["Research AI"])
+
+
+def _is_alphatrace_mysql_profile() -> bool:
+    return os.getenv("ALPHA_TRACE_DOMAIN_STORE", "").strip().lower() == "mysql"
+
+
+def _get_research_ai_db():
+    if _is_alphatrace_mysql_profile():
+        yield None
+        return
+    yield from get_db()
+
+
+# Request/Response models
+class LLMConfigRequest(BaseModel):
+    provider: str
+    api_key: str
+    model: Optional[str] = None
+    base_url: Optional[str] = None
+
+
+class PreferencesRequest(BaseModel):
+    trading_style: Optional[str] = None
+    risk_preference: Optional[str] = None
+    experience_level: Optional[str] = None
+    preferred_symbols: Optional[str] = None
+    preferred_timeframe: Optional[str] = None
+    capital_scale: Optional[str] = None
+
+
+class ChatRequest(BaseModel):
+    message: str
+    conversation_id: Optional[int] = None
+    mode: Optional[str] = None  # "onboarding" for profile collection
+    lang: Optional[str] = None  # "zh" or "en" for language preference
+
+
+class InsightRequest(BaseModel):
+    context: Dict[str, Any]
+    selected_event: Optional[Dict[str, Any]] = None
+    lang: Optional[str] = None
+
+
+class ConfirmationRequest(BaseModel):
+    task_id: str
+    confirmation_id: str
+    confirmed: bool
+
+
+# Endpoints
+@router.post("/agent-runs/submit", response_model=SubmitAgentRunResponse)
+def submit_research_assistant_agent_run(request: SubmitAgentRunRequest, db: Optional[Session] = Depends(_get_research_ai_db)):
+    """Submit a Research Assistant AgentRun through an endpoint independent from HyperAI chat."""
+    extra_params = {
+        **(request.runnerConfig.extraParams or {}),
+        "source": "research_assistant",
+        "llmConfigScope": "research_ai",
+        "submitEndpoint": "/api/research-ai/agent-runs/submit",
+    }
+    runner_config = request.runnerConfig.model_copy(update={"extraParams": extra_params})
+    research_request = request.model_copy(update={"runnerConfig": runner_config})
+    try:
+        return submit_agent_run(research_request, db=db)
+    except AgentRunnerConfigurationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except AgentRunnerNotImplementedError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except AgentRunnerExecutionError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Research assistant submit failed unexpectedly: {exc}") from exc
+
+
+@router.get("/providers")
+def list_providers():
+    """List all available LLM providers with their configurations."""
+    return {"providers": get_all_providers()}
+
+
+@router.get("/profile")
+def get_profile(db: Session = Depends(get_db)):
+    """Get user profile including LLM config status and trading preferences."""
+    profile = get_or_create_profile(db)
+    llm_config = get_llm_config(db)
+
+    # Get base_url for display
+    base_url = llm_config.get("base_url", "") if llm_config.get("configured") else ""
+
+    return {
+        "llm_configured": llm_config.get("configured", False),
+        "llm_api_key_available": bool(llm_config.get("api_key")),
+        "llm_config_source": llm_config.get("source"),
+        "llm_provider": llm_config.get("provider") or profile.llm_provider,
+        "llm_model": llm_config.get("model") or profile.llm_model,
+        "llm_base_url": base_url,
+        "onboarding_completed": profile.onboarding_completed,
+        "nickname": profile.nickname,
+        "trading_style": profile.trading_style,
+        "risk_preference": profile.risk_preference,
+        "experience_level": profile.experience_level,
+        "preferred_symbols": profile.preferred_symbols,
+        "preferred_timeframe": profile.preferred_timeframe,
+        "capital_scale": profile.capital_scale,
+    }
+
+
+class TestConnectionRequest(BaseModel):
+    provider: str
+    api_key: str
+    model: Optional[str] = None
+    base_url: Optional[str] = None
+
+
+@router.post("/test-connection")
+def test_connection(request: TestConnectionRequest):
+    """Test LLM connection without saving configuration."""
+    # Validate provider
+    if request.provider != "custom":
+        provider = get_provider(request.provider)
+        if not provider:
+            raise HTTPException(status_code=400, detail="Invalid provider")
+
+    # For custom provider, base_url is required
+    if request.provider == "custom" and not request.base_url:
+        raise HTTPException(
+            status_code=400,
+            detail="base_url is required for custom provider"
+        )
+
+    # Get default model if not provided
+    model = request.model
+    if not model and request.provider != "custom":
+        provider = get_provider(request.provider)
+        if provider and provider.models:
+            model = provider.models[0]
+
+    result = test_llm_connection(
+        provider=request.provider,
+        api_key=request.api_key,
+        model=model or "",
+        base_url=request.base_url
+    )
+
+    return result
+
+
+@router.post("/profile/llm/test-current")
+def test_current_llm_configuration(db: Session = Depends(get_db)):
+    """Test the currently saved backend LLM configuration without exposing its API key."""
+    llm_config = get_llm_config(db)
+    if not llm_config.get("configured"):
+        raise HTTPException(status_code=400, detail="LLM configuration is not saved.")
+    if not llm_config.get("api_key"):
+        raise HTTPException(status_code=400, detail="Saved LLM API key is missing or could not be decrypted.")
+
+    result = test_llm_connection(
+        provider=str(llm_config.get("provider") or ""),
+        api_key=str(llm_config.get("api_key") or ""),
+        model=str(llm_config.get("model") or ""),
+        base_url=str(llm_config.get("base_url") or "") or None,
+    )
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error", "Connection test failed"))
+
+    return {
+        "success": True,
+        "provider": llm_config.get("provider"),
+        "model": llm_config.get("model"),
+        "base_url": llm_config.get("base_url"),
+    }
+
+
+@router.post("/profile/llm")
+def save_llm_configuration(request: LLMConfigRequest, db: Session = Depends(get_db)):
+    """Save LLM provider configuration after testing connection."""
+    # Validate provider
+    if request.provider != "custom":
+        provider = get_provider(request.provider)
+        if not provider:
+            raise HTTPException(status_code=400, detail="Invalid provider")
+
+    # For custom provider, base_url is required
+    if request.provider == "custom" and not request.base_url:
+        raise HTTPException(
+            status_code=400,
+            detail="base_url is required for custom provider"
+        )
+
+    # Get default model if not provided
+    model = request.model
+    if not model and request.provider != "custom":
+        provider = get_provider(request.provider)
+        if provider and provider.models:
+            model = provider.models[0]
+
+    # Test connection before saving
+    test_result = test_llm_connection(
+        provider=request.provider,
+        api_key=request.api_key,
+        model=model or "",
+        base_url=request.base_url
+    )
+
+    if not test_result.get("success"):
+        raise HTTPException(
+            status_code=400,
+            detail=test_result.get("error", "Connection test failed")
+        )
+
+    # Save configuration
+    profile = save_llm_config(
+        db,
+        provider=request.provider,
+        api_key=request.api_key,
+        model=model,
+        base_url=request.base_url
+    )
+
+    return {"success": True, "provider": profile.llm_provider, "model": profile.llm_model}
+
+
+@router.post("/profile/preferences")
+def save_preferences(request: PreferencesRequest, db: Session = Depends(get_db)):
+    """Save trading preferences and mark onboarding as completed."""
+    profile = get_or_create_profile(db)
+
+    if request.trading_style is not None:
+        profile.trading_style = request.trading_style
+    if request.risk_preference is not None:
+        profile.risk_preference = request.risk_preference
+    if request.experience_level is not None:
+        profile.experience_level = request.experience_level
+    if request.preferred_symbols is not None:
+        profile.preferred_symbols = request.preferred_symbols
+    if request.preferred_timeframe is not None:
+        profile.preferred_timeframe = request.preferred_timeframe
+    if request.capital_scale is not None:
+        profile.capital_scale = request.capital_scale
+
+    # Mark onboarding as completed if we have basic info
+    if profile.trading_style and profile.risk_preference:
+        profile.onboarding_completed = True
+
+    db.commit()
+    db.refresh(profile)
+
+    return {
+        "success": True,
+        "onboarding_completed": profile.onboarding_completed
+    }
+
+
+@router.get("/suggestions")
+def get_suggestions(db: Session = Depends(get_db)):
+    """
+    Get suggested questions for welcome screen.
+    Returns cached suggestions or triggers async update if stale (>6 hours).
+    For new users (no conversations), returns is_new_user=True.
+    """
+    from services.research_ai_service import get_or_update_suggestions
+    return get_or_update_suggestions(db)
+
+@router.get("/conversations")
+def list_conversations(
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db)
+):
+    """List recent conversations (excluding onboarding). Bot conversations pinned first."""
+    conversations = db.query(ResearchAiConversation).filter(
+        ResearchAiConversation.is_onboarding != True
+    ).order_by(
+        ResearchAiConversation.is_bot_conversation.desc(),
+        ResearchAiConversation.updated_at.desc()
+    ).limit(limit).all()
+
+    return {
+        "conversations": [
+            {
+                "id": c.id,
+                "title": c.title,
+                "message_count": c.message_count,
+                "is_bot_conversation": bool(c.is_bot_conversation),
+                "created_at": c.created_at.isoformat() if c.created_at else None,
+                "updated_at": c.updated_at.isoformat() if c.updated_at else None,
+            }
+            for c in conversations
+        ]
+    }
+
+
+@router.post("/conversations")
+def create_conversation(db: Session = Depends(get_db)):
+    """Create a new conversation."""
+    conv = get_or_create_conversation(db)
+    return {
+        "id": conv.id,
+        "title": conv.title,
+        "created_at": conv.created_at.isoformat() if conv.created_at else None
+    }
+
+
+@router.get("/conversations/{conversation_id}/messages")
+def get_messages(
+    conversation_id: int,
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db)
+):
+    """Get messages from a conversation with compression points and token usage."""
+    from database.models import ResearchAiConversation, ResearchAiProfile
+    from services.ai_context_compression_service import calculate_token_usage, restore_tool_calls_to_messages
+    import json as json_module
+
+    messages = get_conversation_messages(db, conversation_id, limit)
+
+    # Get compression points from conversation
+    conversation = db.query(ResearchAiConversation).filter(
+        ResearchAiConversation.id == conversation_id
+    ).first()
+
+    compression_points = []
+    if conversation and conversation.compression_points:
+        try:
+            compression_points = json_module.loads(conversation.compression_points)
+        except (json_module.JSONDecodeError, TypeError):
+            compression_points = []
+
+    # Calculate token usage (only messages after compression point + summary)
+    token_usage = None
+    profile = db.query(ResearchAiProfile).first()
+    if profile and profile.llm_model and messages:
+        from services.ai_context_compression_service import get_last_compression_point
+        from database.models import ResearchAiMessage
+        llm_config = get_llm_config(db)
+        api_format = llm_config.get("api_format", "openai")
+
+        # Load ORM objects for id-based filtering
+        cp = get_last_compression_point(conversation) if conversation else None
+        cp_msg_id = cp.get("message_id", 0) if cp else 0
+
+        history_orm = db.query(ResearchAiMessage).filter(
+            ResearchAiMessage.conversation_id == conversation_id,
+            ResearchAiMessage.id > cp_msg_id
+        ).order_by(ResearchAiMessage.created_at).all()
+
+        msg_dicts = [
+            {
+                "role": m.role,
+                "content": m.content,
+                "tool_calls_log": m.tool_calls_log,
+                "reasoning_snapshot": m.reasoning_snapshot,
+            }
+            for m in history_orm
+        ]
+        msg_list = restore_tool_calls_to_messages(msg_dicts, api_format, model=profile.llm_model or "")
+        if cp and cp.get("summary"):
+            msg_list.insert(0, {"role": "system", "content": cp["summary"]})
+        token_usage = calculate_token_usage(msg_list, profile.llm_model)
+
+    return {
+        "messages": messages,
+        "compression_points": compression_points,
+        "token_usage": token_usage
+    }
+
+
+@router.post("/chat")
+def start_chat(request: ChatRequest, db: Session = Depends(get_db)):
+    """
+    Start a chat with Research AI.
+    Returns task_id for polling via /api/ai-stream/{task_id}.
+
+    mode="onboarding" uses a special prompt for profile collection.
+    """
+    # Check LLM config
+    llm_config = get_llm_config(db)
+    if not llm_config.get("configured"):
+        raise HTTPException(
+            status_code=400,
+            detail="LLM not configured. Please complete onboarding first."
+        )
+
+    # Get or create conversation (mark as onboarding if in onboarding mode)
+    is_onboarding = request.mode == "onboarding"
+    conv = get_or_create_conversation(db, request.conversation_id, is_onboarding=is_onboarding)
+
+    # Start background task based on mode
+    if is_onboarding:
+        task_id = start_onboarding_chat_task(db, conv.id, request.message, request.lang)
+    else:
+        task_id = start_chat_task(db, conv.id, request.message, request.lang)
+
+    return {
+        "task_id": task_id,
+        "conversation_id": conv.id
+    }
+
+
+@router.post("/confirm-tool")
+def confirm_tool(request: ConfirmationRequest):
+    """Submit a runtime checkpoint response for a pending Research AI tool call."""
+    manager = get_buffer_manager()
+    accepted = manager.submit_confirmation(
+        request.task_id,
+        request.confirmation_id,
+        request.confirmed,
+    )
+    if not accepted:
+        raise HTTPException(status_code=404, detail="No matching pending confirmation")
+    return {"success": True}
+
+
+@router.post("/insight")
+def start_insight(request: InsightRequest, db: Session = Depends(get_db)):
+    """Start a one-shot Insight analysis task without chat conversation persistence."""
+    llm_config = get_llm_config(db)
+    if not llm_config.get("configured"):
+        raise HTTPException(
+            status_code=400,
+            detail="LLM not configured. Please complete onboarding first."
+        )
+
+    task_id = start_insight_task(
+        db=db,
+        context=request.context,
+        selected_event=request.selected_event,
+        lang=request.lang,
+    )
+    return {"task_id": task_id}
+
+
+# Memory endpoints
+@router.get("/memories")
+def list_memories(
+    category: Optional[str] = Query(None, description="Filter by category"),
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db)
+):
+    """List user memories, optionally filtered by category."""
+    from services.research_ai_memory_service import get_memories, MEMORY_CATEGORIES
+
+    if category and category not in MEMORY_CATEGORIES:
+        raise HTTPException(status_code=400, detail=f"Invalid category. Valid: {MEMORY_CATEGORIES}")
+
+    memories = get_memories(db, category=category, limit=limit)
+    return {"memories": memories, "categories": MEMORY_CATEGORIES}
+
+
+@router.delete("/memories/{memory_id}")
+def delete_memory_endpoint(memory_id: int, db: Session = Depends(get_db)):
+    """Delete (deactivate) a memory."""
+    from services.research_ai_memory_service import delete_memory
+
+    success = delete_memory(db, memory_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Memory not found")
+    return {"success": True}
+
+
+# Skill endpoints
+@router.get("/skills")
+def list_skills(db: Session = Depends(get_db)):
+    """List all available skills with their enabled/disabled status."""
+    from services.research_ai_skill_engine import scan_all_skills, get_enabled_skills
+
+    all_skills = scan_all_skills()
+    profile = get_or_create_profile(db)
+    enabled = get_enabled_skills(all_skills, profile.enabled_skills)
+    enabled_names = {s["name"] for s in enabled}
+
+    return {
+        "skills": [
+            {
+                "name": s["name"],
+                "description": s["description"],
+                "description_zh": s.get("description_zh", ""),
+                "command": f"/{s.get('shortcut') or s['name']}",
+                "enabled": s["name"] in enabled_names,
+            }
+            for s in all_skills
+        ]
+    }
+
+
+class SkillToggleRequest(BaseModel):
+    enabled: bool
+
+
+@router.put("/skills/{skill_name}/toggle")
+def toggle_skill(skill_name: str, body: SkillToggleRequest, db: Session = Depends(get_db)):
+    """Enable or disable a specific skill for the current user."""
+    import json as _json
+    from services.research_ai_skill_engine import scan_all_skills
+
+    all_skills = scan_all_skills()
+    valid_names = {s["name"] for s in all_skills}
+    if skill_name not in valid_names:
+        raise HTTPException(status_code=404, detail=f"Skill '{skill_name}' not found")
+
+    profile = get_or_create_profile(db)
+
+    # Parse current enabled list (None = all enabled)
+    if profile.enabled_skills is None:
+        current = [s["name"] for s in all_skills]
+    else:
+        try:
+            current = _json.loads(profile.enabled_skills)
+        except (ValueError, TypeError):
+            current = [s["name"] for s in all_skills]
+
+    if body.enabled and skill_name not in current:
+        current.append(skill_name)
+    elif not body.enabled and skill_name in current:
+        current.remove(skill_name)
+
+    # If all skills enabled, store None (default behavior)
+    if set(current) == valid_names:
+        profile.enabled_skills = None
+    else:
+        profile.enabled_skills = _json.dumps(current)
+
+    db.commit()
+    return {"success": True, "skill_name": skill_name, "enabled": body.enabled}
+
+
+# ── External Tool Configuration ──
+
+
+@router.get("/tools")
+def list_tools(db: Session = Depends(get_db)):
+    """List all registered external tools with their config status."""
+    from services.research_ai_tool_registry import (
+        EXTERNAL_TOOL_REGISTRY, get_custom_tool_registry, get_tool_configs,
+    )
+
+    configs = get_tool_configs(db)
+    tools = []
+    registry = {**EXTERNAL_TOOL_REGISTRY, **get_custom_tool_registry(configs)}
+    for name, meta in registry.items():
+        tool_cfg = configs.get(name, {})
+        has_key = bool(tool_cfg.get("api_key_encrypted"))
+        config_source = tool_cfg.get("source") or ("legacy_research_ai_profile" if has_key else "missing")
+        tools.append({
+            "name": name,
+            "display_name": meta["display_name"],
+            "display_name_zh": meta.get("display_name_zh", meta["display_name"]),
+            "description": meta["description"],
+            "description_zh": meta.get("description_zh", meta["description"]),
+            "icon": meta.get("icon", "wrench"),
+            "config_fields": meta["config_fields"],
+            "get_url": meta.get("get_url"),
+            "get_url_label": meta.get("get_url_label"),
+            "get_url_label_zh": meta.get("get_url_label_zh"),
+            "configured": has_key,
+            "api_key_available": has_key,
+            "config_source": config_source,
+            "enabled": tool_cfg.get("enabled", False),
+        })
+    return {"tools": tools}
+
+
+class ToolConfigRequest(BaseModel):
+    config: dict  # {"api_key": "tvly-xxx", ...}
+    validate_key: bool = True
+
+
+@router.put("/tools/{tool_name}/config")
+async def save_tool_config(
+    tool_name: str, body: ToolConfigRequest, db: Session = Depends(get_db)
+):
+    """Save configuration for an external tool. Optionally validates the key."""
+    from services.research_ai_tool_registry import (
+        EXTERNAL_TOOL_REGISTRY,
+        TOOL_VALIDATORS,
+        normalize_custom_tool_name,
+        set_custom_tool_config,
+        set_tool_api_key,
+    )
+
+    is_custom_tool = tool_name.startswith("custom_")
+    if tool_name not in EXTERNAL_TOOL_REGISTRY and not is_custom_tool:
+        raise HTTPException(status_code=404, detail=f"Tool '{tool_name}' not found")
+
+    if is_custom_tool:
+        display_name = str(body.config.get("display_name") or body.config.get("name") or "").strip()
+        api_url = str(body.config.get("api_url") or body.config.get("api") or "").strip()
+        api_key = str(body.config.get("api_key") or "").strip()
+        if not display_name:
+            raise HTTPException(status_code=400, detail="Tool name is required")
+        if not api_url:
+            raise HTTPException(status_code=400, detail="API URL is required")
+        normalized_name = normalize_custom_tool_name(tool_name if tool_name != "custom_new" else display_name)
+        set_custom_tool_config(
+            db,
+            normalized_name,
+            display_name=display_name,
+            api_url=api_url,
+            api_key=api_key or None,
+        )
+        return {"success": True, "tool_name": normalized_name}
+
+    api_key = body.config.get("api_key", "").strip()
+    if not api_key:
+        raise HTTPException(status_code=400, detail="API key is required")
+
+    # Optional validation
+    if body.validate_key and tool_name in TOOL_VALIDATORS:
+        ok, err = await TOOL_VALIDATORS[tool_name](api_key)
+        if not ok:
+            return {"success": False, "error": err}
+
+    set_tool_api_key(db, tool_name, api_key)
+    return {"success": True, "tool_name": tool_name}
+
+
+@router.delete("/tools/{tool_name}/config")
+def delete_tool_config(tool_name: str, db: Session = Depends(get_db)):
+    """Remove configuration for an external tool."""
+    from services.research_ai_tool_registry import (
+        EXTERNAL_TOOL_REGISTRY, remove_tool_config,
+    )
+
+    if tool_name not in EXTERNAL_TOOL_REGISTRY and not tool_name.startswith("custom_"):
+        raise HTTPException(status_code=404, detail=f"Tool '{tool_name}' not found")
+
+    remove_tool_config(db, tool_name)
+    return {"success": True, "tool_name": tool_name}

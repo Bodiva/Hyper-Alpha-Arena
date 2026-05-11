@@ -2,6 +2,8 @@ import type { Asset, AssetType } from "../asset/model";
 import type { Evidence } from "../evidence/model";
 import type {
   BacktestSummary,
+  ClickHouseRankingItem,
+  ClickHouseRankingType,
   LeaderboardItem,
   Strategy,
   StrategyLifecycleStatus,
@@ -37,6 +39,13 @@ export interface ListLeaderboardParams {
   assetType?: AssetType;
 }
 
+export interface ListClickHouseRankingsParams {
+  rankingType?: ClickHouseRankingType;
+  sortBy?: "score" | "roi" | "annualizedRoi" | "scale" | "return1y" | "drawdown";
+  limit?: number;
+  offset?: number;
+}
+
 interface BackendStrategyListResponse {
   items: BackendStrategyItem[];
   total: number;
@@ -63,6 +72,16 @@ interface BackendLeaderboardListResponse {
   total: number;
   limit: number;
   offset: number;
+}
+
+interface BackendClickHouseRankingResponse {
+  items: ClickHouseRankingItem[];
+  total: number;
+  limit: number;
+  offset: number;
+  rankingType: ClickHouseRankingType;
+  sortBy: string;
+  source: string;
 }
 
 interface BackendLeaderboardItem extends LeaderboardItem {
@@ -359,9 +378,9 @@ export const listStrategiesAsync = async (params: ListStrategiesParams = {}, del
       timeoutMs: 1200,
     });
     const items = response.items.map(mapBackendStrategy);
-    return items.length > 0 ? items : strategiesMock;
+    return items;
   } catch {
-    return strategiesMock;
+    return [];
   }
 };
 
@@ -372,7 +391,7 @@ export const getStrategyByIdAsync = async (strategyId: string, delayMs?: number)
   try {
     return mapBackendStrategy(await httpClient.get<BackendStrategyItem>(ENDPOINTS.alphaTraceStrategyDetail(strategyId), { timeoutMs: 1200 }));
   } catch {
-    return strategiesMock.find((strategy) => strategy.strategyId === strategyId);
+    return undefined;
   }
 };
 
@@ -391,9 +410,7 @@ export const getStrategyAssetsAsync = async (strategyId: string, delayMs?: numbe
     const response = await httpClient.get<BackendStrategyAssetResponse>(ENDPOINTS.alphaTraceStrategyAssets(strategyId), { timeoutMs: 1200 });
     return response.items.map(mapBackendAsset);
   } catch {
-    const strategy = strategiesMock.find((item) => item.strategyId === strategyId);
-    const relatedIds = new Set(strategy?.relatedAssetIds ?? []);
-    return assetsMock.filter((asset) => relatedIds.has(asset.id));
+    return [];
   }
 };
 
@@ -415,9 +432,7 @@ export const getStrategyEvidenceAsync = async (strategyId: string, delayMs?: num
     const response = await httpClient.get<BackendStrategyEvidenceResponse>(ENDPOINTS.alphaTraceStrategyEvidence(strategyId), { timeoutMs: 1200 });
     return response.items.map(mapBackendEvidence);
   } catch {
-    const strategy = strategiesMock.find((item) => item.strategyId === strategyId);
-    const relatedIds = new Set(strategy?.relatedEvidenceIds ?? []);
-    return evidenceMock.filter((evidence) => relatedIds.has(evidence.id));
+    return [];
   }
 };
 
@@ -435,4 +450,26 @@ export const listLeaderboardAsync = (params: ListLeaderboardParams = {}, delayMs
           timeoutMs: 1200,
         })
         .then((response) => response.items)
-        .catch(() => leaderboardMock);
+        .catch(() => []);
+
+export const listClickHouseRankingsAsync = (
+  params: ListClickHouseRankingsParams = {},
+  delayMs?: number,
+): Promise<ClickHouseRankingItem[]> => {
+  if (shouldUseMockData()) {
+    return mockDelay([], delayMs);
+  }
+
+  return httpClient
+    .get<BackendClickHouseRankingResponse>(ENDPOINTS.alphaTraceClickHouseRankings, {
+      params: {
+        rankingType: params.rankingType ?? "manager",
+        sortBy: params.sortBy ?? "score",
+        limit: params.limit ?? 50,
+        offset: params.offset ?? 0,
+      },
+      timeoutMs: 15_000,
+    })
+    .then((response) => response.items)
+    .catch(() => []);
+};

@@ -9,6 +9,7 @@ from typing import List, Optional
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 import logging
+import os
 import time
 
 from database.connection import SessionLocal
@@ -120,6 +121,9 @@ def list_all_accounts(include_hidden: bool = False, db: Session = Depends(get_db
         include_hidden: If True, include accounts with show_on_dashboard=False.
                        Default False (only show visible accounts for Dashboard).
     """
+    if os.getenv("ALPHA_TRACE_DOMAIN_STORE", "").strip().lower() == "mysql":
+        return []
+
     start_threads = get_current_thread_count()
     start_time = time.monotonic()
     try:

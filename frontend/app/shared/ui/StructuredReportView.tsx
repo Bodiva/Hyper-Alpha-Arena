@@ -15,6 +15,14 @@ type StructuredBlock =
   | { type: "table"; headers: string[]; rows: string[][] };
 
 const SECTION_TITLES = ["Market View", "Bull View", "Bear View", "Risk Review", "Final Decision", "Watch Indicators"];
+const SECTION_TITLE_LABEL: Record<string, string> = {
+  "Market View": "市场观点",
+  "Bull View": "正方观点",
+  "Bear View": "反方观点",
+  "Risk Review": "风险复核",
+  "Final Decision": "最终决策",
+  "Watch Indicators": "观察指标",
+};
 
 const stripStructuredJsonBlocks = (text: string): string => {
   return text
@@ -33,7 +41,7 @@ const isSectionTitle = (line: string): { text: string; level: 2 | 3 | 4 } | null
 
   const normalized = line.replace(/[:：]\s*$/, "").trim().toLowerCase();
   const matched = SECTION_TITLES.find((sectionTitle) => sectionTitle.toLowerCase() === normalized);
-  return matched ? { text: matched, level: 3 } : null;
+  return matched ? { text: SECTION_TITLE_LABEL[matched] ?? matched, level: 3 } : null;
 };
 
 const isTableLine = (line: string): boolean => {

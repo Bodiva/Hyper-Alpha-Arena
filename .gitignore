@@ -350,4 +350,8 @@ backend/scripts/
 /IMPLEMENTATION_LOG.md
 /last_*.txt
 /data/
+/.codex-run/
+/backend/data/cache/
+/test-results/
+/screenshots/test-*.png
 

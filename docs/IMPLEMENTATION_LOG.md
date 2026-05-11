@@ -5638,3 +5638,30 @@ Notes:
 Result:
 - M232 is complete.
 - Next execution order per user: M234 ClickHouse runtime projection write path, then M235 Tool execution unification, then M233 Native runner deeper extraction.
+
+## 2026-05-05 - M234 ClickHouse AgentRun Projection Write Path
+
+Goal:
+- Add an explicit ClickHouse write path for AgentRun analytical projections while preserving MySQL/JSON as control-plane stores.
+
+Changes:
+- Added `backend/services/clickhouse_agent_run_writer.py`.
+- Extended `backend/services/clickhouse_business_store.py` with AgentRun projection table DDL and run-level delete helpers.
+- Added `POST /api/alpha-trace/agent-runs/{runId}/clickhouse-projection/write`.
+- Kept `GET /clickhouse-projection/preview` read-only and side-effect free.
+- Marked AgentRun projection tables as implemented in `clickhouse_schema_catalog.py`.
+
+Validation:
+- `python -m py_compile backend/services/clickhouse_business_store.py backend/services/clickhouse_agent_run_projection.py backend/services/clickhouse_agent_run_writer.py backend/services/clickhouse_schema_catalog.py backend/api/alpha_trace_agent_runtime_routes.py`: passed.
+- Direct FakeStore smoke: passed.
+  - Deleted rows for 4 target tables using the run id.
+  - Inserted 4 rows total: runtime event, report, evidence ref, decision.
+- `pnpm --dir frontend build`: pending after doc update.
+
+Notes:
+- This is explicit opt-in projection writing, not automatic submit-time synchronization.
+- If ClickHouse is unavailable, the endpoint returns 503 and AgentRun control-plane data remains intact.
+- Next execution order per user: M235 Tool execution unification, then M233 Native runner deeper extraction.
+
+Result:
+- M234 is complete at code and direct-smoke level.

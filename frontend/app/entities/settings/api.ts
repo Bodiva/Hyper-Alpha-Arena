@@ -123,17 +123,52 @@ export interface SettingsModulePresetSaveResponse extends SettingsModulePresetLi
   preset: SettingsModulePresetPayload;
 }
 
+export const defaultHyperAiProfile: HyperAiProfileConfig = {
+  llm_configured: false,
+  llm_api_key_available: false,
+  llm_config_source: "unavailable",
+  llm_provider: "qwen",
+  llm_model: "qwen-plus",
+  llm_base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+};
+
+export const getHyperAiProvidersAsync = (): Promise<{ providers: RuntimeProviderOption[] }> =>
+  httpClient.get<{ providers: RuntimeProviderOption[] }>("/hyper-ai/providers");
+
+export const getHyperAiProfileAsync = (): Promise<HyperAiProfileConfig> =>
+  httpClient.get<HyperAiProfileConfig>("/hyper-ai/profile");
+
+export const getHyperAiToolsAsync = (): Promise<{ tools: HyperAiToolConfigStatus[] }> =>
+  httpClient.get<{ tools: HyperAiToolConfigStatus[] }>("/hyper-ai/tools");
+
 export const getRuntimeCredentialStatus = async (): Promise<RuntimeCredentialStatus> => {
-  const [providersResponse, profile, toolsResponse] = await Promise.all([
-    httpClient.get<{ providers: RuntimeProviderOption[] }>("/hyper-ai/providers"),
-    httpClient.get<HyperAiProfileConfig>("/hyper-ai/profile"),
-    httpClient.get<{ tools: HyperAiToolConfigStatus[] }>("/hyper-ai/tools"),
+  const [providersResult, profileResult, toolsResult] = await Promise.allSettled([
+    getHyperAiProvidersAsync(),
+    getHyperAiProfileAsync(),
+    getHyperAiToolsAsync(),
   ]);
 
+  const providers =
+    providersResult.status === "fulfilled"
+      ? providersResult.value.providers ?? []
+      : [
+          {
+            id: "qwen",
+            name: "Qwen",
+            base_url: defaultHyperAiProfile.llm_base_url ?? "",
+            models: ["qwen-plus", "qwen-max", "qwen-turbo"],
+            api_format: "openai_compatible",
+            description: "Default Qwen provider. Backend status endpoint is currently unavailable.",
+          },
+        ];
+
+  const profile = profileResult.status === "fulfilled" ? profileResult.value : defaultHyperAiProfile;
+  const tools = toolsResult.status === "fulfilled" ? toolsResult.value.tools ?? [] : [];
+
   return {
-    providers: providersResponse.providers ?? [],
+    providers,
     profile,
-    tools: toolsResponse.tools ?? [],
+    tools,
   };
 };
 

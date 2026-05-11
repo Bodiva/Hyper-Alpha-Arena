@@ -28,7 +28,7 @@ Usage:
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple, TypedDict
+from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict
 
 import requests
 import tiktoken
@@ -717,7 +717,8 @@ def compress_messages(
     api_config: Dict[str, Any],
     keep_system: bool = True,
     db: Optional[Session] = None,
-    extract_memories: bool = True
+    extract_memories: bool = True,
+    memory_processor: Optional[Callable[[Session, str, Dict[str, Any]], int]] = None
 ) -> CompressionResult:
     """
     Compress conversation messages if needed.
@@ -728,6 +729,7 @@ def compress_messages(
         keep_system: Whether to preserve system messages
         db: Database session (required for memory extraction)
         extract_memories: Whether to extract memories during compression
+        memory_processor: Optional assistant-specific memory extractor. Defaults to Hyper AI.
 
     Returns:
         CompressionResult with compressed messages and metadata
@@ -796,8 +798,11 @@ def compress_messages(
                 from database.connection import SessionLocal
                 bg_db = SessionLocal()
                 try:
-                    from services.hyper_ai_memory_service import process_compression_memories
-                    count = process_compression_memories(bg_db, conv_text_bg, api_cfg_bg)
+                    if memory_processor is None:
+                        from services.hyper_ai_memory_service import process_compression_memories
+                        count = process_compression_memories(bg_db, conv_text_bg, api_cfg_bg)
+                    else:
+                        count = memory_processor(bg_db, conv_text_bg, api_cfg_bg)
                     logger.warning(f"[Compression] Background memory extraction done: {count} memories")
                 except Exception as e:
                     logger.warning(f"[Compression] Background memory extraction failed: {type(e).__name__}: {e}")

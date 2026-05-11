@@ -348,8 +348,11 @@ export default function PortfolioWorkspacePage() {
         0.2 * concentrationRisk,
     );
 
+    const portfolioAssetIds = new Set(positions.map((position) => position.assetId));
     const relatedDecisions = decisions.filter((decision) => {
-      if (decision.portfolioId !== selectedPortfolio.portfolioId) return false;
+      const matchesPortfolio = decision.portfolioId === selectedPortfolio.portfolioId;
+      const matchesHolding = decision.assetIds.some((assetId) => portfolioAssetIds.has(assetId));
+      if (!matchesPortfolio && !matchesHolding) return false;
       if (linkedAssetId && !decision.assetIds.includes(linkedAssetId)) return false;
       if (linkedRunId && decision.runId !== linkedRunId) return false;
       return true;
@@ -532,12 +535,12 @@ export default function PortfolioWorkspacePage() {
             <p>portfolioId: {selectedPortfolio.portfolioId}</p>
             <p>name: {selectedPortfolio.name}</p>
             <p>objective: {selectedPortfolio.objective}</p>
-            <p>
+            <div className="flex items-center gap-1">
               riskLevel: <Badge variant={RISK_BADGE[selectedPortfolio.riskLevel]}>{selectedPortfolio.riskLevel}</Badge>
-            </p>
+            </div>
             <p>updatedAt: {formatDateTime(selectedPortfolio.updatedAt)}</p>
             <p>组合总资产: {formatMoney(derived.totalAsset)}</p>
-            <p>当前状态: {selectedPortfolio.status ? STATUS_LABEL[selectedPortfolio.status] : "运行中（Mock）"}</p>
+            <p>当前状态: {selectedPortfolio.status ? STATUS_LABEL[selectedPortfolio.status] : "运行中"}</p>
           </div>
           {linkedAssetId || linkedRunId ? (
             <p className="text-xs text-muted-foreground">

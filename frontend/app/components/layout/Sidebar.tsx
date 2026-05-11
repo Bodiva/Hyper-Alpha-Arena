@@ -1,7 +1,6 @@
-import { useState } from 'react'
-import { BarChart3, ChevronDown, FileText, NotebookPen, Coins, MessageSquare, Mail, Bot, Ghost, ScrollText, Settings, FlaskConical, Github, ShieldCheck, AlertTriangle, FileUp } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { BarChart3, ChevronDown, FileText, NotebookPen, Coins, MessageSquare, Bot, Ghost, ScrollText, Settings, FlaskConical, ShieldCheck, AlertTriangle, FileUp, Database, SlidersHorizontal, Network, PanelLeftClose, PanelLeftOpen, LayoutGrid, Trophy } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import ContactDialog from '@/components/contact/ContactDialog'
 import ExchangeModal from '@/components/exchange/ExchangeModal'
 import TradingModeConfirmDialog from '@/components/trading/TradingModeConfirmDialog'
 import { useTradingMode, type TradingMode } from '@/contexts/TradingModeContext'
@@ -12,6 +11,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { PRODUCT_CN_SUBTITLE, PRODUCT_NAME } from '@/shared/lib/product-branding'
+import { getHideAutomationTradingOps, MENU_PREFERENCES_CHANGED_EVENT } from '@/shared/lib/menu-preferences'
 
 const TRADING_CONTEXT_PAGES = new Set([
   'comprehensive',
@@ -123,9 +123,23 @@ export default function Sidebar({ currentPage = 'comprehensive', onPageChange, o
   const { tradingMode, setTradingMode } = useTradingMode()
   const [isExchangeModalOpen, setIsExchangeModalOpen] = useState(false)
   const [confirmTarget, setConfirmTarget] = useState<TradingMode | null>(null)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [hideAutomationTradingOps, setHideAutomationTradingOpsState] = useState(() => getHideAutomationTradingOps())
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
+    researchConfig: false,
+    researchData: true,
     automation: true,
   })
+
+  useEffect(() => {
+    const syncMenuPreferences = () => setHideAutomationTradingOpsState(getHideAutomationTradingOps())
+    window.addEventListener(MENU_PREFERENCES_CHANGED_EVENT, syncMenuPreferences)
+    window.addEventListener('storage', syncMenuPreferences)
+    return () => {
+      window.removeEventListener(MENU_PREFERENCES_CHANGED_EVENT, syncMenuPreferences)
+      window.removeEventListener('storage', syncMenuPreferences)
+    }
+  }, [])
 
   const handleModeClick = (mode: TradingMode) => {
     if (mode === tradingMode) return
@@ -150,17 +164,43 @@ export default function Sidebar({ currentPage = 'comprehensive', onPageChange, o
 
   const navSections = [
     {
+      id: 'pinned',
+      label: pick('置顶', 'Pinned'),
+      items: [
+        { label: pick('市场看板', 'Market Board'), page: 'dashboard-test', icon: LayoutGrid },
+        { label: pick('策略雷达', 'Strategy Radar'), page: 'strategy-radar', icon: BarChart3 },
+        { label: pick('排行', 'Rankings'), page: 'leaderboard', icon: Trophy },
+      ],
+    },
+    {
       id: 'research',
-      label: pick('投研', 'Research'),
+      label: pick('投研工作台', 'Research Workspace'),
       items: [
         { label: pick('总览', 'Overview'), page: 'dashboard', icon: BarChart3 },
-        { label: pick('策略雷达', 'Strategy Radar'), page: 'strategy-radar', icon: BarChart3 },
+        { label: pick('投研助手', 'Research Assistant'), page: 'research-assistant-lab', icon: Network },
         { label: pick('资产研究', 'Assets'), page: 'asset-research', icon: Coins },
-        { label: pick('Agent 实验室', 'Agent Lab'), page: 'agent-lab', icon: Bot },
-        { label: pick('策略实验室', 'Strategy Lab'), page: 'strategy-lab', icon: FlaskConical },
         { label: pick('组合工作台', 'Portfolio'), page: 'portfolio-workspace', icon: ShieldCheck },
+      ],
+    },
+    {
+      id: 'researchConfig',
+      label: pick('配置与实验', 'Config & Experiments'),
+      items: [
+        { label: pick('统一设置', 'Settings'), page: 'settings-workbench', icon: Settings },
+        { label: pick('投研助手配置', 'Research Assistant Config'), page: 'research-runtime-config', icon: SlidersHorizontal },
+        { label: pick('策略实验室', 'Strategy Lab'), page: 'strategy-lab', icon: FlaskConical },
+        { label: pick('Agent 实验室', 'Agent Lab'), page: 'agent-lab', icon: Bot },
+      ],
+    },
+    {
+      id: 'researchData',
+      label: pick('数据与证据', 'Data & Evidence'),
+      items: [
+        { label: pick('数据中心', 'Data Catalog'), page: 'data-catalog', icon: Database },
+        { label: pick('理杏仁 API', 'Lixinger API'), page: 'lixinger-data', icon: Database },
         { label: pick('证据中心', 'Evidence'), page: 'evidence-center', icon: FileText },
         { label: pick('数据导入', 'Data Import'), page: 'data-import', icon: FileUp },
+        { label: pick('投研运行日志', 'Research Runtime Logs'), page: 'runtime-logs', icon: ScrollText },
       ],
     },
     {
@@ -183,35 +223,60 @@ export default function Sidebar({ currentPage = 'comprehensive', onPageChange, o
       items: [
         { label: pick('手动交易', 'Manual Trading'), page: 'hyperliquid', icon: Coins },
         { label: pick('K线图表', 'K-Lines'), page: 'klines', icon: KLinesIcon },
-        { label: pick('系统日志', 'System Logs'), page: 'system-logs', icon: FileText },
-        { label: pick('设置', 'Settings'), page: 'settings-workbench', icon: Settings },
+        { label: pick('自动化运行日志', 'Automation Runtime Logs'), page: 'system-logs', icon: FileText },
       ],
     },
   ] as const
 
+  const visibleNavSections = hideAutomationTradingOps
+    ? navSections.filter((section) => section.id !== 'automation' && section.id !== 'trading')
+    : navSections
   const isTestnet = tradingMode === 'testnet'
   const showTradingContext = TRADING_CONTEXT_PAGES.has(currentPage)
+  const flatNavItems = visibleNavSections.flatMap((section) => section.items)
 
   return (
     <>
       {/* Desktop Sidebar - Hidden on mobile */}
-      <aside className="hidden md:flex w-64 border-r h-full flex-col fixed md:relative left-0 top-0 z-50 bg-card">
+      <aside className={`hidden md:flex border-r h-full flex-col fixed md:relative left-0 top-0 z-50 bg-card transition-all duration-200 ${sidebarCollapsed ? 'w-16' : 'w-64'}`}>
 
         {/* Top: Brand */}
-        <div className="border-b px-4 py-4">
-          <div className="flex items-center gap-3">
+        <div className={`border-b ${sidebarCollapsed ? 'px-3 py-3' : 'px-4 py-4'}`}>
+          <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-3'}`}>
             <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">
               AT
             </div>
-            <div className="min-w-0">
+            {!sidebarCollapsed ? (
+            <div className="min-w-0 flex-1">
               <span className="block truncate text-base font-semibold tracking-tight">{PRODUCT_NAME}</span>
               <span className="block truncate text-[11px] text-muted-foreground">{PRODUCT_CN_SUBTITLE}</span>
             </div>
+            ) : null}
+            {!sidebarCollapsed ? (
+              <button
+                type="button"
+                className="rounded-md p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                onClick={() => setSidebarCollapsed(true)}
+                title={pick('收起导航', 'Collapse navigation')}
+              >
+                <PanelLeftClose className="h-4 w-4" />
+              </button>
+            ) : null}
           </div>
+          {sidebarCollapsed ? (
+            <button
+              type="button"
+              className="mt-3 flex h-8 w-full items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground"
+              onClick={() => setSidebarCollapsed(false)}
+              title={pick('展开导航', 'Expand navigation')}
+            >
+              <PanelLeftOpen className="h-4 w-4" />
+            </button>
+          ) : null}
         </div>
 
         {/* Environment: Exchange + Trading Mode */}
-        {showTradingContext ? (
+        {showTradingContext && !sidebarCollapsed ? (
           <div className="border-b px-3 py-3">
             <div className="rounded-md bg-muted/35 p-2.5">
               <div className="flex items-center justify-between gap-2">
@@ -269,9 +334,45 @@ export default function Sidebar({ currentPage = 'comprehensive', onPageChange, o
         ) : null}
 
         {/* Middle: Navigation (scrollable) */}
-        <nav className="flex-1 overflow-y-auto px-3 py-3">
+        <nav className={`flex-1 overflow-y-auto ${sidebarCollapsed ? 'px-2 py-3' : 'px-3 py-3'}`}>
+          {sidebarCollapsed ? (
+            <TooltipProvider delayDuration={300}>
+              <div className="space-y-1">
+                {flatNavItems.map((item) => {
+                  const Icon = item.icon
+                  const isActive = currentPage === item.page || (item.page === 'settings-workbench' && currentPage === 'settings')
+                  return (
+                    <Tooltip key={item.page}>
+                      <TooltipTrigger asChild>
+                        <button
+                          className={`flex h-10 w-full items-center justify-center rounded-md transition-colors ${
+                            isActive
+                              ? 'bg-primary text-primary-foreground shadow-sm'
+                              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                          }`}
+                          onClick={() => onPageChange?.(item.page)}
+                          title={item.label}
+                        >
+                          <Icon className="h-5 w-5" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        <p>{item.label}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )
+                })}
+              </div>
+            </TooltipProvider>
+          ) : (
           <div className="space-y-4">
-            {navSections.map((section) => (
+            {visibleNavSections.map((section) => {
+              const hasActiveItem = section.items.some(
+                (item) => currentPage === item.page || (item.page === 'settings-workbench' && currentPage === 'settings'),
+              )
+              const isSectionCollapsed = Boolean(collapsedSections[section.id]) && !hasActiveItem
+
+              return (
               <div key={section.id}>
                 <button
                   type="button"
@@ -280,10 +381,10 @@ export default function Sidebar({ currentPage = 'comprehensive', onPageChange, o
                 >
                   <span>{section.label}</span>
                   <ChevronDown
-                    className={`h-3.5 w-3.5 transition-transform ${collapsedSections[section.id] ? '-rotate-90' : 'rotate-0'}`}
+                    className={`h-3.5 w-3.5 transition-transform ${isSectionCollapsed ? '-rotate-90' : 'rotate-0'}`}
                   />
                 </button>
-                {!collapsedSections[section.id] ? (
+                {!isSectionCollapsed ? (
                   <div className="mt-1 space-y-1">
                     {section.items.map((item) => {
                       const Icon = item.icon
@@ -307,41 +408,16 @@ export default function Sidebar({ currentPage = 'comprehensive', onPageChange, o
                   </div>
                 ) : null}
               </div>
-            ))}
+              )
+            })}
           </div>
+          )}
         </nav>
 
         {/* Bottom: Icon toolbar + version */}
-        <div className="px-4 py-2 space-y-1">
+        <div className={`${sidebarCollapsed ? 'px-2 py-2' : 'px-4 py-2'} space-y-1`}>
           <TooltipProvider delayDuration={300}>
-            <div className="flex items-center justify-around">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                    onClick={() => window.open('https://www.akooi.com/docs/guide/getting-started.html', '_blank', 'noopener,noreferrer')}
-                  >
-                    <HowToUseIcon className="w-4 h-4" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="top">
-                  <p>{t('sidebar.howToUse', 'How to Use')}</p>
-                </TooltipContent>
-              </Tooltip>
-
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <ContactDialog>
-                    <button className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-                      <Mail className="w-4 h-4" />
-                    </button>
-                  </ContactDialog>
-                </TooltipTrigger>
-                <TooltipContent side="top">
-                  <p>{t('contact.contactAuthor', 'Contact Author')}</p>
-                </TooltipContent>
-              </Tooltip>
-
+            <div className={sidebarCollapsed ? 'flex flex-col items-center gap-1' : 'flex items-center justify-center'}>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
@@ -359,34 +435,22 @@ export default function Sidebar({ currentPage = 'comprehensive', onPageChange, o
                   <p>{pick('设置', 'Settings')}</p>
                 </TooltipContent>
               </Tooltip>
-
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                    onClick={() => window.open('https://github.com/HammerGPT/Hyper-Alpha-Arena', '_blank', 'noopener,noreferrer')}
-                  >
-                    <Github className="w-4 h-4" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="top">
-                  <p>GitHub</p>
-                </TooltipContent>
-              </Tooltip>
             </div>
           </TooltipProvider>
+          {!sidebarCollapsed ? (
           <div className="text-center">
             <a
-              href="https://www.akooi.com"
+              href="https://sunyard.ai"
               target="_blank"
               rel="noopener noreferrer"
               className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
             >
-              akooi.com
+              sunyard.ai
             </a>
             <span className="text-[10px] text-muted-foreground mx-1">·</span>
-            <span className="text-[10px] text-muted-foreground">v{__APP_VERSION__}</span>
+            <span className="text-[10px] text-muted-foreground">v0.1.0506</span>
           </div>
+          ) : null}
         </div>
       </aside>
 

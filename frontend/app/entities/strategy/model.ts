@@ -109,3 +109,38 @@ export interface LeaderboardItem {
   strengths: string[];
   risks: string[];
 }
+
+export type ClickHouseRankingType = "manager" | "fund" | "etf";
+
+export interface ClickHouseRankingItem {
+  rank: number;
+  rankingType: ClickHouseRankingType;
+  code?: string;
+  name?: string;
+  assetType?: "FUND" | "ETF" | string;
+  managerCode?: string;
+  managerName?: string;
+  fundCompany?: string;
+  fundType?: string;
+  representativeFundCode?: string;
+  representativeFundName?: string;
+  managedFunds?: Array<{ code: string; name: string; scale?: number | null }>;
+  activeFundCount?: number;
+  activeManagerCount?: number;
+  activeScale?: number;
+  scale?: number;
+  latestNav?: number;
+  latestDate?: string;
+  return1y?: number;
+  averageTenureRoi?: number;
+  averageAnnualizedRoi?: number;
+  scaleWeightedRoi?: number;
+  drawdown?: number;
+  turnoverRate?: number;
+  representativeManager?: string;
+  earliestRoiStartDate?: string;
+  latestRoiEndDate?: string;
+  score: number;
+  rationale: string;
+  metadata?: Record<string, unknown>;
+}

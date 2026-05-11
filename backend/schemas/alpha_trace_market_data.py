@@ -56,6 +56,14 @@ class AlphaTraceMarketSnapshot(BaseModel):
     collectedAt: str
 
 
+class AlphaTraceFundManagerProfileResponse(BaseModel):
+    assetId: str
+    symbol: str
+    managers: List[Dict[str, Any]] = Field(default_factory=list)
+    source: str
+    collectedAt: str
+
+
 class AlphaTraceMarketIndicator(BaseModel):
     assetId: str
     symbol: str
@@ -81,4 +89,3 @@ class AlphaTraceMarketIndicatorResponse(BaseModel):
     symbol: str
     items: List[AlphaTraceMarketIndicator]
     total: int
-

@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Activity, AlertCircle, ArrowRight, Bot, CheckCircle2, Loader2, RefreshCw, Route } from "lucide-react";
+import { Activity, AlertCircle, ArrowRight, Bot, CheckCircle2, Loader2, RefreshCw, Route, Send } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -13,6 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import type { AgentRun, AgentRunStatus, AgentRunTaskType } from "@/entities/agent/model";
 import {
@@ -27,7 +30,13 @@ import {
   type AgentRunnerCapabilitiesResponse,
   type AgentRunnerStatusItem,
 } from "@/entities/agent/api";
-import { listAssets } from "@/entities/asset/api";
+import { listAssets, listAssetsAsync } from "@/entities/asset/api";
+import {
+  listDatasetBindingsAsync,
+  listImportedFileBatchesAsync,
+  type DatasetBinding,
+  type ImportedFileBatch,
+} from "@/entities/data-source/api";
 import { getRuntimeCredentialStatus, type RuntimeCredentialStatus } from "@/entities/settings/api";
 import { getApiMode } from "@/shared/api/api-mode";
 import { getCurrentHashQueryParams, navigateTo } from "@/shared/lib/navigation";
@@ -43,11 +52,13 @@ type StatusFilter = "ALL" | AgentRunStatus;
 type TimeFilter = "ALL" | "TODAY" | "LAST_7_DAYS" | "LAST_30_DAYS";
 type SubmitRunnerKind = "stub" | "qwen" | "alphatrace_native" | "tradingagents";
 type AgentRunnerCapabilityLike = AgentRunnerStatusItem | AgentRunnerCapability;
+type AssetItem = ReturnType<typeof listAssets>[number];
 
 const SUBMIT_ENDPOINT = "/api/alpha-trace/agent-runs/submit";
+const AUTO_DATASET_SELECT_VALUE = "__auto_dataset__";
 
 const RUNNER_LABEL: Record<SubmitRunnerKind | string, string> = {
-  stub: "本地样例",
+  stub: "演示模式",
   qwen: "通义千问",
   alphatrace_native: "AlphaTrace 原生",
   tradingagents: "TradingAgents",
@@ -68,14 +79,14 @@ const RUNNER_META: Record<
     brief: "AlphaTrace 后端内置 Qwen Runner，适合常规投研问答。",
     backend: "AlphaTrace Backend / Qwen Runner",
     model: "qwen-plus",
-    flow: ["AlphaTrace API", "Qwen Runner", "证据检索", "报告与决策"],
+    flow: ["AlphaTrace API", "Qwen Runner", "准备数据", "外部搜索", "报告与决策"],
   },
   alphatrace_native: {
     title: "AlphaTrace 原生",
     brief: "我们自己的多 Agent 编排，保留 AlphaTrace 的证据、报告和决策结构。",
     backend: "AlphaTrace Backend / Native Multi-Agent",
     model: "qwen-plus",
-    flow: ["AlphaTrace API", "Native Orchestrator", "多 Agent", "报告与决策"],
+    flow: ["AlphaTrace API", "Native Orchestrator", "准备数据", "外部搜索", "多 Agent", "报告与决策"],
   },
   tradingagents: {
     title: "TradingAgents",
@@ -85,11 +96,11 @@ const RUNNER_META: Record<
     flow: ["AlphaTrace API", "Adapter", "TradingAgents", "结果映射"],
   },
   stub: {
-    title: "本地样例",
-    brief: "不调用真实模型，用本地样例数据演示页面流程。",
-    backend: "Frontend Mock / Local Sample",
+    title: "演示模式",
+    brief: "仅用于开发调试，不调用真实模型，不使用外部搜索。",
+    backend: "Local Demo / Stub Runner",
     model: "none",
-    flow: ["本地样例", "模拟任务", "模拟报告"],
+    flow: ["演示数据", "模拟任务", "模拟报告"],
   },
 };
 
@@ -119,6 +130,14 @@ const TASK_LABEL: Record<TaskFilter, string> = {
   PORTFOLIO_DIAGNOSTIC: "组合诊断",
   EVENT_IMPACT_ANALYSIS: "事件影响分析",
   REBALANCE_SUGGESTION: "调仓建议",
+};
+
+const SUBMIT_TASK_TYPE: Record<AgentRunTaskType, string> = {
+  SINGLE_ASSET_ANALYSIS: "single_asset_analysis",
+  MULTI_ASSET_COMPARISON: "multi_asset_comparison",
+  PORTFOLIO_DIAGNOSTIC: "portfolio_diagnosis",
+  EVENT_IMPACT_ANALYSIS: "event_impact_analysis",
+  REBALANCE_SUGGESTION: "rebalance_suggestion",
 };
 
 const ASSET_LABEL: Record<AssetFilter, string> = {
@@ -209,13 +228,12 @@ const riskBadgeVariant = (riskLevel: AgentRun["riskLevel"]): "default" | "second
 
 export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
   const apiMode = useMemo(() => getApiMode(), []);
-  const assets = useMemo(() => {
-    try {
-      return listAssets();
-    } catch {
-      return [];
-    }
-  }, []);
+  const [assets, setAssets] = useState<AssetItem[]>([]);
+  const [knownAssetsById, setKnownAssetsById] = useState<Record<string, AssetItem>>({});
+  const [assetSearchKeyword, setAssetSearchKeyword] = useState("");
+  const [debouncedAssetSearchKeyword, setDebouncedAssetSearchKeyword] = useState("");
+  const [isLoadingAssets, setIsLoadingAssets] = useState(true);
+  const [assetLoadError, setAssetLoadError] = useState<string | null>(null);
   const [agentRuns, setAgentRuns] = useState<AgentRun[]>([]);
   const [isLoadingRuns, setIsLoadingRuns] = useState(true);
   const [agentRunError, setAgentRunError] = useState<string | null>(null);
@@ -235,8 +253,28 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
   const [draftRunner, setDraftRunner] = useState<SubmitRunnerKind>("qwen");
   const [draftTaskType, setDraftTaskType] = useState<AgentRunTaskType>("SINGLE_ASSET_ANALYSIS");
   const [draftAssetId, setDraftAssetId] = useState("asset_etf_510300");
+  const [selectedPortfolioAssetIds, setSelectedPortfolioAssetIds] = useState<string[]>([]);
   const [draftQuestion, setDraftQuestion] = useState("请分析该 ETF 是否适合中期配置");
-  const assetsById = useMemo(() => new Map(assets.map((asset) => [asset.id, asset])), [assets]);
+  const [externalSearchEnabled, setExternalSearchEnabled] = useState(true);
+  const assetsById = useMemo(
+    () => new Map([...Object.values(knownAssetsById), ...assets].map((asset) => [asset.id, asset])),
+    [assets, knownAssetsById],
+  );
+  const defaultAssetId = assets[0]?.id ?? Object.keys(knownAssetsById)[0] ?? "asset_etf_510300";
+  const isPortfolioTask = draftTaskType === "PORTFOLIO_DIAGNOSTIC";
+  const selectedPortfolioAssets = useMemo(
+    () => selectedPortfolioAssetIds.map((assetId) => assetsById.get(assetId)).filter((asset): asset is NonNullable<typeof asset> => Boolean(asset)),
+    [assetsById, selectedPortfolioAssetIds],
+  );
+  const visibleAssetOptions = useMemo(() => {
+    const optionMap = new Map(assets.map((asset) => [asset.id, asset]));
+    const selectedAsset = assetsById.get(draftAssetId);
+    if (selectedAsset) {
+      optionMap.set(selectedAsset.id, selectedAsset);
+    }
+    selectedPortfolioAssets.forEach((asset) => optionMap.set(asset.id, asset));
+    return Array.from(optionMap.values());
+  }, [assets, assetsById, draftAssetId, selectedPortfolioAssets]);
   const runnerStatusByType = useMemo(
     () => new Map(runnerStatuses.map((runner) => [runner.runnerType, runner])),
     [runnerStatuses],
@@ -249,6 +287,7 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
   const bochaCredentialSource = bochaToolStatus?.config_source ?? "unknown";
   const qwenCredentialAvailable = runtimeCredentials?.profile.llm_api_key_available ?? qwenStatus?.qwenKeyConfigured ?? false;
   const bochaCredentialAvailable = Boolean(bochaToolStatus?.api_key_available ?? bochaToolStatus?.configured);
+  const externalSearchActive = externalSearchEnabled && bochaCredentialAvailable;
   const getSupportedTaskTypes = (runner: AgentRunnerStatusItem | AgentRunnerCapabilityLike): string[] =>
     runner.capabilities?.supportedTaskTypes ??
     runner.capabilities?.supported_task_types ??
@@ -269,7 +308,7 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
   const tradingAgentsSubmitBlockedReason = useMemo(() => {
     if (apiMode !== "real") return null;
     if (!tradingAgentsStatus) {
-      if (isLoadingRunnerStatus && !runnerStatusError) return "TradingAgents runtime status is checking backend status.";
+      if (isLoadingRunnerStatus && !runnerStatusError) return "正在验证 TradingAgents 提交通路...";
       return runnerStatusError
         ? `TradingAgents runtime status unavailable: ${runnerStatusError}`
         : "TradingAgents runtime status unavailable. Use Runtime Diagnostics > Refresh.";
@@ -285,7 +324,7 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
   const qwenSubmitBlockedReason = useMemo(() => {
     if (apiMode !== "real") return null;
     if (!qwenStatus) {
-      if (isLoadingRunnerStatus && !runnerStatusError) return "Qwen runtime status is checking backend status.";
+      if (isLoadingRunnerStatus && !runnerStatusError) return "正在验证 Qwen 提交通路...";
       return runnerStatusError
         ? `Qwen runtime status unavailable: ${runnerStatusError}`
         : "Qwen runtime status unavailable. Use Runtime Diagnostics > Refresh.";
@@ -301,7 +340,7 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
   const nativeSubmitBlockedReason = useMemo(() => {
     if (apiMode !== "real") return null;
     if (!nativeStatus) {
-      if (isLoadingRunnerStatus && !runnerStatusError) return "AlphaTrace Native runtime status is checking backend status.";
+      if (isLoadingRunnerStatus && !runnerStatusError) return "正在验证 AlphaTrace 原生提交通路...";
       return runnerStatusError
         ? `AlphaTrace Native runtime status unavailable: ${runnerStatusError}`
         : "AlphaTrace Native runtime status unavailable. Use Runtime Diagnostics > Refresh.";
@@ -318,7 +357,15 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
   const initialRouteParams = useMemo(() => getCurrentHashQueryParams(), []);
   const linkedAssetId = initialRouteParams.get("assetId") ?? undefined;
   const linkedPortfolioId = initialRouteParams.get("portfolioId") ?? undefined;
+  const linkedDatasetId = initialRouteParams.get("datasetId") ?? undefined;
+  const linkedAssetSymbol = initialRouteParams.get("assetSymbol") ?? undefined;
+  const linkedDataContext = initialRouteParams.get("dataContext") ?? undefined;
 
+  const [catalogDatasets, setCatalogDatasets] = useState<ImportedFileBatch[]>([]);
+  const [datasetBindings, setDatasetBindings] = useState<DatasetBinding[]>([]);
+  const [isLoadingCatalogDatasets, setIsLoadingCatalogDatasets] = useState(false);
+  const [catalogDatasetError, setCatalogDatasetError] = useState<string | null>(null);
+  const [selectedDatasetId, setSelectedDatasetId] = useState<string>(() => linkedDatasetId ?? AUTO_DATASET_SELECT_VALUE);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [assetFilter, setAssetFilter] = useState<AssetFilter>(() => {
     if (!linkedAssetId) return "ALL";
@@ -338,55 +385,140 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
         : draftRunner === "tradingagents"
           ? tradingAgentsSubmitBlockedReason
           : null;
+  const selectionBlockedReason = isPortfolioTask && selectedPortfolioAssetIds.length < 2 ? "组合诊断至少选择 2 个资产。" : null;
   const selectedRunnerReady =
     draftRunner === "stub" ||
     Boolean(selectedRunnerStatus?.available && selectedRunnerStatus?.status === "ready" && !selectedSubmitBlockedReason);
+  const selectedRunnerValidationState = isLoadingRunnerStatus
+    ? "validating"
+    : selectedRunnerReady
+      ? "ready"
+      : runnerStatusError
+        ? "error"
+        : "needs_config";
+  const selectedRunnerValidationLabel: Record<typeof selectedRunnerValidationState, string> = {
+    validating: "验证中",
+    ready: "通路已验证",
+    error: "验证异常",
+    needs_config: "需配置",
+  };
+  const formatValidationStatus = (runner?: AgentRunnerStatusItem, requiresQwenCredential = false): string => {
+    if (isLoadingRunnerStatus && !runner) return "验证中";
+    if (!runner) return runnerStatusError ? "异常" : "未验证";
+    if (requiresQwenCredential && !qwenCredentialAvailable) return "缺少密钥";
+    if (runner.available && runner.status === "ready") return "可用";
+    if (runner.enabled === false || runner.status === "disabled") return "已禁用";
+    return "未就绪";
+  };
   const submitRouteLabel =
     apiMode === "real"
       ? `${SUBMIT_ENDPOINT} -> runnerType=${draftRunner}`
       : `Mock 数据模式 -> runnerType=${draftRunner}`;
+  const activeDatasetId = selectedDatasetId === AUTO_DATASET_SELECT_VALUE ? undefined : selectedDatasetId;
+  const selectedCatalogDataset = useMemo(
+    () => catalogDatasets.find((dataset) => dataset.importId === activeDatasetId),
+    [activeDatasetId, catalogDatasets],
+  );
+  const selectedDatasetBinding = useMemo(
+    () => datasetBindings.find((binding) => binding.datasetId === activeDatasetId),
+    [activeDatasetId, datasetBindings],
+  );
+  const selectedDatasetAssetSymbol =
+    selectedDatasetBinding?.dataSymbol ||
+    selectedDatasetBinding?.assetSymbol ||
+    selectedCatalogDataset?.assetSymbol ||
+    linkedAssetSymbol;
+  const selectedDataContextLabel = activeDatasetId
+    ? `Data Catalog dataset=${activeDatasetId}${selectedDatasetAssetSymbol ? ` · ${selectedDatasetAssetSymbol}` : ""}`
+    : externalSearchActive
+      ? "自动匹配本地结构化数据 + 外部资讯搜索"
+      : "自动匹配本地结构化数据";
+
+  const buildSelectedDataContext = () => {
+    const portfolioAssets = selectedPortfolioAssets.map((asset) => ({
+      assetId: asset.id,
+      symbol: asset.symbol,
+      name: asset.name,
+      assetType: asset.assetType,
+      market: asset.market,
+    }));
+    const context: Record<string, unknown> = {
+      source: linkedDataContext ?? "catalog",
+      assetIds: isPortfolioTask ? selectedPortfolioAssetIds : [draftAssetId || defaultAssetId],
+      portfolioAssets: isPortfolioTask ? portfolioAssets : undefined,
+      requestedDimensions: [
+        "latest_quote",
+        "return_windows",
+        "valuation",
+        "liquidity",
+        "volatility",
+        "trend",
+        "fund_flow",
+        "premium_discount",
+        "holdings_or_exposure",
+        "source_refs",
+      ],
+      contextBudget: {
+        mode: "summary_first",
+        maxAssets: isPortfolioTask ? 12 : 1,
+        maxRowsPerAsset: 90,
+        preferWindows: ["latest", "20d", "60d", "1y"],
+        maxEvidenceItems: externalSearchActive ? 8 : 5,
+      },
+    };
+    if (activeDatasetId) {
+      context.datasetId = activeDatasetId;
+      context.assetSymbol = selectedDatasetAssetSymbol;
+    }
+    return context;
+  };
 
   const refreshRunnerStatuses = async () => {
     setIsLoadingRunnerStatus(true);
-    try {
-      const items = await getAgentRunnerStatusAsync();
+    const [statusResult, capabilitiesResult, workersResult, credentialsResult] = await Promise.allSettled([
+      getAgentRunnerStatusAsync(),
+      getAgentRunnerCapabilitiesAsync({
+        taskType: SUBMIT_TASK_TYPE[draftTaskType],
+        requestedRunnerType: draftRunner,
+      }),
+      getAgentRuntimeWorkersAsync(),
+      getRuntimeCredentialStatus(),
+    ]);
+
+    if (statusResult.status === "fulfilled") {
+      const items = statusResult.value;
       setRunnerStatuses(items);
       setRunnerStatusError(null);
-    } catch (error) {
+    } else {
       setRunnerStatuses([]);
-      setRunnerStatusError(getErrorMessage(error, "运行状态不可用"));
-    } finally {
-      setIsLoadingRunnerStatus(false);
+      setRunnerStatusError(getErrorMessage(statusResult.reason, "运行状态不可用"));
     }
 
-    try {
-      setRunnerCapabilities(
-        await getAgentRunnerCapabilitiesAsync({
-          taskType: draftTaskType,
-          requestedRunnerType: draftRunner,
-        }),
-      );
+    if (capabilitiesResult.status === "fulfilled") {
+      setRunnerCapabilities(capabilitiesResult.value);
       setRunnerCapabilitiesError(null);
-    } catch (error) {
+    } else {
       setRunnerCapabilities(null);
-      setRunnerCapabilitiesError(getErrorMessage(error, "执行能力不可用"));
+      setRunnerCapabilitiesError(getErrorMessage(capabilitiesResult.reason, "执行能力不可用"));
     }
 
-    try {
-      setRuntimeWorkers(await getAgentRuntimeWorkersAsync());
+    if (workersResult.status === "fulfilled") {
+      setRuntimeWorkers(workersResult.value);
       setRuntimeWorkersError(null);
-    } catch (error) {
+    } else {
       setRuntimeWorkers(null);
-      setRuntimeWorkersError(getErrorMessage(error, "工作进程不可用"));
+      setRuntimeWorkersError(getErrorMessage(workersResult.reason, "工作进程不可用"));
     }
 
-    try {
-      setRuntimeCredentials(await getRuntimeCredentialStatus());
+    if (credentialsResult.status === "fulfilled") {
+      setRuntimeCredentials(credentialsResult.value);
       setRuntimeCredentialsError(null);
-    } catch (error) {
+    } else {
       setRuntimeCredentials(null);
-      setRuntimeCredentialsError(getErrorMessage(error, "运行凭证不可用"));
+      setRuntimeCredentialsError(getErrorMessage(credentialsResult.reason, "运行凭证不可用"));
     }
+
+    setIsLoadingRunnerStatus(false);
   };
 
   useEffect(() => {
@@ -394,7 +526,7 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
     setIsLoadingRuns(true);
     setAgentRunError(null);
 
-    listAgentRunsAsync()
+    listAgentRunsAsync({ limit: 20 })
       .then((runs) => {
         if (!cancelled) {
           setAgentRuns(runs);
@@ -418,6 +550,105 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
   }, [draftRunner, draftTaskType]);
 
   useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedAssetSearchKeyword(assetSearchKeyword.trim());
+    }, 300);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [assetSearchKeyword]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoadingAssets(true);
+    setAssetLoadError(null);
+
+    listAssetsAsync({
+      keyword: debouncedAssetSearchKeyword || undefined,
+      limit: 25,
+    })
+      .then((assetItems) => {
+        if (cancelled) return;
+        setAssets(assetItems);
+        setKnownAssetsById((current) => {
+          const next = { ...current };
+          assetItems.forEach((asset) => {
+            next[asset.id] = asset;
+          });
+          return next;
+        });
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setAssets([]);
+        setAssetLoadError(getErrorMessage(error, "资产目录加载失败"));
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingAssets(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedAssetSearchKeyword]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoadingCatalogDatasets(true);
+    setCatalogDatasetError(null);
+
+    Promise.all([listImportedFileBatchesAsync(), listDatasetBindingsAsync({ activeOnly: true })])
+      .then(([batchResponse, bindingResponse]) => {
+        if (cancelled) return;
+        setCatalogDatasets(batchResponse.items ?? []);
+        setDatasetBindings(bindingResponse.items ?? []);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setCatalogDatasets([]);
+        setDatasetBindings([]);
+        setCatalogDatasetError(getErrorMessage(error, "数据集加载失败"));
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingCatalogDatasets(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (linkedAssetId && assetsById.has(linkedAssetId)) {
+      setDraftAssetId(linkedAssetId);
+    }
+  }, [assetsById, linkedAssetId]);
+
+  useEffect(() => {
+    if (assets.length > 0 && !assetsById.has(draftAssetId)) {
+      setDraftAssetId(defaultAssetId);
+    }
+  }, [assets.length, assetsById, defaultAssetId, draftAssetId]);
+
+  useEffect(() => {
+    if (!isPortfolioTask || assets.length === 0 || selectedPortfolioAssetIds.length > 0) {
+      return;
+    }
+    setSelectedPortfolioAssetIds(assets.slice(0, 4).map((asset) => asset.id));
+  }, [assets, isPortfolioTask, selectedPortfolioAssetIds.length]);
+
+  useEffect(() => {
+    if (selectedDatasetBinding?.assetId && assetsById.has(selectedDatasetBinding.assetId)) {
+      setDraftAssetId(selectedDatasetBinding.assetId);
+    }
+  }, [assetsById, selectedDatasetBinding]);
+
+  useEffect(() => {
     let cancelled = false;
     setIsLoadingRunnerStatus(true);
     getAgentRunnerStatusAsync()
@@ -439,7 +670,7 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
         }
       });
 
-    getAgentRunnerCapabilitiesAsync({ taskType: draftTaskType, requestedRunnerType: draftRunner })
+    getAgentRunnerCapabilitiesAsync({ taskType: SUBMIT_TASK_TYPE[draftTaskType], requestedRunnerType: draftRunner })
       .then((capabilities) => {
         if (!cancelled) {
           setRunnerCapabilities(capabilities);
@@ -501,7 +732,7 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
 
     try {
       const demoRun = await createDemoAgentRunAsync({
-        assetId: "asset_etf_510300",
+        assetId: draftAssetId || defaultAssetId,
         taskType: "single_asset_analysis",
         question: "请分析该 ETF 是否适合中期配置",
       });
@@ -515,6 +746,12 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
   };
 
   const handleSubmitAgentTask = async (runner: SubmitRunnerKind) => {
+    if (selectionBlockedReason) {
+      setDemoRunError(selectionBlockedReason);
+      setDemoRunMessage(null);
+      return;
+    }
+
     const runnerBlockedReason =
       runner === "qwen"
         ? qwenSubmitBlockedReason
@@ -541,20 +778,22 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
 
     const isTradingAgents = runner === "tradingagents";
     const isQwenBacked = runner === "qwen" || runner === "alphatrace_native" || isTradingAgents;
+    const submissionAssetId = isPortfolioTask ? undefined : selectedDatasetBinding?.assetId || linkedAssetId || draftAssetId || defaultAssetId;
+    const selectedDataContext = buildSelectedDataContext();
 
     try {
       const submittedRun = await submitAgentRunAsync({
-        assetId: "asset_etf_510300",
-        portfolioId: "portfolio_etf_core_001",
+        assetId: submissionAssetId,
+        portfolioId: isPortfolioTask ? "portfolio_etf_core_001" : undefined,
         strategyId: "strategy_etf_rotation_001",
-        taskType: "single_asset_analysis",
+        taskType: SUBMIT_TASK_TYPE[draftTaskType],
         question: isTradingAgents ? "Use TradingAgents PoC to analyze SPY." : "请分析该 ETF 是否适合中期配置",
         horizon: "medium_term",
         riskPreference: "balanced",
         evidenceScope: {
-          includeNews: true,
+          includeNews: externalSearchActive,
           includeReports: true,
-          includeMacro: true,
+          includeMacro: externalSearchActive,
           includeMarketSnapshot: true,
         },
         runnerConfig: {
@@ -562,8 +801,16 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
           modelProvider: isQwenBacked ? "qwen" : "none",
           modelName: isQwenBacked ? "qwen-plus" : "none",
           enableStreaming: true,
-          extraParams: isTradingAgents
-            ? {
+          extraParams: {
+            enableResearchTools: true,
+            enableExternalSearch: externalSearchActive,
+            includeExternalEvidence: externalSearchActive,
+            include_external_evidence: externalSearchActive,
+            selectedAssetIds: isPortfolioTask ? selectedPortfolioAssetIds : [submissionAssetId],
+            selectedPortfolioAssets,
+            ...(selectedDataContext ? { dataContext: selectedDataContext } : {}),
+            ...(isTradingAgents
+              ? {
                 ticker: "SPY",
                 tradeDate: "2025-06-05",
                 offlineData: true,
@@ -571,7 +818,8 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
                 maxDebateRounds: 1,
                 maxRiskDiscussRounds: 1,
               }
-            : {},
+              : {}),
+          },
         },
       });
       setDemoRunMessage(null);
@@ -585,6 +833,12 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
   };
 
   const handleSubmitDraftAgentTask = async () => {
+    if (selectionBlockedReason) {
+      setDemoRunError(selectionBlockedReason);
+      setDemoRunMessage(null);
+      return;
+    }
+
     if (selectedSubmitBlockedReason) {
       setDemoRunError(`${RUNNER_LABEL[draftRunner] ?? draftRunner}暂不可用，请检查运行状态。`);
       setDemoRunMessage(null);
@@ -602,20 +856,21 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
     const isTradingAgents = draftRunner === "tradingagents";
     const isQwenBacked = draftRunner === "qwen" || draftRunner === "alphatrace_native" || isTradingAgents;
     const isPortfolioTask = draftTaskType === "PORTFOLIO_DIAGNOSTIC";
+    const selectedDataContext = buildSelectedDataContext();
 
     try {
       const submittedRun = await submitAgentRunAsync({
-        assetId: draftAssetId,
+        assetId: isPortfolioTask ? undefined : draftAssetId || defaultAssetId,
         portfolioId: isPortfolioTask ? "portfolio_etf_core_001" : undefined,
         strategyId: "strategy_etf_rotation_001",
-        taskType: isPortfolioTask ? "portfolio_diagnosis" : "single_asset_analysis",
+        taskType: SUBMIT_TASK_TYPE[draftTaskType],
         question: draftQuestion,
         horizon: "medium_term",
         riskPreference: "balanced",
         evidenceScope: {
-          includeNews: true,
+          includeNews: externalSearchActive,
           includeReports: true,
-          includeMacro: true,
+          includeMacro: externalSearchActive,
           includeMarketSnapshot: true,
         },
         runnerConfig: {
@@ -623,8 +878,16 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
           modelProvider: isQwenBacked ? "qwen" : "none",
           modelName: isQwenBacked ? "qwen-plus" : "none",
           enableStreaming: true,
-          extraParams: isTradingAgents
-            ? {
+          extraParams: {
+            enableResearchTools: true,
+            enableExternalSearch: externalSearchActive,
+            includeExternalEvidence: externalSearchActive,
+            include_external_evidence: externalSearchActive,
+            selectedAssetIds: isPortfolioTask ? selectedPortfolioAssetIds : [draftAssetId || defaultAssetId],
+            selectedPortfolioAssets,
+            ...(selectedDataContext ? { dataContext: selectedDataContext } : {}),
+            ...(isTradingAgents
+              ? {
                 ticker: "SPY",
                 tradeDate: "2025-06-05",
                 offlineData: true,
@@ -632,7 +895,8 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
                 maxDebateRounds: 1,
                 maxRiskDiscussRounds: 1,
               }
-            : {},
+              : {}),
+          },
         },
       });
       setSubmittingRunner(null);
@@ -688,7 +952,7 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
   }, [statusFilter, assetFilter, taskFilter, timeFilter, linkedAssetId, linkedPortfolioId, agentRuns, assetsById]);
 
   return (
-    <div className="flex h-full flex-col gap-4 overflow-auto">
+    <div className="flex h-full flex-col gap-4 overflow-auto pb-40">
       <ResearchWorkspaceNav />
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_420px]">
@@ -697,55 +961,57 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <CardTitle className="text-lg">发起投研任务</CardTitle>
-                <CardDescription className="mt-1">选择执行器、目标和问题后提交。</CardDescription>
+                <CardDescription className="mt-1">选择执行器和数据上下文，问题从底部输入框提交。</CardDescription>
               </div>
               <div className="flex items-center gap-2">
                 <Badge variant={selectedRunnerReady ? "default" : "outline"} className="gap-1">
-                  {selectedRunnerReady ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
-                  {selectedRunnerReady ? "可提交" : "待配置"}
+                  {isLoadingRunnerStatus ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : selectedRunnerReady ? (
+                    <CheckCircle2 className="h-3 w-3" />
+                  ) : (
+                    <AlertCircle className="h-3 w-3" />
+                  )}
+                  {selectedRunnerValidationLabel[selectedRunnerValidationState]}
                 </Badge>
                 <Button size="sm" variant="outline" className="h-8 gap-1" onClick={() => void refreshRunnerStatuses()}>
                   <RefreshCw className="h-3.5 w-3.5" />
-                  刷新
+                  验证通路
                 </Button>
               </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-5 p-5">
             <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-background p-3">
-              <span className="mr-1 text-xs font-medium text-muted-foreground">快捷入口</span>
-              <Button size="sm" variant="outline" onClick={handleCreateDemoRun} disabled={isCreatingDemoRun}>
-                {isCreatingDemoRun ? "创建中..." : "创建样例任务"}
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => void handleSubmitAgentTask("stub")} disabled={Boolean(submittingRunner)}>
-                {submittingRunner === "stub" ? "提交中..." : "本地样例"}
+              <span className="mr-1 text-xs font-medium text-muted-foreground">执行器</span>
+              <Button
+                size="sm"
+                variant={draftRunner === "qwen" ? "default" : "outline"}
+                onClick={() => setDraftRunner("qwen")}
+                disabled={Boolean(qwenSubmitBlockedReason)}
+              >
+                通义千问
               </Button>
               <Button
                 size="sm"
-                onClick={() => void handleSubmitAgentTask("qwen")}
-                disabled={Boolean(submittingRunner) || Boolean(qwenSubmitBlockedReason)}
+                variant={draftRunner === "alphatrace_native" ? "default" : "outline"}
+                onClick={() => setDraftRunner("alphatrace_native")}
+                disabled={Boolean(nativeSubmitBlockedReason)}
               >
-                {submittingRunner === "qwen" ? "提交中..." : "通义千问"}
+                原生多 Agent
               </Button>
               <Button
                 size="sm"
-                onClick={() => void handleSubmitAgentTask("alphatrace_native")}
-                disabled={Boolean(submittingRunner) || Boolean(nativeSubmitBlockedReason)}
+                variant={draftRunner === "tradingagents" ? "default" : "outline"}
+                onClick={() => setDraftRunner("tradingagents")}
+                disabled={Boolean(tradingAgentsSubmitBlockedReason)}
               >
-                {submittingRunner === "alphatrace_native" ? "提交中..." : "原生多 Agent"}
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => void handleSubmitAgentTask("tradingagents")}
-                disabled={Boolean(submittingRunner) || Boolean(tradingAgentsSubmitBlockedReason)}
-              >
-                {submittingRunner === "tradingagents" ? "提交中..." : "TradingAgents"}
+                TradingAgents
               </Button>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              {(["qwen", "alphatrace_native", "tradingagents", "stub"] as SubmitRunnerKind[]).map((runner) => {
+            <div className="grid gap-3 md:grid-cols-3">
+              {(["qwen", "alphatrace_native", "tradingagents"] as SubmitRunnerKind[]).map((runner) => {
                 const status = runnerStatusByType.get(runner);
                 const ready =
                   runner === "stub" || Boolean(status?.available && status?.status === "ready");
@@ -797,17 +1063,131 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label>分析资产</Label>
-                  <Select value={draftAssetId} onValueChange={setDraftAssetId}>
+                  <Label>{isPortfolioTask ? "组合资产篮子" : "分析资产"}</Label>
+                  <Input
+                    value={assetSearchKeyword}
+                    onChange={(event) => setAssetSearchKeyword(event.target.value)}
+                    placeholder="输入代码、名称或标签检索资产目录..."
+                    autoComplete="off"
+                  />
+                  {isPortfolioTask ? (
+                    <div className="rounded-md border bg-background">
+                      <div className="flex items-center justify-between border-b px-3 py-2 text-xs text-muted-foreground">
+                        <span>已选 {selectedPortfolioAssetIds.length} 个资产</span>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => setSelectedPortfolioAssetIds(visibleAssetOptions.slice(0, 4).map((asset) => asset.id))}
+                          disabled={visibleAssetOptions.length === 0}
+                        >
+                          默认篮子
+                        </Button>
+                      </div>
+                      <div className="max-h-[210px] overflow-auto p-2">
+                        {visibleAssetOptions.length === 0 ? (
+                          <div className="px-2 py-6 text-center text-xs text-muted-foreground">
+                            {isLoadingAssets ? "正在检索资产目录..." : "没有匹配资产，请换代码或名称搜索"}
+                          </div>
+                        ) : (
+                          visibleAssetOptions.slice(0, 25).map((asset) => {
+                            const checked = selectedPortfolioAssetIds.includes(asset.id);
+                            return (
+                              <label
+                                key={asset.id}
+                                className="flex cursor-pointer items-start gap-2 rounded-md px-2 py-2 text-xs hover:bg-muted/40"
+                              >
+                                <Checkbox
+                                  checked={checked}
+                                  onCheckedChange={(nextChecked) => {
+                                    setSelectedPortfolioAssetIds((current) =>
+                                      nextChecked
+                                        ? Array.from(new Set([...current, asset.id]))
+                                        : current.filter((assetId) => assetId !== asset.id),
+                                    );
+                                  }}
+                                />
+                                <span className="min-w-0">
+                                  <span className="block truncate font-medium">{asset.symbol} {asset.name}</span>
+                                  <span className="text-muted-foreground">{asset.assetType} · {asset.market}</span>
+                                </span>
+                              </label>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <Select
+                      value={draftAssetId}
+                      onValueChange={setDraftAssetId}
+                      disabled={isLoadingAssets || visibleAssetOptions.length === 0}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={isLoadingAssets ? "正在检索资产目录..." : "选择分析资产"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {visibleAssetOptions.map((asset) => (
+                          <SelectItem key={asset.id} value={asset.id}>
+                            {asset.symbol} {asset.name} · {asset.assetType}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    {isLoadingAssets
+                      ? "正在从后端资产目录检索候选..."
+                      : assetLoadError
+                        ? assetLoadError
+                        : debouncedAssetSearchKeyword
+                          ? `匹配 ${assets.length} 个候选；继续输入可缩小范围。`
+                          : `默认仅显示 ${assets.length} 个候选，输入代码或名称可从资产目录检索。`}
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>投研数据集</Label>
+                  <Select value={selectedDatasetId} onValueChange={setSelectedDatasetId}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="asset_etf_510300">510300.SH 沪深300ETF</SelectItem>
-                      <SelectItem value="asset_etf_159915">159915.SZ 创业板ETF</SelectItem>
-                      <SelectItem value="asset_index_000300">000300.SH 沪深300</SelectItem>
+                      <SelectItem value={AUTO_DATASET_SELECT_VALUE}>自动匹配默认数据</SelectItem>
+                      {catalogDatasets.map((dataset) => (
+                        <SelectItem key={dataset.importId} value={dataset.importId}>
+                          {dataset.assetSymbol || dataset.assetName || dataset.sourceName} · {dataset.rows} 行
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {isLoadingCatalogDatasets
+                      ? "正在读取数据目录..."
+                      : catalogDatasetError
+                        ? catalogDatasetError
+                        : activeDatasetId
+                          ? `${selectedCatalogDataset?.minTradeDate ?? "-"} 至 ${selectedCatalogDataset?.maxTradeDate ?? "-"}`
+                          : "提交时后端会按资产绑定自动查找本地结构化数据。"}
+                  </p>
+                </div>
+                <div className="rounded-lg border bg-background p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <Label htmlFor="agent-external-search">外部资讯搜索</Label>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        打开后在本地结构化数据基础上补充新闻、公告和研究观点；关闭时仅用本地数据和本地证据。
+                      </p>
+                    </div>
+                    <Switch
+                      id="agent-external-search"
+                      checked={externalSearchEnabled && bochaCredentialAvailable}
+                      disabled={!bochaCredentialAvailable}
+                      onCheckedChange={setExternalSearchEnabled}
+                    />
+                  </div>
+                  {!bochaCredentialAvailable ? (
+                    <p className="mt-2 text-xs text-amber-700">外部搜索凭证不可用，本次任务会只使用本地数据和本地证据。</p>
+                  ) : null}
                 </div>
                 <div className="rounded-lg border bg-muted/20 p-3 text-xs">
                   <div className="flex items-center justify-between">
@@ -816,23 +1196,45 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
                   </div>
                   <div className="mt-2 flex items-center justify-between">
                     <span className="text-muted-foreground">证据</span>
-                    <span className="font-medium">{bochaCredentialAvailable ? "在线检索" : "本地库"}</span>
+                    <span className="font-medium">{externalSearchActive ? "本地数据 + 外部搜索" : "仅本地数据"}</span>
                   </div>
                   <div className="mt-2 flex items-center justify-between">
-                    <span className="text-muted-foreground">资产</span>
-                    <span className="font-medium">{selectedAsset?.symbol ?? draftAssetId}</span>
+                    <span className="text-muted-foreground">{isPortfolioTask ? "组合资产" : "资产"}</span>
+                    <span className="font-medium">
+                      {isPortfolioTask ? `${selectedPortfolioAssetIds.length} 个` : selectedAsset?.symbol ?? draftAssetId}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">数据集</span>
+                    <span className="truncate font-medium">{activeDatasetId ?? "自动"}</span>
                   </div>
                 </div>
               </div>
 
-              <div className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label>问题</Label>
-                  <Textarea
-                    className="min-h-[138px] resize-none text-sm"
-                    value={draftQuestion}
-                    onChange={(event) => setDraftQuestion(event.target.value)}
-                  />
+              <div className="space-y-3 rounded-xl border bg-background/80 p-4">
+                <div>
+                  <Label>当前问题</Label>
+                  <p className="mt-2 line-clamp-3 rounded-lg bg-muted/30 px-3 py-2 text-sm leading-6 text-muted-foreground">
+                    {draftQuestion || "在底部输入框描述投研问题。"}
+                  </p>
+                </div>
+                <div className="grid gap-2 text-xs sm:grid-cols-3">
+                  <div className="rounded-md border p-2">
+                    <p className="text-muted-foreground">执行器</p>
+                    <p className="mt-1 font-medium">{selectedRunnerMeta.title}</p>
+                  </div>
+                  <div className="rounded-md border p-2">
+                    <p className="text-muted-foreground">任务</p>
+                    <p className="mt-1 font-medium">{TASK_LABEL[draftTaskType]}</p>
+                  </div>
+                  <div className="rounded-md border p-2">
+                    <p className="text-muted-foreground">{isPortfolioTask ? "组合资产" : "资产"}</p>
+                    <p className="mt-1 truncate font-medium">
+                      {isPortfolioTask
+                        ? selectedPortfolioAssets.map((asset) => asset.symbol).join(" / ") || "未选择"
+                        : selectedAsset?.symbol ?? draftAssetId}
+                    </p>
+                  </div>
                 </div>
                 {demoRunMessage ? (
                   <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
@@ -849,14 +1251,11 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
                     {selectedSubmitBlockedReason}
                   </div>
                 ) : null}
-                <Button
-                  className="h-10 w-full gap-2"
-                  onClick={() => void handleSubmitDraftAgentTask()}
-                  disabled={Boolean(submittingRunner) || Boolean(selectedSubmitBlockedReason)}
-                >
-                  {submittingRunner === draftRunner ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bot className="h-4 w-4" />}
-                  {submittingRunner === draftRunner ? "提交中" : "提交任务"}
-                </Button>
+                {selectionBlockedReason ? (
+                  <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    {selectionBlockedReason}
+                  </div>
+                ) : null}
               </div>
             </div>
           </CardContent>
@@ -879,6 +1278,19 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
               <p className="mt-1 font-medium">{selectedRunnerMeta.backend}</p>
               <p className="mt-1 text-xs text-muted-foreground">{selectedRunnerMeta.brief}</p>
             </div>
+            <div>
+              <p className="text-xs text-muted-foreground">数据上下文</p>
+              <p className="mt-1 break-all font-medium">{selectedDataContextLabel}</p>
+              {activeDatasetId ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  当前 dataset 会随任务提交，后端会通过投研上下文服务读取本地数据窗口、指标摘要和来源引用；外部资讯搜索由左侧开关控制。
+                </p>
+              ) : (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  后端会按资产代码、别名和默认绑定自动匹配本地结构化数据；打开外部资讯搜索时再补充新闻、公告和研究观点。
+                </p>
+              )}
+            </div>
             <div className="rounded-lg border p-3">
               <div className="mb-3 flex items-center gap-2 text-xs font-medium text-muted-foreground">
                 <Activity className="h-3.5 w-3.5" />
@@ -898,20 +1310,22 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
             <div className="grid grid-cols-3 gap-2 text-xs">
               <div className="rounded-md border p-2">
                 <p className="text-muted-foreground">Qwen</p>
-                <p className="mt-1 font-medium">{qwenCredentialAvailable && qwenStatus?.available ? "可用" : "未就绪"}</p>
+                <p className="mt-1 font-medium">{formatValidationStatus(qwenStatus, true)}</p>
               </div>
               <div className="rounded-md border p-2">
                 <p className="text-muted-foreground">原生</p>
-                <p className="mt-1 font-medium">{nativeStatus?.available ? "可用" : "未就绪"}</p>
+                <p className="mt-1 font-medium">{formatValidationStatus(nativeStatus, true)}</p>
               </div>
               <div className="rounded-md border p-2">
                 <p className="text-muted-foreground">证据</p>
-                <p className="mt-1 font-medium">{bochaCredentialAvailable ? "在线" : "本地"}</p>
+                <p className="mt-1 font-medium">
+                  {isLoadingRunnerStatus && !runtimeCredentials ? "验证中" : externalSearchActive ? "外部搜索" : "本地"}
+                </p>
               </div>
             </div>
             {runnerStatusError || runtimeCredentialsError ? (
               <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                部分运行状态暂不可用，提交前建议刷新。
+                部分运行状态暂不可用，提交前建议重新验证通路。
               </div>
             ) : null}
 
@@ -930,7 +1344,7 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
                     <p className="text-muted-foreground">key: {qwenCredentialAvailable ? "available" : "missing"}</p>
                   </div>
                   <div className="rounded-md border p-2">
-                    <p className="font-medium">Bocha 工具</p>
+                    <p className="font-medium">外部搜索工具</p>
                     <p className="mt-1 text-muted-foreground">source: {bochaCredentialSource}</p>
                     <p className="text-muted-foreground">key: {bochaCredentialAvailable ? "available" : "missing"}</p>
                   </div>
@@ -1174,6 +1588,60 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
           })}
         </div>
       )}
+
+      <div className="pointer-events-none fixed bottom-20 left-4 right-4 z-30 flex justify-center md:bottom-6 xl:left-[300px]">
+        <div className="pointer-events-auto w-full max-w-[860px] rounded-[18px] border border-blue-300 bg-white/95 p-3 shadow-[0_22px_70px_rgba(80,82,96,0.20)] backdrop-blur">
+          <Textarea
+            className="min-h-[54px] resize-none border-0 bg-transparent px-1 py-1 text-sm leading-6 shadow-none focus-visible:ring-0"
+            value={draftQuestion}
+            placeholder="向 Agent 描述投研问题、目标资产或组合分析要求......"
+            onChange={(event) => setDraftQuestion(event.target.value)}
+            onKeyDown={(event) => {
+              if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+                event.preventDefault();
+                if (!submittingRunner && !selectedSubmitBlockedReason && draftQuestion.trim()) {
+                  void handleSubmitDraftAgentTask();
+                }
+              }
+            }}
+          />
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+              <span className="inline-flex items-center gap-1">
+                <Bot className="h-3.5 w-3.5" />
+                {selectedRunnerMeta.title}
+              </span>
+              <span>{TASK_LABEL[draftTaskType]}</span>
+              <span className="max-w-[260px] truncate">
+                {isPortfolioTask
+                  ? selectedPortfolioAssets.map((asset) => asset.symbol).join(" / ") || "未选择组合资产"
+                  : selectedAsset?.symbol ?? draftAssetId}
+              </span>
+              <span>{externalSearchActive ? "外部搜索开启" : "仅本地证据"}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              {selectedSubmitBlockedReason ? (
+                <span className="hidden max-w-[260px] truncate text-xs text-amber-700 sm:inline">
+                  {selectedSubmitBlockedReason}
+                </span>
+              ) : null}
+              <Button
+                size="icon"
+                className="h-10 w-10 rounded-full"
+                onClick={() => void handleSubmitDraftAgentTask()}
+                disabled={Boolean(submittingRunner) || Boolean(selectedSubmitBlockedReason) || Boolean(selectionBlockedReason) || !draftQuestion.trim()}
+                title="提交任务"
+              >
+                {submittingRunner === draftRunner ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

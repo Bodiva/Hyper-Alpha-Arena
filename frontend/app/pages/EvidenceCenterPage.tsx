@@ -82,7 +82,13 @@ const scoreVariant = (score: number): "default" | "secondary" | "destructive" =>
 };
 
 const hasSourceUrl = (url?: string): url is string => {
-  return Boolean(url && /^https?:\/\//i.test(url));
+  if (!url || !/^https?:\/\//i.test(url)) return false;
+  try {
+    const hostname = new URL(url).hostname.toLowerCase();
+    return hostname !== "example.com" && !hostname.endsWith(".example.com");
+  } catch {
+    return false;
+  }
 };
 
 const metadataText = (metadata: Record<string, unknown> | undefined, key: string): string | undefined => {
@@ -99,7 +105,7 @@ const sourceTypeLabel = (sourceType?: string): string => {
   if (!sourceType) return "unknown source";
   if (sourceType === "bocha_search") return "Bocha Search";
   if (sourceType === "agent_run") return "Agent Run";
-  if (sourceType === "static_seed") return "Static Seed";
+  if (sourceType === "static_seed") return "Development Fixture";
   return sourceType;
 };
 
@@ -327,6 +333,23 @@ export default function EvidenceCenterPage() {
     return filteredEvidence.find((item) => item.id === selectedEvidenceId) ?? filteredEvidence[0];
   }, [filteredEvidence, selectedEvidenceId]);
 
+  useEffect(() => {
+    if (!selectedEvidence?.id) return;
+    let cancelled = false;
+    getEvidenceByIdAsync(selectedEvidence.id, { runId: linkedRunId })
+      .then((detail) => {
+        if (cancelled || !detail) return;
+        setEvidenceItems((current) => {
+          const exists = current.some((item) => item.id === detail.id);
+          return exists ? current.map((item) => (item.id === detail.id ? detail : item)) : [detail, ...current];
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [linkedRunId, selectedEvidence?.id]);
+
   const selectedTrace = useMemo(() => {
     if (!selectedEvidence) return null;
     const relatedAssets = selectedEvidence.relatedAssetIds
@@ -352,7 +375,7 @@ export default function EvidenceCenterPage() {
 
       {isLoadingEvidence && (
         <Card>
-          <CardContent className="py-4 text-sm text-muted-foreground">Loading evidence...</CardContent>
+          <CardContent className="py-4 text-sm text-muted-foreground">证据加载中...</CardContent>
         </Card>
       )}
 
@@ -440,7 +463,7 @@ export default function EvidenceCenterPage() {
             <input
               value={searchKeyword}
               onChange={(event) => setSearchKeyword(event.target.value)}
-              placeholder="搜索 title / summary / sourceName"
+              placeholder="搜索标题、摘要或来源"
               className="w-full md:max-w-md h-9 rounded-md border bg-background px-3 text-sm"
             />
           </div>

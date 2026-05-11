@@ -63,6 +63,10 @@ export const ENDPOINTS = {
   alphaTraceAgentRuntimeWorkers: "/alpha-trace/agent-runs/runtime/workers",
   alphaTraceDemoAgentRun: "/alpha-trace/agent-runs/demo",
   alphaTraceSubmitAgentRun: "/alpha-trace/agent-runs/submit",
+  researchAssistantSubmitAgentRun: "/research-ai/agent-runs/submit",
+  openClawStatus: "/openclaw/status",
+  alphaTraceDashboardSummary: "/alpha-trace/dashboard/summary",
+  alphaTraceDashboardFundTrends: "/alpha-trace/dashboard/fund-trends",
   alphaTraceEvidence: "/alpha-trace/evidence",
   alphaTraceEvidenceDetail: (evidenceId = ":evidenceId") => `/alpha-trace/evidence/${evidenceId}`,
   alphaTraceEvidenceSearch: "/alpha-trace/evidence/search",
@@ -71,6 +75,7 @@ export const ENDPOINTS = {
   alphaTraceAssetEvidence: (assetId = ":assetId") => `/alpha-trace/assets/${assetId}/evidence`,
   alphaTraceMarketQuote: (assetId = ":assetId") => `/alpha-trace/market-data/assets/${assetId}/quote`,
   alphaTraceMarketSnapshot: (assetId = ":assetId") => `/alpha-trace/market-data/assets/${assetId}/snapshot`,
+  alphaTraceFundManagers: (assetId = ":assetId") => `/alpha-trace/market-data/assets/${assetId}/fund-managers`,
   alphaTraceMarketKlines: (assetId = ":assetId") => `/alpha-trace/market-data/assets/${assetId}/klines`,
   alphaTraceMarketIndicators: (assetId = ":assetId") => `/alpha-trace/market-data/assets/${assetId}/indicators`,
   alphaTraceStrategies: "/alpha-trace/strategies",
@@ -78,6 +83,7 @@ export const ENDPOINTS = {
   alphaTraceStrategyAssets: (strategyId = ":strategyId") => `/alpha-trace/strategies/${strategyId}/assets`,
   alphaTraceStrategyEvidence: (strategyId = ":strategyId") => `/alpha-trace/strategies/${strategyId}/evidence`,
   alphaTraceLeaderboard: "/alpha-trace/leaderboard",
+  alphaTraceClickHouseRankings: "/alpha-trace/leaderboard/clickhouse",
   alphaTracePortfolios: "/alpha-trace/portfolios",
   alphaTracePortfolioDetail: (portfolioId = ":portfolioId") => `/alpha-trace/portfolios/${portfolioId}`,
   alphaTracePortfolioHoldings: (portfolioId = ":portfolioId") => `/alpha-trace/portfolios/${portfolioId}/holdings`,
@@ -91,13 +97,26 @@ export const ENDPOINTS = {
   alphaTraceDecisionAgentRun: (decisionId = ":decisionId") => `/alpha-trace/decisions/${decisionId}/agent-run`,
   alphaTraceDataSources: "/alpha-trace/data-sources",
   alphaTraceDataApiCatalog: "/alpha-trace/data-sources/api-catalog",
+  alphaTraceLixingerLlmContext: "/alpha-trace/lixinger/llm-context",
   alphaTraceDataSourceFileImports: "/alpha-trace/data-sources/file-imports",
   alphaTraceDataSourceImportBatches: "/alpha-trace/data-sources/file-imports/imports",
   alphaTraceDataSourceImportRows: (importId = ":importId") => `/alpha-trace/data-sources/file-imports/imports/${importId}/rows`,
+  alphaTraceClickHouseOverview: "/alpha-trace/data-sources/clickhouse/overview",
+  alphaTraceClickHouseTableRows: (database = ":database", table = ":table") => `/alpha-trace/data-sources/clickhouse/tables/${database}/${table}/rows`,
+  alphaTraceDatasetBindings: "/alpha-trace/data-sources/dataset-bindings",
+  alphaTraceDatasetBinding: (bindingId = ":bindingId") => `/alpha-trace/data-sources/dataset-bindings/${bindingId}`,
   alphaTraceDataSourceLocalImportFiles: "/alpha-trace/data-sources/file-imports/local-files",
   alphaTraceDataSourceLocalImport: "/alpha-trace/data-sources/file-imports/local-files/import",
   alphaTraceDataSourceDetail: (sourceId = ":sourceId") => `/alpha-trace/data-sources/${sourceId}`,
   alphaTraceDataSourceTasks: (sourceId = ":sourceId") => `/alpha-trace/data-sources/${sourceId}/tasks`,
+  alphaTraceLixingerStatus: "/alpha-trace/lixinger/status",
+  alphaTraceLixingerSearch: "/alpha-trace/lixinger/search",
+  alphaTraceResearchWorkspaces: "/alpha-trace/research-workspaces",
+  alphaTraceResearchWorkspaceTaxonomy: "/alpha-trace/research-workspaces/taxonomy",
+  alphaTraceResearchWorkspaceEnsure: "/alpha-trace/research-workspaces/ensure",
+  alphaTraceResearchWorkspaceDetail: (workspaceId = ":workspaceId") => `/alpha-trace/research-workspaces/${workspaceId}`,
+  alphaTraceResearchWorkspaceThreads: (workspaceId = ":workspaceId") => `/alpha-trace/research-workspaces/${workspaceId}/threads`,
+  alphaTraceResearchWorkspaceReviews: (workspaceId = ":workspaceId") => `/alpha-trace/research-workspaces/${workspaceId}/reviews`,
 } as const;
 
 export const ASSETS = ENDPOINTS.assets;
@@ -164,6 +183,9 @@ export const ALPHA_TRACE_AGENT_RUNTIME_LOGS = ENDPOINTS.alphaTraceAgentRuntimeLo
 export const ALPHA_TRACE_AGENT_RUNTIME_WORKERS = ENDPOINTS.alphaTraceAgentRuntimeWorkers;
 export const ALPHA_TRACE_DEMO_AGENT_RUN = ENDPOINTS.alphaTraceDemoAgentRun;
 export const ALPHA_TRACE_SUBMIT_AGENT_RUN = ENDPOINTS.alphaTraceSubmitAgentRun;
+export const RESEARCH_ASSISTANT_SUBMIT_AGENT_RUN = ENDPOINTS.researchAssistantSubmitAgentRun;
+export const ALPHA_TRACE_DASHBOARD_SUMMARY = ENDPOINTS.alphaTraceDashboardSummary;
+export const ALPHA_TRACE_DASHBOARD_FUND_TRENDS = ENDPOINTS.alphaTraceDashboardFundTrends;
 export const ALPHA_TRACE_EVIDENCE = ENDPOINTS.alphaTraceEvidence;
 export const ALPHA_TRACE_EVIDENCE_DETAIL = ENDPOINTS.alphaTraceEvidenceDetail;
 export const ALPHA_TRACE_EVIDENCE_SEARCH = ENDPOINTS.alphaTraceEvidenceSearch;
@@ -172,6 +194,7 @@ export const ALPHA_TRACE_ASSET_DETAIL = ENDPOINTS.alphaTraceAssetDetail;
 export const ALPHA_TRACE_ASSET_EVIDENCE = ENDPOINTS.alphaTraceAssetEvidence;
 export const ALPHA_TRACE_MARKET_QUOTE = ENDPOINTS.alphaTraceMarketQuote;
 export const ALPHA_TRACE_MARKET_SNAPSHOT = ENDPOINTS.alphaTraceMarketSnapshot;
+export const ALPHA_TRACE_FUND_MANAGERS = ENDPOINTS.alphaTraceFundManagers;
 export const ALPHA_TRACE_MARKET_KLINES = ENDPOINTS.alphaTraceMarketKlines;
 export const ALPHA_TRACE_MARKET_INDICATORS = ENDPOINTS.alphaTraceMarketIndicators;
 export const ALPHA_TRACE_STRATEGIES = ENDPOINTS.alphaTraceStrategies;
@@ -195,7 +218,11 @@ export const ALPHA_TRACE_DATA_API_CATALOG = ENDPOINTS.alphaTraceDataApiCatalog;
 export const ALPHA_TRACE_DATA_SOURCE_FILE_IMPORTS = ENDPOINTS.alphaTraceDataSourceFileImports;
 export const ALPHA_TRACE_DATA_SOURCE_IMPORT_BATCHES = ENDPOINTS.alphaTraceDataSourceImportBatches;
 export const ALPHA_TRACE_DATA_SOURCE_IMPORT_ROWS = ENDPOINTS.alphaTraceDataSourceImportRows;
+export const ALPHA_TRACE_CLICKHOUSE_OVERVIEW = ENDPOINTS.alphaTraceClickHouseOverview;
+export const ALPHA_TRACE_DATASET_BINDINGS = ENDPOINTS.alphaTraceDatasetBindings;
+export const ALPHA_TRACE_DATASET_BINDING = ENDPOINTS.alphaTraceDatasetBinding;
 export const ALPHA_TRACE_DATA_SOURCE_LOCAL_IMPORT_FILES = ENDPOINTS.alphaTraceDataSourceLocalImportFiles;
 export const ALPHA_TRACE_DATA_SOURCE_LOCAL_IMPORT = ENDPOINTS.alphaTraceDataSourceLocalImport;
 export const ALPHA_TRACE_DATA_SOURCE_DETAIL = ENDPOINTS.alphaTraceDataSourceDetail;
 export const ALPHA_TRACE_DATA_SOURCE_TASKS = ENDPOINTS.alphaTraceDataSourceTasks;
+export const ALPHA_TRACE_RESEARCH_WORKSPACES = ENDPOINTS.alphaTraceResearchWorkspaces;

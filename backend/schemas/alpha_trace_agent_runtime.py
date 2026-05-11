@@ -4,6 +4,8 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from schemas.research_workspace_taxonomy import ResearchArtifactType, ResearchRunType
+
 
 AgentRuntimeEventType = Literal[
     "agent.run.started",
@@ -64,6 +66,7 @@ class AgentReport(BaseModel):
     title: str
     summary: str
     createdAt: str
+    artifactType: Optional[ResearchArtifactType] = None
 
 
 class AgentDecision(BaseModel):
@@ -77,6 +80,31 @@ class AgentDecision(BaseModel):
     triggerConditions: List[str] = Field(default_factory=list)
     invalidationConditions: List[str] = Field(default_factory=list)
     observationIndicators: List[str] = Field(default_factory=list)
+
+
+class DecisionTraceStep(BaseModel):
+    stepId: str
+    title: str
+    agentName: Optional[str] = None
+    artifactIds: List[str] = Field(default_factory=list)
+    evidenceIds: List[str] = Field(default_factory=list)
+    summary: str = ""
+    status: Literal["pending", "completed", "needs_review"] = "completed"
+
+
+class DecisionTrace(BaseModel):
+    traceId: str
+    runId: str
+    researchRunType: Optional[ResearchRunType] = None
+    artifactIds: List[str] = Field(default_factory=list)
+    evidenceIds: List[str] = Field(default_factory=list)
+    conclusion: str = ""
+    supportSummary: str = ""
+    riskSummary: str = ""
+    openQuestions: List[str] = Field(default_factory=list)
+    reviewStatus: Literal["pending", "approved", "rejected", "needs_revision"] = "pending"
+    steps: List[DecisionTraceStep] = Field(default_factory=list)
+    createdAt: str
 
 
 class RuntimeMetrics(BaseModel):
@@ -103,6 +131,10 @@ class EvidenceReference(BaseModel):
     title: str
     evidenceType: str
     sourceName: str
+    sourceType: Optional[str] = None
+    sourceApiName: Optional[str] = None
+    snapshotId: Optional[str] = None
+    snapshotCapturedAt: Optional[str] = None
     qualityScore: int
     summary: str
     reliabilityScore: Optional[int] = None
@@ -142,6 +174,7 @@ class AgentRun(BaseModel):
     name: str
     target: str
     taskType: str
+    researchRunType: Optional[ResearchRunType] = None
     riskLevel: Literal["low", "medium", "high"]
     status: AgentRunStatus
     assetIds: List[str] = Field(default_factory=list)
@@ -158,6 +191,7 @@ class AgentRun(BaseModel):
     events: List[AgentRuntimeEvent] = Field(default_factory=list)
     evidenceIds: List[str] = Field(default_factory=list)
     finalDecision: AgentDecision
+    decisionTrace: Optional[DecisionTrace] = None
     metrics: RuntimeMetrics = Field(default_factory=RuntimeMetrics)
 
 
@@ -194,6 +228,7 @@ class SubmitAgentRunRequest(BaseModel):
     portfolioId: Optional[str] = None
     strategyId: Optional[str] = None
     taskType: AgentTaskType = "single_asset_analysis"
+    researchRunType: Optional[ResearchRunType] = None
     question: str
     horizon: InvestmentHorizon = "medium_term"
     riskPreference: RiskPreference = "balanced"

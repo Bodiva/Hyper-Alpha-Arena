@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import lru_cache
 from typing import List, Optional
 
 from schemas.alpha_trace_asset import AlphaTraceAssetItem
@@ -135,6 +136,7 @@ class StaticStrategyStore:
         return items
 
 
+@lru_cache(maxsize=1)
 def get_static_strategy_store() -> StaticStrategyStore:
     if get_domain_store_type() == "mysql":
         return MysqlStrategyStore()
