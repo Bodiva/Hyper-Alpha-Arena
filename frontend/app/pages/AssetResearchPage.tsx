@@ -228,8 +228,18 @@ export default function AssetResearchPage({ onOpenAsset }: AssetResearchPageProp
     return filteredAssets.find((asset) => asset.id === chartAssetId) ?? filteredAssets[0];
   }, [chartAssetId, filteredAssets]);
 
+  const statItems = [
+    { label: text.total, value: stats.total },
+    { label: text.etf, value: stats.etf },
+    { label: text.fund, value: stats.fund },
+    { label: text.future, value: stats.future },
+    { label: text.index, value: stats.index },
+    { label: text.evidence, value: stats.evidenceCount },
+    { label: text.runs, value: stats.runCount },
+  ];
+
   return (
-    <div className="flex flex-col gap-4 h-full overflow-auto">
+    <div className="flex flex-col gap-3 h-full overflow-auto">
       <ResearchWorkspaceNav />
 
       {isLoadingAssets ? (
@@ -244,106 +254,62 @@ export default function AssetResearchPage({ onOpenAsset }: AssetResearchPageProp
         </Card>
       ) : null}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>{text.total}</CardDescription>
-            <CardTitle className="text-lg">{stats.total}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>{text.etf}</CardDescription>
-            <CardTitle className="text-lg">{stats.etf}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>{text.fund}</CardDescription>
-            <CardTitle className="text-lg">{stats.fund}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>{text.future}</CardDescription>
-            <CardTitle className="text-lg">{stats.future}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>{text.index}</CardDescription>
-            <CardTitle className="text-lg">{stats.index}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>{text.evidence}</CardDescription>
-            <CardTitle className="text-lg">{stats.evidenceCount}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>{text.runs}</CardDescription>
-            <CardTitle className="text-lg">{stats.runCount}</CardTitle>
-          </CardHeader>
-        </Card>
-      </div>
-
       <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">{isZh ? "筛选" : "Filters"}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="space-y-2">
-            <p className="text-xs font-medium">{text.type}</p>
-            <div className="flex flex-wrap gap-2">
+        <CardContent className="space-y-2 px-3 py-3">
+          <div className="flex flex-wrap items-center gap-2 border-b pb-2">
+            {statItems.map((item) => (
+              <div key={item.label} className="flex min-w-[74px] items-center justify-between gap-2 rounded-md border bg-muted/10 px-2 py-1 text-xs">
+                <span className="text-muted-foreground">{item.label}</span>
+                <span className="font-semibold text-foreground">{item.value}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid gap-2 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.35fr)_minmax(0,1.45fr)_minmax(220px,0.7fr)]">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="w-8 text-xs font-medium text-muted-foreground">{text.type}</span>
               {ASSET_FILTERS.map((item) => (
                 <Button
                   key={item}
                   size="sm"
                   variant={assetFilter === item ? "default" : "outline"}
+                  className="h-7 px-2 text-xs"
                   onClick={() => setAssetFilter(item)}
                 >
                   {optionLabel(item)}
                 </Button>
               ))}
             </div>
-          </div>
 
-          <div className="space-y-2">
-            <p className="text-xs font-medium">{text.market}</p>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="w-8 text-xs font-medium text-muted-foreground">{text.market}</span>
               {MARKET_FILTERS.map((item) => (
                 <Button
                   key={item}
                   size="sm"
                   variant={marketFilter === item ? "default" : "outline"}
+                  className="h-7 px-2 text-xs"
                   onClick={() => setMarketFilter(item)}
                 >
                   {optionLabel(item)}
                 </Button>
               ))}
             </div>
-          </div>
 
-          <div className="space-y-2">
-            <p className="text-xs font-medium">{text.tags}</p>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="w-8 text-xs font-medium text-muted-foreground">{text.tags}</span>
               {TAG_FILTERS.map((item) => (
-                <Button key={item} size="sm" variant={tagFilter === item ? "default" : "outline"} onClick={() => setTagFilter(item)}>
+                <Button key={item} size="sm" variant={tagFilter === item ? "default" : "outline"} className="h-7 px-2 text-xs" onClick={() => setTagFilter(item)}>
                   {optionLabel(item)}
                 </Button>
               ))}
             </div>
-          </div>
 
-          <div className="space-y-2">
-            <p className="text-xs font-medium">{text.search}</p>
             <input
               value={searchKeyword}
               onChange={(event) => setSearchKeyword(event.target.value)}
               placeholder={isZh ? "代码 / 名称 / 标签" : "Symbol / name / tag"}
-              className="w-full md:max-w-md h-9 rounded-md border bg-background px-3 text-sm"
+              className="h-8 w-full rounded-md border bg-background px-3 text-sm"
             />
           </div>
         </CardContent>
@@ -357,6 +323,7 @@ export default function AssetResearchPage({ onOpenAsset }: AssetResearchPageProp
           onSelectAsset={setChartAssetId}
           onOpenAsset={() => handleOpenAsset(chartFocusAsset.id)}
           onStartAgentAnalysis={() => navigateTo("/agent-lab", { assetId: chartFocusAsset.id })}
+          compact
         />
       ) : null}
 

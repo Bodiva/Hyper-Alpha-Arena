@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import os
 from typing import Any, Dict, List, Optional
 
 
@@ -21,6 +22,18 @@ class EvidenceItem:
     sourceApiName: Optional[str] = None
     snapshotId: Optional[str] = None
     snapshotCapturedAt: Optional[str] = None
+
+
+STATIC_EVIDENCE_ENABLED_ENV = "ALPHATRACE_ENABLE_STATIC_EVIDENCE_SEED"
+
+
+def static_evidence_seed_enabled() -> bool:
+    return os.getenv(STATIC_EVIDENCE_ENABLED_ENV, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def is_static_seed_evidence_id(evidence_id: Optional[str]) -> bool:
+    value = str(evidence_id or "")
+    return value.startswith("ev_static_") or value.startswith("ev_stub_")
 
 
 STATIC_EVIDENCE_SEED: List[EvidenceItem] = [
@@ -158,4 +171,6 @@ STATIC_EVIDENCE_SEED: List[EvidenceItem] = [
 
 
 def get_static_evidence_seed() -> List[EvidenceItem]:
+    if not static_evidence_seed_enabled():
+        return []
     return list(STATIC_EVIDENCE_SEED)

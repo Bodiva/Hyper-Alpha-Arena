@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import threading
@@ -19,7 +20,7 @@ from services.clickhouse_business_store import (
 RankingType = Literal["manager", "fund", "etf"]
 LEADERBOARD_CACHE_TTL_SECONDS = 12 * 60 * 60
 LEADERBOARD_CACHE_LIMIT = 200
-LEADERBOARD_CACHE_VERSION = 1
+LEADERBOARD_CACHE_VERSION = 4
 
 _LEADERBOARD_CACHE_REFRESH_LOCK = threading.Lock()
 _LEADERBOARD_CACHE_SCHEDULER_STARTED = False
@@ -36,7 +37,8 @@ def _as_float(value: Any) -> Optional[float]:
     if value is None or value == "":
         return None
     try:
-        return float(value)
+        number = float(value)
+        return number if math.isfinite(number) else None
     except (TypeError, ValueError):
         return None
 
@@ -202,6 +204,14 @@ class ClickHouseLeaderboardStore:
         bounded_offset = max(offset, 0)
         if ranking_type == "manager":
             rows = self._query_manager_rankings(sort_by=sort_by, limit=bounded_limit, offset=bounded_offset)
+            if self._should_use_manager_wide_fallback(sort_by=sort_by, rows=rows, limit=bounded_limit):
+                fallback_rows = self._query_manager_rankings_from_lixinger_wide(
+                    sort_by=sort_by,
+                    limit=bounded_limit,
+                    offset=bounded_offset,
+                )
+                if fallback_rows:
+                    rows = fallback_rows
         elif ranking_type in {"fund", "etf"}:
             rows = self._query_fund_rankings(
                 ranking_type=ranking_type,
@@ -209,10 +219,56 @@ class ClickHouseLeaderboardStore:
                 limit=bounded_limit,
                 offset=bounded_offset,
             )
+            if self._should_use_fund_wide_fallback(
+                ranking_type=ranking_type,
+                sort_by=sort_by,
+                rows=rows,
+                limit=bounded_limit,
+            ):
+                fallback_rows = self._query_fund_rankings_from_lixinger_wide(
+                    ranking_type=ranking_type,
+                    sort_by=sort_by,
+                    limit=bounded_limit,
+                    offset=bounded_offset,
+                )
+                if fallback_rows:
+                    rows = fallback_rows
         else:
             raise ClickHouseStoreError(f"Unsupported ranking type: {ranking_type}")
 
         return [self._normalize_row(row, ranking_type=ranking_type, rank=bounded_offset + index + 1) for index, row in enumerate(rows)]
+
+    def _should_use_fund_wide_fallback(
+        self,
+        *,
+        ranking_type: RankingType,
+        sort_by: str,
+        rows: list[dict[str, Any]],
+        limit: int,
+    ) -> bool:
+        if not rows:
+            return True
+        sample = rows[: max(1, min(limit, 5))]
+        if sort_by == "return1y":
+            return not any(_as_float(row.get("return1y")) is not None for row in sample)
+        if sort_by in {"score", "scale"}:
+            return not any(
+                _as_float(row.get("return1y")) is not None and (_as_float(row.get("scale")) or 0) > 0
+                for row in sample
+            )
+        if ranking_type == "etf":
+            return not any(_as_float(row.get("return1y")) is not None for row in sample)
+        return not any(
+            _as_float(row.get("return1y")) is not None or _as_float(row.get("latestNav")) is not None for row in sample
+        )
+
+    def _should_use_manager_wide_fallback(self, *, sort_by: str, rows: list[dict[str, Any]], limit: int) -> bool:
+        if not rows:
+            return True
+        if sort_by in {"roi", "annualizedRoi"}:
+            return False
+        sample = rows[: max(1, min(limit, 5))]
+        return not any((_as_float(row.get("activeScale")) or 0) > 0 for row in sample)
 
     def _query_manager_rankings(self, *, sort_by: str, limit: int, offset: int) -> list[dict[str, Any]]:
         order_by = _sort_expr("manager", sort_by)
@@ -247,8 +303,20 @@ class ClickHouseLeaderboardStore:
                 scale_latest AS (
                     SELECT
                         stock_code,
-                        argMax(coalesce(exchange_traded_asset_scale, asset_scale), date) AS latest_scale
-                    FROM monitor.factor_fund_shares
+                        argMaxIf(scale_candidate, date, isNotNull(scale_candidate)) AS latest_scale
+                    FROM (
+                        SELECT
+                            stock_code,
+                            date,
+                            multiIf(
+                                ifNull(isFinite(exchange_traded_asset_scale) AND exchange_traded_asset_scale > 0, 0),
+                                exchange_traded_asset_scale,
+                                ifNull(isFinite(asset_scale) AND asset_scale > 0, 0),
+                                asset_scale,
+                                NULL
+                            ) AS scale_candidate
+                        FROM monitor.factor_fund_shares
+                    )
                     GROUP BY stock_code
                 ),
                 fund_roi AS (
@@ -326,6 +394,35 @@ class ClickHouseLeaderboardStore:
             )
         )
 
+    def _query_manager_rankings_from_lixinger_wide(self, *, sort_by: str, limit: int, offset: int) -> list[dict[str, Any]]:
+        order_by = _sort_expr("manager", sort_by)
+        return _rows(
+            self.store.query_json(
+                f"""
+                SELECT
+                    hot.stock_code AS managerCode,
+                    any(info.name) AS managerName,
+                    any(hot.fm_a_mfn) AS activeFundCount,
+                    any(hot.fm_as) AS activeScale,
+                    NULL AS averageAnnualizedRoi,
+                    NULL AS scaleWeightedRoi,
+                    greatest(0, least(100,
+                        42
+                        + log10(1 + ifNull(any(hot.fm_as), 0) / 100000000) * 6
+                        + ifNull(any(hot.fm_a_mfn), 0) * 0.8
+                        + ifNull(any(hot.fm_my), 0) * 1.1
+                    )) AS score
+                FROM monitor.wide_lixinger_cn_fund_manager_hot_fmi AS hot
+                LEFT JOIN monitor.wide_lixinger_cn_fund_manager_info AS info ON info.stock_code = hot.stock_code
+                GROUP BY hot.stock_code
+                HAVING managerName IS NOT NULL AND managerName != ''
+                ORDER BY {order_by}
+                LIMIT {limit} OFFSET {offset}
+                FORMAT JSON
+                """
+            )
+        )
+
     def _query_fund_rankings(self, *, ranking_type: RankingType, sort_by: str, limit: int, offset: int) -> list[dict[str, Any]]:
         order_by = _sort_expr(ranking_type, sort_by)
         if ranking_type == "etf":
@@ -365,6 +462,18 @@ class ClickHouseLeaderboardStore:
             asset_filter = "is_etf = 0"
             asset_type_literal = "FUND"
 
+        scale_expr = """
+                    multiIf(
+                        isNotNull(scale_data.latest_scale),
+                        scale_data.latest_scale,
+                        isNotNull(scale_data.latest_exchange_traded_shares) AND isNotNull(value.latest_nav) AND value.latest_nav > 0,
+                        scale_data.latest_exchange_traded_shares * value.latest_nav,
+                        isNotNull(scale_data.latest_shares) AND isNotNull(value.latest_nav) AND value.latest_nav > 0,
+                        scale_data.latest_shares * value.latest_nav,
+                        NULL
+                    )
+        """.strip()
+
         return _rows(
             self.store.query_json(
                 f"""
@@ -400,8 +509,24 @@ class ClickHouseLeaderboardStore:
                 scale_latest AS (
                     SELECT
                         stock_code,
-                        argMax(ifNull(exchange_traded_asset_scale, asset_scale), date) AS latest_scale
-                    FROM monitor.factor_fund_shares
+                        argMaxIf(scale_candidate, date, isNotNull(scale_candidate)) AS latest_scale,
+                        argMaxIf(shares_candidate, date, isNotNull(shares_candidate)) AS latest_shares,
+                        argMaxIf(exchange_traded_shares_candidate, date, isNotNull(exchange_traded_shares_candidate)) AS latest_exchange_traded_shares
+                    FROM (
+                        SELECT
+                            stock_code,
+                            date,
+                            multiIf(
+                                ifNull(isFinite(exchange_traded_asset_scale) AND exchange_traded_asset_scale > 0, 0),
+                                exchange_traded_asset_scale,
+                                ifNull(isFinite(asset_scale) AND asset_scale > 0, 0),
+                                asset_scale,
+                                NULL
+                            ) AS scale_candidate,
+                            if(ifNull(isFinite(shares) AND shares > 0, 0), shares, NULL) AS shares_candidate,
+                            if(ifNull(isFinite(exchange_traded_shares) AND exchange_traded_shares > 0, 0), exchange_traded_shares, NULL) AS exchange_traded_shares_candidate
+                        FROM monitor.factor_fund_shares
+                    )
                     GROUP BY stock_code
                 ),
                 {value_cte},
@@ -430,7 +555,7 @@ class ClickHouseLeaderboardStore:
                     meta.fund_type AS fundType,
                     meta.operation_mode AS operationMode,
                     '{asset_type_literal}' AS assetType,
-                    scale.latest_scale AS scale,
+                    {scale_expr} AS scale,
                     value.latest_nav AS latestNav,
                     value.latest_date AS latestDate,
                     value.return_1y AS return1y,
@@ -439,17 +564,138 @@ class ClickHouseLeaderboardStore:
                     managers.active_manager_count AS activeManagerCount,
                     managers.representative_manager AS representativeManager,
                     greatest(0, least(100,
-                        46
-                        + least(greatest(ifNull(value.return_1y, 0), -0.5), 1.2) * 22
-                        + log10(1 + ifNull(scale.latest_scale, 0) / 100000000) * 5
-                        - abs(ifNull(drawdown.drawdown, 0)) * 10
-                        + ifNull(value.points, 0) / 160
+                        20
+                        + least(
+                            greatest((least(greatest(ifNull(value.return_1y, -0.3), -0.3), 1.2) + 0.3) / 1.5, 0),
+                            1
+                        ) * 35
+                        + least(greatest(log10(1 + ifNull(({scale_expr}), 0) / 100000000) / 3, 0), 1) * 25
+                        + if(
+                            isNull(drawdown.drawdown),
+                            8,
+                            (1 - least(abs(drawdown.drawdown) / 0.6, 1)) * 15
+                        )
+                        + least(ifNull(value.points, 0) / 240, 1) * 5
                     )) AS score
                 FROM fund_meta AS meta
-                LEFT JOIN scale_latest AS scale ON scale.stock_code = meta.stock_code
+                LEFT JOIN scale_latest AS scale_data ON scale_data.stock_code = meta.stock_code
                 {value_join}
                 LEFT JOIN drawdown_latest AS drawdown ON drawdown.stock_code = meta.stock_code
                 LEFT JOIN turnover_latest AS turnover ON turnover.stock_code = meta.stock_code
+                LEFT JOIN manager_counts AS managers ON managers.stock_code = meta.stock_code
+                WHERE {asset_filter}
+                ORDER BY {order_by}
+                LIMIT {limit} OFFSET {offset}
+                FORMAT JSON
+                """
+            )
+        )
+
+    def _query_fund_rankings_from_lixinger_wide(
+        self,
+        *,
+        ranking_type: RankingType,
+        sort_by: str,
+        limit: int,
+        offset: int,
+    ) -> list[dict[str, Any]]:
+        order_by = _sort_expr(ranking_type, sort_by)
+        asset_filter = "is_etf = 1" if ranking_type == "etf" else "is_etf = 0"
+        asset_type_literal = "ETF" if ranking_type == "etf" else "FUND"
+        return _rows(
+            self.store.query_json(
+                f"""
+                WITH
+                profile_latest AS (
+                    SELECT
+                        stock_code,
+                        argMax(fund_company_name, updated_at) AS fund_company,
+                        argMax(exchange_traded_short_name, updated_at) AS etf_name,
+                        argMax(operation_mode, updated_at) AS operation_mode
+                    FROM monitor.dim_lixinger_fund_profile
+                    GROUP BY stock_code
+                ),
+                fund_meta AS (
+                    SELECT
+                        f.stock_code AS stock_code,
+                        any(f.short_name) AS name,
+                        any(f.fund_second_level) AS fund_type,
+                        any(profile.fund_company) AS fund_company,
+                        any(profile.etf_name) AS etf_name,
+                        any(profile.operation_mode) AS operation_mode,
+                        if(
+                            positionCaseInsensitiveUTF8(any(profile.operation_mode), '交易型开放式') > 0
+                            OR notEmpty(any(profile.etf_name)),
+                            1,
+                            0
+                        ) AS is_etf
+                    FROM monitor.dim_lixinger_fund AS f
+                    LEFT JOIN profile_latest AS profile ON profile.stock_code = f.stock_code
+                    GROUP BY f.stock_code
+                ),
+                scale_latest AS (
+                    SELECT
+                        stock_code,
+                        argMaxIf(scale_candidate, scale_date, isNotNull(scale_candidate)) AS latest_scale
+                    FROM (
+                        SELECT
+                            stock_code,
+                            ifNull(fet_as_d, f_tas_d) AS scale_date,
+                            multiIf(
+                                ifNull(isFinite(fet_as) AND fet_as > 0, 0),
+                                fet_as,
+                                ifNull(isFinite(f_tas) AND f_tas > 0, 0),
+                                f_tas,
+                                NULL
+                            ) AS scale_candidate
+                        FROM monitor.wide_lixinger_cn_fund_hot_f_as
+                    )
+                    GROUP BY stock_code
+                ),
+                return_latest AS (
+                    SELECT
+                        stock_code,
+                        any(f_p_r_y1) AS return_1y,
+                        max(last_data_date) AS latest_date
+                    FROM monitor.wide_lixinger_cn_fund_hot_fp
+                    WHERE isFinite(f_p_r_y1)
+                    GROUP BY stock_code
+                ),
+                manager_counts AS (
+                    SELECT
+                        stock_code,
+                        countIf(departure_date IS NULL) AS active_manager_count,
+                        anyIf(manager_name, departure_date IS NULL) AS representative_manager
+                    FROM monitor.fund_manager_relation
+                    GROUP BY stock_code
+                )
+                SELECT
+                    meta.stock_code AS code,
+                    meta.name AS name,
+                    meta.fund_company AS fundCompany,
+                    meta.fund_type AS fundType,
+                    meta.operation_mode AS operationMode,
+                    '{asset_type_literal}' AS assetType,
+                    scale.latest_scale AS scale,
+                    NULL AS latestNav,
+                    value.latest_date AS latestDate,
+                    value.return_1y AS return1y,
+                    NULL AS drawdown,
+                    NULL AS turnoverRate,
+                    managers.active_manager_count AS activeManagerCount,
+                    managers.representative_manager AS representativeManager,
+                    greatest(0, least(100,
+                        15
+                        + least(
+                            greatest((least(greatest(ifNull(value.return_1y, -0.3), -0.3), 1.2) + 0.3) / 1.5, 0),
+                            1
+                        ) * 45
+                        + least(greatest(log10(1 + ifNull(scale.latest_scale, 0) / 100000000) / 3, 0), 1) * 30
+                        + least(ifNull(managers.active_manager_count, 0), 3) / 3 * 5
+                    )) AS score
+                FROM fund_meta AS meta
+                INNER JOIN return_latest AS value ON value.stock_code = meta.stock_code
+                LEFT JOIN scale_latest AS scale ON scale.stock_code = meta.stock_code
                 LEFT JOIN manager_counts AS managers ON managers.stock_code = meta.stock_code
                 WHERE {asset_filter}
                 ORDER BY {order_by}

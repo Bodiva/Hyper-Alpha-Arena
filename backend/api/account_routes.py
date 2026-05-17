@@ -4,7 +4,7 @@ Account and Asset Curve API Routes (Cleaned)
 
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, inspect
 from typing import List, Optional
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
@@ -53,6 +53,14 @@ def _normalize_bool(value, default=True) -> bool:
     if isinstance(value, str):
         return value.strip().lower() in {"true", "1", "yes", "y", "on"}
     return bool(value)
+
+
+def _db_table_exists(db: Session, table_name: str) -> bool:
+    try:
+        return inspect(db.get_bind()).has_table(table_name)
+    except Exception as exc:
+        logger.warning("Could not inspect database table %s: %s", table_name, exc)
+        return False
 
 
 def _serialize_strategy(account: Account, strategy, db: Session = None) -> StrategyConfig:
@@ -1393,14 +1401,18 @@ def check_mainnet_accounts(
         checked_account_ids = set()
 
         # === Check new multi-wallet architecture (hyperliquid_wallets table) ===
-        # Query accounts with mainnet wallet in hyperliquid_wallets table and trading enabled
-        mainnet_wallets = db.query(HyperliquidWallet, Account).join(
-            Account, HyperliquidWallet.account_id == Account.id
-        ).filter(
-            HyperliquidWallet.environment == "mainnet",
-            HyperliquidWallet.private_key_encrypted.isnot(None),
-            Account.auto_trading_enabled == "true"
-        ).all()
+        # Optional in AlphaTrace UAT: deployments that only run research should not fail if this legacy table is absent.
+        if _db_table_exists(db, "hyperliquid_wallets"):
+            mainnet_wallets = db.query(HyperliquidWallet, Account).join(
+                Account, HyperliquidWallet.account_id == Account.id
+            ).filter(
+                HyperliquidWallet.environment == "mainnet",
+                HyperliquidWallet.private_key_encrypted.isnot(None),
+                Account.auto_trading_enabled == "true"
+            ).all()
+        else:
+            mainnet_wallets = []
+            logger.info("Skipping Hyperliquid wallet builder check because table hyperliquid_wallets is absent.")
 
         logger.info(f"Found {len(mainnet_wallets)} accounts with mainnet wallet in wallets table")
 
@@ -1461,12 +1473,16 @@ def check_mainnet_accounts(
 
         # === Fallback: Check old architecture (accounts table field) ===
         # Query accounts with mainnet key in accounts table (not already checked)
-        old_accounts = db.query(Account).filter(
-            Account.auto_trading_enabled == "true",
-            Account.hyperliquid_mainnet_private_key.isnot(None),
-            Account.hyperliquid_mainnet_private_key != "",
-            Account.is_deleted != True
-        ).all()
+        if _db_table_exists(db, "accounts"):
+            old_accounts = db.query(Account).filter(
+                Account.auto_trading_enabled == "true",
+                Account.hyperliquid_mainnet_private_key.isnot(None),
+                Account.hyperliquid_mainnet_private_key != "",
+                Account.is_deleted != True
+            ).all()
+        else:
+            old_accounts = []
+            logger.info("Skipping legacy account builder check because table accounts is absent.")
 
         # Filter out accounts already checked via wallets table
         old_accounts = [a for a in old_accounts if a.id not in checked_account_ids]
@@ -1531,7 +1547,8 @@ def check_mainnet_accounts(
         )
 
         return {
-            "unauthorized_accounts": unauthorized_accounts
+            "unauthorized_accounts": unauthorized_accounts,
+            "skipped": not _db_table_exists(db, "hyperliquid_wallets") and not _db_table_exists(db, "accounts"),
         }
 
     except Exception as e:

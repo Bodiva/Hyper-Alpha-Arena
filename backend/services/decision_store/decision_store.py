@@ -10,10 +10,17 @@ from schemas.alpha_trace_decision import (
     DecisionExpectedOutcome,
 )
 from services.agent_runtime_store.registry import get_agent_run_store
+from services.evidence_retrieval.static_evidence_seed import is_static_seed_evidence_id, static_evidence_seed_enabled
 
 
 def _normalize_token(value: str | None) -> str:
     return (value or "").replace("-", "_").upper()
+
+
+def _visible_evidence_ids(evidence_ids: List[str]) -> List[str]:
+    if static_evidence_seed_enabled():
+        return evidence_ids
+    return [evidence_id for evidence_id in evidence_ids if not is_static_seed_evidence_id(evidence_id)]
 
 
 class AgentRunDecisionStore:
@@ -110,7 +117,7 @@ class AgentRunDecisionStore:
         decision = self.get_decision(decision_id)
         if not decision:
             return []
-        allowed = set(decision.evidenceIds)
+        allowed = set(_visible_evidence_ids(decision.evidenceIds))
         items = [item for item in self._store.get_evidence(run_id) if item.evidenceId in allowed]
         return items[:limit]
 
@@ -133,7 +140,8 @@ class AgentRunDecisionStore:
         horizon = _normalize_token(decision.horizon)
         created_at = run.completedAt or run.updatedAt or run.startedAt
         risks = decision.risks or ["No explicit risk summary was generated."]
-        evidence_count = len(decision.evidenceIds)
+        visible_evidence_ids = _visible_evidence_ids(decision.evidenceIds)
+        evidence_count = len(visible_evidence_ids)
         report_count = len(run.reports)
         risk_event_count = len([event for event in run.events if event.type == "risk.warning"])
 
@@ -190,7 +198,7 @@ class AgentRunDecisionStore:
             confidence=decision.confidence,
             thesis=decision.thesis,
             risks=risks,
-            evidenceIds=decision.evidenceIds,
+            evidenceIds=visible_evidence_ids,
             expectedOutcome=DecisionExpectedOutcome(
                 targetReturn=0,
                 expectedMaxDrawdown=0,

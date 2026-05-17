@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import math
 import re
 from datetime import date, datetime, time
@@ -162,6 +163,18 @@ def _number(value: Any, default: float = 0) -> float:
     return result
 
 
+def _optional_number(value: Any) -> Optional[float]:
+    if value is None or value == "":
+        return None
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return None
+    if math.isnan(result) or math.isinf(result):
+        return None
+    return result
+
+
 def _int(value: Any, default: int = 0) -> int:
     try:
         return int(_number(value, default))
@@ -174,6 +187,25 @@ def _string(value: Any, default: str = "") -> str:
         return default
     text = str(value).strip()
     return text or default
+
+
+def _display_text(value: Any, default: str = "") -> str:
+    text = _string(value, default)
+    if not text or text == default:
+        return text
+    if text[0] not in "[{":
+        return text
+    try:
+        parsed = json.loads(text)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return text
+    if isinstance(parsed, list):
+        items = [_string(item) for item in parsed if _string(item)]
+        return "；".join(items) or default
+    if isinstance(parsed, dict):
+        items = [_string(item) for item in parsed.values() if _string(item)]
+        return "；".join(items) or default
+    return text
 
 
 def _date_text(value: Any) -> str:
@@ -362,27 +394,45 @@ def _fund_asset_from_row(row: dict[str, Any]) -> AlphaTraceAssetItem:
     market = _display_market(row.get("area_code"), row.get("market"))
     currency = _currency(row.get("area_code"), row.get("market"))
     fund_level = _string(row.get("fund_second_level")) or _string(row.get("fund_first_level")) or "基金"
+    fund_company = _string(row.get("fund_company"))
+    benchmark = _display_text(row.get("performance_benchmark")) or "投研数据仓库: monitor.factor_fund_price_daily"
+    management_fee = _optional_number(row.get("management_fee_rate"))
+    custody_fee = _optional_number(row.get("custody_fee_rate"))
+    expense_ratio = (management_fee or 0) + (custody_fee or 0)
+    latest_nav = _optional_number(row.get("latest_nav"))
+    fund_scale = (
+        _optional_number(row.get("exchange_traded_asset_scale"))
+        if asset_type == "ETF"
+        else _optional_number(row.get("asset_scale"))
+    )
+    if fund_scale is None:
+        fund_scale = amount
+    premium_discount = (
+        latest_close / latest_nav - 1
+        if asset_type == "ETF" and latest_close > 0 and latest_nav is not None and latest_nav > 0
+        else 0
+    )
 
     if asset_type == "ETF":
         profile = {
-            "trackingIndex": "投研数据仓库: monitor.factor_fund_price_daily",
-            "fundCompany": "",
-            "aum": amount,
-            "expenseRatio": 0,
+            "trackingIndex": benchmark,
+            "fundCompany": fund_company,
+            "aum": fund_scale,
+            "expenseRatio": expense_ratio,
             "trackingError": 0,
             "liquidityScore": _liquidity_score(amount, volume),
-            "premiumDiscount": 0,
+            "premiumDiscount": premium_discount,
             "holdings": [],
             "exposures": [],
         }
     else:
         profile = {
             "fundManager": "",
-            "fundCompany": "",
+            "fundCompany": fund_company,
             "fundType": fund_level,
-            "nav": latest_close,
-            "aum": amount,
-            "expenseRatio": 0,
+            "nav": latest_nav if latest_nav is not None else latest_close,
+            "aum": fund_scale,
+            "expenseRatio": expense_ratio,
             "holdings": [],
             "styleExposure": [],
             "drawdown": 0,
@@ -494,6 +544,7 @@ class ClickHouseAssetStore:
         table = "monitor.factor_fund_price_daily" if kind == "fund" else "monitor.factor_index_price_daily"
         code_col = "stock_code"
         point_filter = "" if kind == "fund" else "AND point_type IN ('cp', 'normal', '')"
+        source_table = table
         rows = _rows(
             self.store.query_json(
                 f"""
@@ -518,6 +569,7 @@ class ClickHouseAssetStore:
             )
         )
         if not rows and kind == "fund":
+            source_table = "monitor.factor_fund_net_value_daily"
             rows = _rows(
                 self.store.query_json(
                     f"""
@@ -545,6 +597,26 @@ class ClickHouseAssetStore:
         row = rows[0]
         change = _number(row.get("change"))
         close = _number(row.get("close"))
+        latest_nav = None
+        if kind == "fund":
+            nav_row = self._first_row(
+                f"""
+                SELECT net_value
+                FROM monitor.factor_fund_net_value_daily
+                WHERE fund_code = '{_escape_sql_string(code)}'
+                  AND net_value IS NOT NULL
+                ORDER BY trade_date DESC
+                LIMIT 1
+                FORMAT JSON
+                """
+            )
+            latest_nav = _optional_number(nav_row.get("net_value"))
+        quote_nav = latest_nav if latest_nav is not None else (close if asset.assetType == "FUND" else None)
+        premium_discount = (
+            close / quote_nav - 1
+            if asset.assetType == "ETF" and close > 0 and quote_nav is not None and quote_nav > 0
+            else None
+        )
         return AlphaTraceMarketQuote(
             assetId=asset.id,
             symbol=asset.symbol,
@@ -557,10 +629,10 @@ class ClickHouseAssetStore:
             changePercent=change,
             volume=_number(row.get("volume")),
             amount=_number(row.get("amount")),
-            nav=close if asset.assetType == "FUND" else None,
-            premiumDiscount=None,
+            nav=quote_nav,
+            premiumDiscount=premium_discount,
             timestamp=_iso_datetime(row.get("date")),
-            source=f"投研数据仓库 {table}",
+            source=f"投研数据仓库 {source_table}",
         )
 
     def get_klines(self, asset_id: str, *, period: str = "1d", limit: int = 240) -> list[AlphaTraceMarketKline]:
@@ -768,6 +840,18 @@ class ClickHouseAssetStore:
     def _query_rows(self, query: str) -> list[dict[str, Any]]:
         return _rows(self.store.query_json(query))
 
+    def _optional_first_row(self, query: str) -> dict[str, Any]:
+        try:
+            return self._first_row(query)
+        except ClickHouseStoreError:
+            return {}
+
+    def _optional_query_rows(self, query: str) -> list[dict[str, Any]]:
+        try:
+            return self._query_rows(query)
+        except ClickHouseStoreError:
+            return []
+
     def _wide_columns(self, table_name: str) -> set[str]:
         if table_name in self._wide_column_cache:
             return self._wide_column_cache[table_name]
@@ -847,7 +931,7 @@ class ClickHouseAssetStore:
         manager_code = _safe_code(_string(relation.get("manager_code")))
         safe_manager_code = _escape_sql_string(manager_code)
         manager_name = _string(relation.get("manager_name"), manager_code)
-        basic = self._first_row(
+        basic = self._optional_first_row(
             f"""
             SELECT fund_manager_code, fund_manager_name, gender, birth_year, resume, business_updated_at
             FROM monitor.v_llm_fund_manager_basic
@@ -890,7 +974,7 @@ class ClickHouseAssetStore:
             code_clause = _in_clause(fund_codes)
             profile_by_code = {
                 _string(row.get("stock_code")): row
-                for row in self._query_rows(
+                for row in self._optional_query_rows(
                     f"""
                     SELECT
                         stock_code,
@@ -906,7 +990,7 @@ class ClickHouseAssetStore:
             }
             scale_by_code = {
                 _string(row.get("stock_code")): row
-                for row in self._query_rows(
+                for row in self._optional_query_rows(
                     f"""
                     SELECT
                         stock_code,
@@ -922,7 +1006,7 @@ class ClickHouseAssetStore:
             }
             return_by_code = {
                 _string(row.get("stock_code")): row
-                for row in self._query_rows(
+                for row in self._optional_query_rows(
                     f"""
                     SELECT
                         stock_code,
@@ -942,7 +1026,7 @@ class ClickHouseAssetStore:
             }
             tenure_roi_by_key = {
                 f"{_string(row.get('stock_code'))}|{_date_text(row.get('appointment_date'))}|{_date_text(row.get('departure_date'))}": row
-                for row in self._query_rows(
+                for row in self._optional_query_rows(
                     f"""
                     SELECT
                         rel.stock_code AS stock_code,
@@ -972,7 +1056,7 @@ class ClickHouseAssetStore:
             }
             tenure_nav_roi_by_key = {
                 f"{_string(row.get('stock_code'))}|{_date_text(row.get('appointment_date'))}|{_date_text(row.get('departure_date'))}": row
-                for row in self._query_rows(
+                for row in self._optional_query_rows(
                     f"""
                     SELECT
                         rel.stock_code AS stock_code,
@@ -1002,7 +1086,7 @@ class ClickHouseAssetStore:
             }
             drawdown_by_code = {
                 _string(row.get("stock_code")): row
-                for row in self._query_rows(
+                for row in self._optional_query_rows(
                     f"""
                     SELECT stock_code, argMax(drawdown, date) AS drawdown, max(date) AS drawdown_date
                     FROM monitor.factor_fund_drawdown
@@ -1014,7 +1098,7 @@ class ClickHouseAssetStore:
             }
             turnover_by_code = {
                 _string(row.get("stock_code")): row
-                for row in self._query_rows(
+                for row in self._optional_query_rows(
                     f"""
                     SELECT stock_code, argMax(turnover_rate, date) AS turnover_rate, max(date) AS turnover_date
                     FROM monitor.factor_fund_turnover
@@ -1068,7 +1152,7 @@ class ClickHouseAssetStore:
             )
         managed_funds.sort(key=lambda row: (bool(row["isActive"]), _number(row.get("latestScale"))), reverse=True)
 
-        hot_fmi = self._first_row(
+        hot_fmi = self._optional_first_row(
             f"""
             SELECT fm_a_mfn, fm_as, fm_mfn, fm_my, fm_nb_as, fm_r_fd, business_updated_at
             FROM monitor.wide_lixinger_cn_fund_manager_hot_fmi
@@ -1077,7 +1161,7 @@ class ClickHouseAssetStore:
             FORMAT JSON
             """
         )
-        hot_fmp = self._first_row(
+        hot_fmp = self._optional_first_row(
             f"""
             SELECT
                 fm_cagr_p_r_fs,
@@ -1369,6 +1453,9 @@ class ClickHouseAssetStore:
             if _date_text(value)
         ]
         premium = (quote.price / latest_nav - 1) if latest_nav and latest_nav > 0 else None
+        tracking_valuation = self._tracking_index_valuation_from_benchmark(
+            _string(profile.get("performance_comparison_benchmark"))
+        )
 
         valuation = {
             "净值日期": max(nav_dates) if nav_dates else "-",
@@ -1377,6 +1464,19 @@ class ClickHouseAssetStore:
             "复权净值": reinvestment_nav_value,
             "交易价格": quote.price,
         }
+        if tracking_valuation:
+            valuation.update(
+                {
+                    "跟踪指数": tracking_valuation.get("tracking_index_name"),
+                    "跟踪指数代码": tracking_valuation.get("tracking_index_code"),
+                    "估值日期": _date_text(tracking_valuation.get("date")) or "-",
+                    "PE_TTM_MC": tracking_valuation.get("pe_ttm_mcw"),
+                    "PE_TTM_等权": tracking_valuation.get("pe_ttm_ew"),
+                    "PB_MC": tracking_valuation.get("pb_mcw"),
+                    "PB_等权": tracking_valuation.get("pb_ew"),
+                    "股息率": tracking_valuation.get("dyr_mcw"),
+                }
+            )
         liquidity = {
             "最新成交额": quote.amount,
             "最新成交量": quote.volume,
@@ -1391,7 +1491,8 @@ class ClickHouseAssetStore:
             "近1月收益": returns.get("return_1m"),
             "近3月收益": returns.get("return_3m"),
             "近1年收益": returns.get("return_1y"),
-            "近1年最大回撤": _number(drawdown.get("drawdown")),
+            "年化波动率": returns.get("annualized_volatility"),
+            "近1年最大回撤": _optional_number(drawdown.get("drawdown")) if drawdown else returns.get("max_drawdown"),
             "回撤口径": _string(drawdown.get("granularity"), "-"),
             "换手率": _number(turnover.get("turnover_rate")),
             "换手日期": _date_text(turnover.get("date")) or "-",
@@ -1404,7 +1505,7 @@ class ClickHouseAssetStore:
             "托管人": _string(profile.get("custodian_name"), "-"),
             "成立日": _date_text(profile.get("inception_date")) or "-",
             "运作方式": _string(profile.get("operation_mode"), "-"),
-            "业绩基准": _string(profile.get("performance_comparison_benchmark"), "-"),
+            "业绩基准": _display_text(profile.get("performance_comparison_benchmark"), "-"),
             "风险收益特征": _string(profile.get("risk_return_characteristics"), "-"),
             "费率/基础画像": _join_wide_summaries([wide_summaries.get("cn_fund_hot_ff", "")]),
         }
@@ -1439,6 +1540,34 @@ class ClickHouseAssetStore:
                 if section[key] == "":
                     section.pop(key)
         return valuation, liquidity, volatility, trend, fund_flow, premium_discount
+
+    def _tracking_index_valuation_from_benchmark(self, benchmark: str) -> dict[str, Any]:
+        if not benchmark:
+            return {}
+        safe_benchmark = _escape_sql_string(benchmark)
+        return self._first_row(
+            f"""
+            WITH latest AS (
+                SELECT stock_code, max(date) AS latest_date
+                FROM monitor.factor_index_valuation_daily
+                GROUP BY stock_code
+            )
+            SELECT
+                idx.stock_code AS tracking_index_code,
+                idx.name AS tracking_index_name,
+                valuation.*
+            FROM monitor.dim_lixinger_index AS idx
+            INNER JOIN latest
+                ON latest.stock_code = idx.stock_code
+            INNER JOIN monitor.factor_index_valuation_daily AS valuation
+                ON valuation.stock_code = latest.stock_code
+               AND valuation.date = latest.latest_date
+            WHERE positionCaseInsensitiveUTF8('{safe_benchmark}', idx.name) > 0
+            ORDER BY lengthUTF8(idx.name) DESC
+            LIMIT 1
+            FORMAT JSON
+            """
+        )
 
     def _index_snapshot_sections(
         self,
@@ -1480,6 +1609,7 @@ class ClickHouseAssetStore:
             """
         )
         wide_summaries = self._index_wide_summaries(code)
+        returns = self._return_metrics(self.get_klines(make_ck_asset_id("index", code), limit=260))
         valuation_section = {
             "估值日期": _date_text(valuation.get("date")) or "-",
             "PE_TTM_MC": valuation.get("pe_ttm_mcw"),
@@ -1499,7 +1629,9 @@ class ClickHouseAssetStore:
             ),
         }
         volatility_section = {
-            "近1年最大回撤": _number(drawdown.get("drawdown")),
+            "年化波动率": returns.get("annualized_volatility"),
+            "近1年收益": returns.get("return_1y"),
+            "近1年最大回撤": _optional_number(drawdown.get("drawdown")) if drawdown else returns.get("max_drawdown"),
             "回撤口径": _string(drawdown.get("granularity"), "-"),
             "回撤日期": _date_text(drawdown.get("date")) or "-",
         }
@@ -1521,7 +1653,13 @@ class ClickHouseAssetStore:
 
     def _return_metrics(self, klines: list[AlphaTraceMarketKline]) -> dict[str, Optional[float]]:
         if len(klines) < 2:
-            return {"return_1m": None, "return_3m": None, "return_1y": None}
+            return {
+                "return_1m": None,
+                "return_3m": None,
+                "return_1y": None,
+                "annualized_volatility": None,
+                "max_drawdown": None,
+            }
         latest = klines[-1].close
 
         def calc(days: int) -> Optional[float]:
@@ -1530,10 +1668,35 @@ class ClickHouseAssetStore:
             base = klines[-days - 1].close
             return latest / base - 1 if base > 0 else None
 
+        closes = [point.close for point in klines[-253:] if point.close > 0]
+        daily_returns = [
+            closes[index] / closes[index - 1] - 1
+            for index in range(1, len(closes))
+            if closes[index - 1] > 0
+        ]
+        annualized_volatility = None
+        if len(daily_returns) >= 2:
+            mean_return = sum(daily_returns) / len(daily_returns)
+            variance = sum((value - mean_return) ** 2 for value in daily_returns) / (len(daily_returns) - 1)
+            annualized_volatility = math.sqrt(variance) * math.sqrt(252)
+
+        max_drawdown = None
+        if closes:
+            peak = closes[0]
+            worst = 0.0
+            for close in closes:
+                if close > peak:
+                    peak = close
+                if peak > 0:
+                    worst = min(worst, close / peak - 1)
+            max_drawdown = worst
+
         return {
             "return_1m": calc(21),
             "return_3m": calc(63),
             "return_1y": calc(252),
+            "annualized_volatility": annualized_volatility,
+            "max_drawdown": max_drawdown,
         }
 
     def _query_funds(self, *, keyword: Optional[str] = None, code: Optional[str] = None, limit: int = 100) -> list[dict[str, Any]]:
@@ -1550,6 +1713,39 @@ class ClickHouseAssetStore:
         return _rows(
             self.store.query_json(
                 f"""
+                WITH
+                    profile_latest AS (
+                        SELECT
+                            stock_code,
+                            argMax(fund_company_name, updated_at) AS fund_company,
+                            argMax(performance_comparison_benchmark, updated_at) AS performance_benchmark,
+                            argMax(operation_mode, updated_at) AS operation_mode
+                        FROM monitor.dim_lixinger_fund_profile
+                        GROUP BY stock_code
+                    ),
+                    fee_latest AS (
+                        SELECT
+                            stock_code,
+                            argMax(management_fee_rate, date) AS management_fee_rate,
+                            argMax(custody_fee_rate, date) AS custody_fee_rate
+                        FROM monitor.fund_fee
+                        GROUP BY stock_code
+                    ),
+                    shares_latest AS (
+                        SELECT
+                            stock_code,
+                            argMax(exchange_traded_asset_scale, date) AS exchange_traded_asset_scale,
+                            argMax(asset_scale, date) AS asset_scale
+                        FROM monitor.factor_fund_shares
+                        GROUP BY stock_code
+                    ),
+                    nav_latest AS (
+                        SELECT
+                            fund_code AS stock_code,
+                            argMax(net_value, trade_date) AS latest_nav
+                        FROM monitor.factor_fund_net_value_daily
+                        GROUP BY fund_code
+                    )
                 SELECT
                     f.stock_code AS stock_code,
                     any(f.name) AS name,
@@ -1563,9 +1759,21 @@ class ClickHouseAssetStore:
                     argMax(p.close, p.date) AS latest_close,
                     argMax(p.amount, p.date) AS latest_amount,
                     argMax(p.volume, p.date) AS latest_volume,
-                    uniqExactIf(p.date, p.close IS NOT NULL) AS price_points
+                    uniqExactIf(p.date, p.close IS NOT NULL) AS price_points,
+                    any(profile.fund_company) AS fund_company,
+                    any(profile.performance_benchmark) AS performance_benchmark,
+                    any(profile.operation_mode) AS operation_mode,
+                    any(fee.management_fee_rate) AS management_fee_rate,
+                    any(fee.custody_fee_rate) AS custody_fee_rate,
+                    any(shares.exchange_traded_asset_scale) AS exchange_traded_asset_scale,
+                    any(shares.asset_scale) AS asset_scale,
+                    any(nav.latest_nav) AS latest_nav
                 FROM monitor.dim_lixinger_fund AS f
                 LEFT JOIN monitor.factor_fund_price_daily AS p ON p.stock_code = f.stock_code
+                LEFT JOIN profile_latest AS profile ON profile.stock_code = f.stock_code
+                LEFT JOIN fee_latest AS fee ON fee.stock_code = f.stock_code
+                LEFT JOIN shares_latest AS shares ON shares.stock_code = f.stock_code
+                LEFT JOIN nav_latest AS nav ON nav.stock_code = f.stock_code
                 {where}
                 GROUP BY f.stock_code
                 ORDER BY latest_date DESC, latest_amount DESC

@@ -29,7 +29,7 @@ import {
   Zap,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
-import { Line, LineChart, ResponsiveContainer, Tooltip, YAxis } from "recharts";
+import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import remarkGfm from "remark-gfm";
 import { apiRequest } from "@/lib/api";
 import { navigateTo } from "@/shared/lib/navigation";
@@ -158,6 +158,12 @@ const marketCardPlaceholders = [
     semanticLabel: "美股 / 港股 / 商品 / 全球配置",
     hint: "等待跨境 ETF 与 QDII 净值数据",
   },
+  {
+    name: "商品与另类",
+    symbol: "ALT_ASSET",
+    semanticLabel: "黄金 / 原油 / 商品 / 多资产",
+    hint: "等待商品 ETF 与另类资产数据",
+  },
 ];
 
 const stockResults = [
@@ -285,7 +291,7 @@ async function fetchDashboardTestBochaFeed(options: { llm?: boolean; timeoutMs?:
 }
 
 async function fetchDashboardTestMarketCards() {
-  const response = await apiRequest("/alpha-trace/dashboard/test/market-cards?limit=5");
+  const response = await apiRequest("/alpha-trace/dashboard/test/market-cards?limit=6");
   return response.json() as Promise<DashboardTestMarketCardsResponse>;
 }
 
@@ -532,15 +538,16 @@ function IndexCardContent({ index }: { index: IndexData }) {
       </div>
       <div className="lat-index-chart">
         {chartData.length > 1 ? (
-          <ResponsiveContainer width="100%" height={100}>
+          <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData}>
-              <Line type="monotone" dataKey="val" stroke={index.isPositive ? "var(--lat-profit)" : "var(--lat-loss)"} strokeWidth={1.5} dot={false} isAnimationActive={false} />
+              <XAxis dataKey="time" hide />
+              <Line type="monotone" dataKey="val" stroke={index.isPositive ? "var(--lat-profit)" : "var(--lat-loss)"} strokeWidth={1.75} dot={false} isAnimationActive={false} />
               <Tooltip
                 content={({ active, payload }) =>
                   active && payload?.[0] ? (
                     <div className="lat-chart-tooltip">
-                      <span>{payload[0].payload.time}</span>
-                      <strong>{fmt2(Number(payload[0].payload.val))}</strong>
+                      <span>{formatMarketCardDate(payload[0].payload.time)}</span>
+                      <strong>收盘价：{fmt2(Number(payload[0].payload.val))}</strong>
                     </div>
                   ) : null
                 }
@@ -569,18 +576,19 @@ function AIDailyBriefCard({
   loading,
   bochaStatus,
   bochaMessage,
-  onInsightsChange,
+  onGenerateBrief,
   onReadFull,
 }: {
   insights: Insight[];
   loading: boolean;
   bochaStatus?: string;
   bochaMessage?: string | null;
-  onInsightsChange: (updater: (items: Insight[]) => Insight[]) => void;
+  onGenerateBrief: () => Promise<Insight | null>;
   onReadFull: (id: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
   const latest = insights[0] ?? loadingInsight();
   const hasUsableInsight =
     latest.market_insight_id !== "insight_market_empty" &&
@@ -613,24 +621,21 @@ function AIDailyBriefCard({
       }));
   const briefListLabel = older.length ? "今日较早洞察" : "简报关联来源";
 
-  const generatePersonalized = () => {
+  const generatePersonalized = async () => {
     if (!hasUsableInsight) return;
     setGenerating(true);
-    window.setTimeout(() => {
-      const personalized: Insight = {
-        market_insight_id: `insight-personalized-${Date.now()}`,
-        type: "personalized",
-        headline: "个性化简报：基于实时市场动态提炼关注点",
-        summary:
-          `基于当前市场动态和关注/持仓标的，短线重点关注 ${latest.topics.map((topic) => topic.text).slice(0, 3).join("、") || "市场主线"}。${latest.summary}`,
-        completed_at: new Date().toISOString(),
-        topics: latest.topics.length ? latest.topics : [{ text: "市场动态", trend: "neutral" }],
-        sources: latest.sources,
-      };
-      onInsightsChange((items) => [personalized, ...items]);
+    setGenerateError(null);
+    try {
+      const generated = await onGenerateBrief();
+      if (!generated) {
+        setGenerateError("未生成新的简报，请稍后重试。");
+        return;
+      }
+    } catch {
+      setGenerateError("简报生成失败，请稍后重试。");
+    } finally {
       setGenerating(false);
-      onReadFull(personalized.market_insight_id);
-    }, 600);
+    }
   };
 
   return (
@@ -711,6 +716,7 @@ function AIDailyBriefCard({
               <ArrowRight size={16} />
             </button>
           </div>
+          {generateError && !unavailable ? <p className="lat-brief-action-error">{generateError}</p> : null}
         </div>
         {!unavailable && briefListItems.length > 0 ? (
           <button
@@ -1415,8 +1421,10 @@ export default function DashboardTestPage() {
       setInsights((items) => [
         feed.insight as Insight,
         ...items.filter((item) => (
+          item.market_insight_id !== feed.insight?.market_insight_id &&
           !item.market_insight_id.startsWith("insight_bocha_") &&
           !item.market_insight_id.startsWith("insight_market_cache_") &&
+          !item.market_insight_id.startsWith("insight-personalized-") &&
           item.market_insight_id !== "insight-loading"
         )),
       ]);
@@ -1461,6 +1469,28 @@ export default function DashboardTestPage() {
       applyBochaFeed(llmFeed);
     } catch (error: unknown) {
       setBochaError(error instanceof DOMException && error.name === "AbortError" ? "市场动态更新超时" : "市场动态更新失败");
+    } finally {
+      setBochaRefreshing(false);
+      setBochaLoading(false);
+    }
+  };
+
+  const generateMarketBrief = async (): Promise<Insight | null> => {
+    setBochaRefreshing(true);
+    setBochaLoading(true);
+    setBochaError(null);
+    try {
+      const llmFeed = await fetchDashboardTestBochaFeed({ llm: true, refresh: true, timeoutMs: 90000 });
+      applyBochaFeed(llmFeed);
+      if (llmFeed.status !== "completed" || !llmFeed.insight) {
+        setBochaError(llmFeed.message || "市场简报未生成，请稍后重试。");
+        return null;
+      }
+      setSelectedInsight(llmFeed.insight);
+      return llmFeed.insight;
+    } catch (error: unknown) {
+      setBochaError(error instanceof DOMException && error.name === "AbortError" ? "市场简报生成超时" : "市场简报生成失败");
+      throw error;
     } finally {
       setBochaRefreshing(false);
       setBochaLoading(false);
@@ -1526,7 +1556,7 @@ export default function DashboardTestPage() {
                 loading={bochaLoading}
                 bochaStatus={bochaFeed?.status}
                 bochaMessage={bochaError || bochaFeed?.message}
-                onInsightsChange={(updater) => setInsights((items) => updater(items))}
+                onGenerateBrief={generateMarketBrief}
                 onReadFull={openInsight}
               />
               <NewsFeedCard

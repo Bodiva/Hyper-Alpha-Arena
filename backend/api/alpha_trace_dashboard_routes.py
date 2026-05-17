@@ -32,7 +32,11 @@ from services.clickhouse_business_store import (
     get_clickhouse_business_store,
     get_etf_import_table_name,
 )
-from services.domain_store.mysql_domain_store import get_mysql_domain_database_url
+from services.domain_store.mysql_domain_store import (
+    get_domain_store_type,
+    get_mysql_domain_database_url,
+    get_mysql_domain_store,
+)
 from services.evidence_retrieval.external_search import ExternalEvidenceSearch
 
 
@@ -83,6 +87,11 @@ def _clickhouse_existing_tables(table_names: list[str]) -> set[str]:
             continue
         existing.add(f"{row.get('database')}.{row.get('name')}")
     return {table_name for table_name in normalized if table_name in existing}
+
+
+def _ensure_dashboard_domain_tables() -> None:
+    if get_domain_store_type() == "mysql":
+        get_mysql_domain_store()
 
 
 class DashboardTestNewsItem(BaseModel):
@@ -436,6 +445,7 @@ def _clickhouse_monitor_market_cards(limit: int = 5) -> list[DashboardTestMarket
     try:
         from services.clickhouse_business_store import get_clickhouse_business_store
 
+        target = max(1, min(limit, 8))
         store = get_clickhouse_business_store()
         index_payload = store.query_json(
             """
@@ -513,28 +523,78 @@ def _clickhouse_monitor_market_cards(limit: int = 5) -> list[DashboardTestMarket
             "bond": "固收与债基",
             "QDII": "QDII/跨境",
         }
-        for row in [item for item in fund_payload.get("data", []) if isinstance(item, dict)]:
-            symbol = str(row.get("symbol") or "")
-            fund_type = str(row.get("fund_type") or "")
-            label = fund_labels.get(fund_type, "基金净值")
-            raw_points = row.get("points") if isinstance(row.get("points"), list) else []
-            parsed_points = list(reversed([
-                (str(point[0]), _to_float_or_zero(point[1]))
-                for point in raw_points
-                if isinstance(point, (list, tuple)) and len(point) >= 2
-            ]))
-            card = _build_market_card_from_points(
-                asset_id=f"ck_fund_{symbol}",
-                name=str(row.get("name") or label),
-                symbol=symbol,
-                asset_type="FUND",
-                semantic_label=label,
-                source_name="monitor.factor_fund_net_value_daily",
-                data_source="clickhouse_monitor_fund_net_value_daily",
-                points=parsed_points,
+        def append_fund_cards(rows: list[dict[str, Any]]) -> None:
+            seen_asset_ids = {card.assetId for card in cards}
+            for row in rows:
+                symbol = str(row.get("symbol") or "")
+                if not symbol:
+                    continue
+                asset_id = f"ck_fund_{symbol}"
+                if asset_id in seen_asset_ids:
+                    continue
+                fund_type = str(row.get("fund_type") or "")
+                label = fund_labels.get(fund_type, "基金净值")
+                raw_points = row.get("points") if isinstance(row.get("points"), list) else []
+                parsed_points = list(reversed([
+                    (str(point[0]), _to_float_or_zero(point[1]))
+                    for point in raw_points
+                    if isinstance(point, (list, tuple)) and len(point) >= 2
+                ]))
+                card = _build_market_card_from_points(
+                    asset_id=asset_id,
+                    name=str(row.get("name") or label),
+                    symbol=symbol,
+                    asset_type="FUND",
+                    semantic_label=label,
+                    source_name="monitor.factor_fund_net_value_daily",
+                    data_source="clickhouse_monitor_fund_net_value_daily",
+                    points=parsed_points,
+                )
+                if card:
+                    cards.append(card)
+                    seen_asset_ids.add(asset_id)
+
+        append_fund_cards([item for item in fund_payload.get("data", []) if isinstance(item, dict)])
+
+        if len(cards) < target:
+            fill_limit = target - len(cards)
+            excluded_symbols = [_clickhouse_sql_string(card.symbol) for card in cards if card.symbol]
+            excluded_clause = f"AND fund_code NOT IN ({', '.join(excluded_symbols)})" if excluded_symbols else ""
+            dynamic_fund_payload = store.query_json(
+                f"""
+                SELECT
+                    n.fund_code AS symbol,
+                    any(f.short_name) AS name,
+                    any(f.fund_second_level) AS fund_type,
+                    groupArray((n.trade_date, n.net_value)) AS points,
+                    max(n.trade_date) AS max_trade_date
+                FROM
+                (
+                    SELECT fund_code, trade_date, net_value
+                    FROM monitor.factor_fund_net_value_daily
+                    WHERE fund_code IN
+                    (
+                        SELECT fund_code
+                        FROM monitor.factor_fund_net_value_daily
+                        WHERE net_value IS NOT NULL
+                          {excluded_clause}
+                        GROUP BY fund_code
+                        HAVING count() >= 12
+                        ORDER BY max(trade_date) DESC, fund_code ASC
+                        LIMIT {max(fill_limit * 3, fill_limit)}
+                    )
+                      AND net_value IS NOT NULL
+                    ORDER BY fund_code ASC, trade_date DESC
+                    LIMIT 32 BY fund_code
+                ) AS n
+                LEFT JOIN monitor.dim_lixinger_fund AS f ON f.stock_code = n.fund_code
+                GROUP BY n.fund_code
+                ORDER BY max_trade_date DESC, symbol ASC
+                LIMIT {fill_limit}
+                FORMAT JSON
+                """
             )
-            if card:
-                cards.append(card)
+            append_fund_cards([item for item in dynamic_fund_payload.get("data", []) if isinstance(item, dict)])
 
         priority = {
             "000300": 0,
@@ -545,7 +605,7 @@ def _clickhouse_monitor_market_cards(limit: int = 5) -> list[DashboardTestMarket
             "000905": 5,
         }
         cards.sort(key=lambda card: priority.get(card.symbol, 99))
-        return cards[: max(1, min(limit, 8))]
+        return cards[:target]
     except Exception:
         return []
 
@@ -1339,6 +1399,7 @@ def _public_dashboard_feed_message(status: str, message: str | None) -> str | No
 @router.get("/summary", response_model=AlphaTraceDashboardSummary)
 @router.get("/statistics", response_model=AlphaTraceDashboardSummary)
 def get_alpha_trace_dashboard_summary() -> AlphaTraceDashboardSummary:
+    _ensure_dashboard_domain_tables()
     sql = text(
         """
         SELECT
@@ -1524,10 +1585,14 @@ def get_alpha_trace_dashboard_fund_trends(
         for code, group in grouped.items()
         if group["points"]
     ]
+    target_count = max(1, min(limit, 8))
+    message = None
+    if series and len(series) < target_count:
+        message = f"当前数据源仅有 {len(series)} 个可用标的，导入更多基金或 ETF 后会自动展示更多走势。"
     return AlphaTraceFundTrendsResponse(
         status="completed" if series else "empty",
         tableName=table_name or get_etf_import_table_name(),
-        message=None if series else _CLICKHOUSE_FUND_TRENDS_EMPTY_MESSAGE,
+        message=message if series else _CLICKHOUSE_FUND_TRENDS_EMPTY_MESSAGE,
         series=series,
     )
 

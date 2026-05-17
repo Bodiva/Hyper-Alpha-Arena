@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ArrowDown, ArrowUp, ArrowUpDown, RefreshCw } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -31,12 +32,44 @@ type StyleFilter =
 type RunModeFilter = "ALL" | "BACKTEST" | "PAPER" | "LIVE";
 type TimeRangeFilter = "1M" | "3M" | "6M" | "1Y" | "ALL";
 type RankingTab = ClickHouseRankingType;
+type SortDirection = "asc" | "desc";
+type RankingSortKey =
+  | "rank"
+  | "managerName"
+  | "representativeFundName"
+  | "name"
+  | "fundCompany"
+  | "fundType"
+  | "activeFundCount"
+  | "activeScale"
+  | "scale"
+  | "latestNav"
+  | "return1y"
+  | "drawdown"
+  | "representativeManager"
+  | "averageTenureRoi"
+  | "averageAnnualizedRoi"
+  | "scaleWeightedRoi"
+  | "score"
+  | "rationale";
+
+interface RankingSortState {
+  key: RankingSortKey;
+  direction: SortDirection;
+}
 
 interface RankedLeaderboardItem extends LeaderboardItem {
   compositeScore: number;
   scoreIndex: number;
   ranking: number;
   assetCategory: Exclude<AssetFilter, "ALL">;
+}
+
+type InsightTagTone = "tech" | "growth" | "defense" | "cycle" | "health" | "consumer" | "finance" | "global" | "quality";
+
+interface InsightTag {
+  label: string;
+  tone: InsightTagTone;
 }
 
 const ASSET_FILTERS: AssetFilter[] = ["ALL", "ETF", "FUND", "FUTURE", "MULTI_ASSET"];
@@ -74,6 +107,26 @@ const TIME_RANGE_LABEL: Record<TimeRangeFilter, string> = {
   ALL: "全部",
 };
 
+const DEFAULT_RANKING_SORTS: Record<RankingTab, RankingSortState> = {
+  manager: { key: "score", direction: "desc" },
+  fund: { key: "score", direction: "desc" },
+  etf: { key: "score", direction: "desc" },
+};
+
+const SORTABLE_NUMERIC_KEYS = new Set<RankingSortKey>([
+  "rank",
+  "activeFundCount",
+  "activeScale",
+  "scale",
+  "latestNav",
+  "return1y",
+  "drawdown",
+  "averageTenureRoi",
+  "averageAnnualizedRoi",
+  "scaleWeightedRoi",
+  "score",
+]);
+
 const ASSET_FILTER_LABEL: Record<AssetFilter, string> = {
   ALL: "全部",
   ETF: "ETF",
@@ -109,11 +162,182 @@ function formatRatioPercent(value?: number): string {
   return `${(value * 100).toFixed(1)}%`;
 }
 
+function hasFiniteNumber(value?: number | null): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
 function formatAum(value?: number): string {
   if (typeof value !== "number" || !Number.isFinite(value)) return "-";
   if (value >= 100_000_000) return `${(value / 100_000_000).toFixed(1)} 亿`;
   if (value >= 10_000) return `${(value / 10_000).toFixed(1)} 万`;
   return value.toLocaleString("zh-CN");
+}
+
+function formatDateRange(start?: string | null, end?: string | null): string {
+  if (!start && !end) return "";
+  if (start && end) return `${start} 至 ${end}`;
+  return start ?? end ?? "";
+}
+
+function managerRationale(item: ClickHouseRankingItem): string {
+  const fundCount = item.activeFundCount ?? 0;
+  const representativeFund = item.representativeFundName ?? item.representativeFundCode ?? "-";
+  if (hasFiniteNumber(item.scaleWeightedRoi)) {
+    return `管理 ${fundCount} 只在任基金；代表基金 ${representativeFund}；规模加权任期 ROI ${formatRatioPercent(item.scaleWeightedRoi)}。`;
+  }
+  if (hasFiniteNumber(item.averageTenureRoi)) {
+    return `管理 ${fundCount} 只在任基金；代表基金 ${representativeFund}；平均任期收益 ${formatRatioPercent(item.averageTenureRoi)}。`;
+  }
+  if (hasFiniteNumber(item.averageAnnualizedRoi)) {
+    return `管理 ${fundCount} 只在任基金；代表基金 ${representativeFund}；平均年化收益 ${formatRatioPercent(item.averageAnnualizedRoi)}。`;
+  }
+  return item.rationale || `管理 ${fundCount} 只在任基金；代表基金 ${representativeFund}。`;
+}
+
+function addUniqueInsightTag(tags: InsightTag[], label: string, tone: InsightTagTone): void {
+  if (!tags.some((tag) => tag.label === label)) {
+    tags.push({ label, tone });
+  }
+}
+
+function inferFocusTags(item: ClickHouseRankingItem): InsightTag[] {
+  const tags: InsightTag[] = [];
+  const sourceText = [
+    item.name,
+    item.representativeFundName,
+    item.fundCompany,
+    item.fundType,
+    item.assetType,
+    ...(item.managedFunds ?? []).map((fund) => fund.name),
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const rules: Array<{ pattern: RegExp; label: string; tone: InsightTagTone }> = [
+    { pattern: /人工智能|AI|智能|机器人|算力|云计算|软件|计算机/i, label: "AI 科技", tone: "tech" },
+    { pattern: /半导体|芯片|通信|电子|设备|信创/i, label: "科技硬件", tone: "tech" },
+    { pattern: /科创|创业板|创新|成长|新兴/i, label: "成长弹性", tone: "growth" },
+    { pattern: /红利|低波|价值|央企|国企|公用事业/i, label: "红利价值", tone: "defense" },
+    { pattern: /医药|医疗|生物|创新药|疫苗/i, label: "医药健康", tone: "health" },
+    { pattern: /新能源|光伏|电池|锂|储能|电动车/i, label: "新能源链", tone: "growth" },
+    { pattern: /军工|国防|卫星|高端制造|装备/i, label: "高端制造", tone: "cycle" },
+    { pattern: /消费|食品|白酒|家电|旅游/i, label: "消费复苏", tone: "consumer" },
+    { pattern: /有色|资源|煤炭|钢铁|化工|周期/i, label: "资源周期", tone: "cycle" },
+    { pattern: /证券|银行|保险|金融|非银/i, label: "金融板块", tone: "finance" },
+    { pattern: /港股|恒生|中概|纳斯达克|标普|海外|全球/i, label: "跨境资产", tone: "global" },
+    { pattern: /沪深300|中证A?500|上证50|宽基|指数/i, label: "宽基核心", tone: "quality" },
+    { pattern: /债|货币|短融|信用|利率/i, label: "固收低波", tone: "defense" },
+  ];
+
+  rules.forEach((rule) => {
+    if (rule.pattern.test(sourceText)) {
+      addUniqueInsightTag(tags, rule.label, rule.tone);
+    }
+  });
+
+  if (hasFiniteNumber(item.return1y)) {
+    if (item.return1y >= 1) addUniqueInsightTag(tags, "高弹性收益", "growth");
+    else if (item.return1y >= 0.3) addUniqueInsightTag(tags, "收益领先", "quality");
+  }
+  if (hasFiniteNumber(item.scale) && item.scale >= 20_000_000_000) {
+    addUniqueInsightTag(tags, "大规模流动性", "quality");
+  }
+  if (hasFiniteNumber(item.drawdown) && item.drawdown > -0.05) {
+    addUniqueInsightTag(tags, "回撤控制", "defense");
+  }
+  if ((item.activeFundCount ?? 0) >= 10) {
+    addUniqueInsightTag(tags, "多产品管理", "quality");
+  }
+  if (hasFiniteNumber(item.scaleWeightedRoi) && item.scaleWeightedRoi >= 0.6) {
+    addUniqueInsightTag(tags, "规模收益强", "growth");
+  }
+  if (hasFiniteNumber(item.averageAnnualizedRoi) && item.averageAnnualizedRoi >= 0.3) {
+    addUniqueInsightTag(tags, "年化领先", "quality");
+  }
+
+  if (tags.length === 0) {
+    addUniqueInsightTag(tags, item.rankingType === "manager" ? "综合选基" : "均衡配置", "quality");
+  }
+
+  return tags.slice(0, 4);
+}
+
+function RankingInsightCell({ item, rationale }: { item: ClickHouseRankingItem; rationale: string }) {
+  const tags = inferFocusTags(item);
+  return (
+    <div className="leaderboard-insight-cell">
+      <p>{rationale}</p>
+      <div className="leaderboard-insight-tags">
+        {tags.map((tag) => (
+          <span key={tag.label} className={`leaderboard-insight-tag leaderboard-insight-tag--${tag.tone}`}>
+            {tag.label}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function rankingSortValue(item: ClickHouseRankingItem, key: RankingSortKey): number | string | null | undefined {
+  if (key === "fundType") return item.fundType ?? item.assetType;
+  return item[key as keyof ClickHouseRankingItem] as number | string | null | undefined;
+}
+
+function compareRankingValues(a: ClickHouseRankingItem, b: ClickHouseRankingItem, key: RankingSortKey, direction: SortDirection): number {
+  const multiplier = direction === "asc" ? 1 : -1;
+  const aValue = rankingSortValue(a, key);
+  const bValue = rankingSortValue(b, key);
+  const aEmpty = aValue === null || aValue === undefined || aValue === "";
+  const bEmpty = bValue === null || bValue === undefined || bValue === "";
+  if (aEmpty && bEmpty) return 0;
+  if (aEmpty) return 1;
+  if (bEmpty) return -1;
+
+  if (SORTABLE_NUMERIC_KEYS.has(key)) {
+    const aNumber = Number(aValue);
+    const bNumber = Number(bValue);
+    const aInvalid = Number.isNaN(aNumber);
+    const bInvalid = Number.isNaN(bNumber);
+    if (aInvalid && bInvalid) return 0;
+    if (aInvalid) return 1;
+    if (bInvalid) return -1;
+    return (aNumber - bNumber) * multiplier;
+  }
+
+  return String(aValue).localeCompare(String(bValue), "zh-CN", { numeric: true, sensitivity: "base" }) * multiplier;
+}
+
+function sortRankingRows(rows: ClickHouseRankingItem[], sort: RankingSortState): ClickHouseRankingItem[] {
+  return [...rows].sort((a, b) => compareRankingValues(a, b, sort.key, sort.direction) || a.rank - b.rank);
+}
+
+function SortableTableHead({
+  sortKey,
+  label,
+  activeSort,
+  onSort,
+}: {
+  sortKey: RankingSortKey;
+  label: string;
+  activeSort: RankingSortState;
+  onSort: (key: RankingSortKey) => void;
+}) {
+  const active = activeSort.key === sortKey;
+  const Icon = active ? (activeSort.direction === "asc" ? ArrowUp : ArrowDown) : ArrowUpDown;
+  const ariaSort = active ? (activeSort.direction === "asc" ? "ascending" : "descending") : "none";
+  return (
+    <TableHead aria-sort={ariaSort}>
+      <button
+        type="button"
+        className={`leaderboard-sort-button${active ? " is-active" : ""}`}
+        aria-label={`${label}排序，当前${active ? (activeSort.direction === "asc" ? "升序" : "降序") : "未排序"}`}
+        onClick={() => onSort(sortKey)}
+      >
+        <span>{label}</span>
+        <Icon size={13} />
+      </button>
+    </TableHead>
+  );
 }
 
 function formatManagedFundsTooltip(funds?: ClickHouseRankingItem["managedFunds"]): string {
@@ -148,7 +372,9 @@ export default function LeaderboardPage() {
     etf: [],
   });
   const [activeRankingTab, setActiveRankingTab] = useState<RankingTab>("manager");
+  const [rankingSorts, setRankingSorts] = useState<Record<RankingTab, RankingSortState>>(DEFAULT_RANKING_SORTS);
   const [isLoadingLeaderboard, setIsLoadingLeaderboard] = useState(true);
+  const [isRefreshingLeaderboard, setIsRefreshingLeaderboard] = useState(false);
   const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
 
   const initialRouteParams = useMemo(() => getCurrentHashQueryParams(), []);
@@ -166,42 +392,49 @@ export default function LeaderboardPage() {
   const [runModeFilter, setRunModeFilter] = useState<RunModeFilter>("ALL");
   const [timeRangeFilter, setTimeRangeFilter] = useState<TimeRangeFilter>("ALL");
 
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadLeaderboard = async () => {
+  const loadLeaderboard = async ({ refresh = false, cancelledRef }: { refresh?: boolean; cancelledRef?: { current: boolean } } = {}) => {
+    if (refresh) {
+      setIsRefreshingLeaderboard(true);
+    } else {
       setIsLoadingLeaderboard(true);
-      setLeaderboardError(null);
-      try {
-        const [nextLeaderboard, nextRankings] = await Promise.all([
-          listLeaderboardAsync({ strategyId: linkedStrategyId }),
-          Promise.all([
-            listClickHouseRankingsAsync({ rankingType: "manager", limit: 80 }),
-            listClickHouseRankingsAsync({ rankingType: "fund", limit: 80 }),
-            listClickHouseRankingsAsync({ rankingType: "etf", limit: 80 }),
-          ]),
-        ]);
-        if (cancelled) return;
-        setLeaderboardItems(nextLeaderboard);
-        setClickHouseRankings({
-          manager: nextRankings[0],
-          fund: nextRankings[1],
-          etf: nextRankings[2],
-        });
-      } catch (error) {
-        if (cancelled) return;
-        setLeaderboardItems([]);
-        setClickHouseRankings({ manager: [], fund: [], etf: [] });
-        setLeaderboardError(error instanceof Error ? error.message : String(error));
-      } finally {
-        if (!cancelled) setIsLoadingLeaderboard(false);
+    }
+    setLeaderboardError(null);
+    try {
+      const [nextLeaderboard, nextRankings] = await Promise.all([
+        listLeaderboardAsync({ strategyId: linkedStrategyId }),
+        Promise.all([
+          listClickHouseRankingsAsync({ rankingType: "manager", limit: 80, refresh }),
+          listClickHouseRankingsAsync({ rankingType: "fund", limit: 80, refresh }),
+          listClickHouseRankingsAsync({ rankingType: "etf", limit: 80, refresh }),
+        ]),
+      ]);
+      if (cancelledRef?.current) return;
+      setLeaderboardItems(nextLeaderboard);
+      setClickHouseRankings({
+        manager: nextRankings[0],
+        fund: nextRankings[1],
+        etf: nextRankings[2],
+      });
+    } catch (error) {
+      if (cancelledRef?.current) return;
+      setLeaderboardItems([]);
+      setClickHouseRankings({ manager: [], fund: [], etf: [] });
+      setLeaderboardError(error instanceof Error ? error.message : String(error));
+    } finally {
+      if (!cancelledRef?.current) {
+        setIsLoadingLeaderboard(false);
+        setIsRefreshingLeaderboard(false);
       }
-    };
+    }
+  };
 
-    loadLeaderboard();
+  useEffect(() => {
+    const cancelledRef = { current: false };
+
+    loadLeaderboard({ cancelledRef });
 
     return () => {
-      cancelled = true;
+      cancelledRef.current = true;
     };
   }, [linkedStrategyId]);
 
@@ -303,10 +536,36 @@ export default function LeaderboardPage() {
   const strategyCount = rankedData.length;
   const coverageTypes = new Set(rankedData.map((item) => item.assetCategory));
   const activeRankingRows = clickHouseRankings[activeRankingTab];
+  const activeRankingSort = rankingSorts[activeRankingTab];
+  const sortedActiveRankingRows = useMemo(
+    () => sortRankingRows(activeRankingRows, activeRankingSort),
+    [activeRankingRows, activeRankingSort],
+  );
+  const showManagerScaleColumn = useMemo(
+    () => clickHouseRankings.manager.some((manager) => hasFiniteNumber(manager.activeScale) && manager.activeScale > 0),
+    [clickHouseRankings.manager],
+  );
+  const showManagerScaleWeightedRoiColumn = useMemo(
+    () => clickHouseRankings.manager.some((manager) => hasFiniteNumber(manager.scaleWeightedRoi)),
+    [clickHouseRankings.manager],
+  );
   const topManager = clickHouseRankings.manager[0] ?? null;
   const topFund = clickHouseRankings.fund[0] ?? null;
   const topEtf = clickHouseRankings.etf[0] ?? null;
-  const topActiveRanking = activeRankingRows[0] ?? null;
+  const topActiveRanking = sortedActiveRankingRows[0] ?? null;
+
+  const handleRankingSort = (key: RankingSortKey) => {
+    setRankingSorts((current) => {
+      const previous = current[activeRankingTab];
+      return {
+        ...current,
+        [activeRankingTab]: {
+          key,
+          direction: previous.key === key && previous.direction === "desc" ? "asc" : "desc",
+        },
+      };
+    });
+  };
 
   const returnRank = [...rankedData].sort((a, b) => b.totalReturn - a.totalReturn);
   const drawdownRank = [...rankedData].sort((a, b) => a.maxDrawdown - b.maxDrawdown);
@@ -329,6 +588,16 @@ export default function LeaderboardPage() {
           <p>汇总基金经理、基金、ETF 与 Agent 策略表现，便于快速比较收益、回撤、规模和评分。</p>
         </div>
         <div className="leaderboard-hero-metrics">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => loadLeaderboard({ refresh: true })}
+            disabled={isLoadingLeaderboard || isRefreshingLeaderboard}
+            title="重新计算并更新榜单缓存"
+          >
+            <RefreshCw size={14} className={isRefreshingLeaderboard ? "animate-spin" : undefined} />
+            {isRefreshingLeaderboard ? "更新中" : "更新"}
+          </Button>
           <span>榜单 {activeRankingRows.length}</span>
           <span>策略 {strategyCount}</span>
           <span>交易员 {totalTraderCount}</span>
@@ -413,92 +682,115 @@ export default function LeaderboardPage() {
             ))}
           </div>
           {activeRankingRows.length === 0 ? (
-            <div className="rounded border border-dashed p-6 text-center text-sm text-muted-foreground">
-              暂无可用于排行的数据。
+            <div className="rounded border border-dashed p-6 text-center text-sm text-muted-foreground leaderboard-empty-ranking">
+              <p className="font-medium">当前榜单暂无可展示数据</p>
+              <p className="mt-1 text-xs">请确认 ClickHouse 的基金收益、规模或经理快照已完成同步；同步完成后榜单会自动刷新。</p>
             </div>
           ) : activeRankingTab === "manager" ? (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>排名</TableHead>
-                  <TableHead>基金经理</TableHead>
-                  <TableHead>代表基金</TableHead>
-                  <TableHead>基金公司</TableHead>
-                  <TableHead>在管基金</TableHead>
-                  <TableHead>在管规模</TableHead>
-                  <TableHead>任期收益</TableHead>
-                  <TableHead>年化收益</TableHead>
-                  <TableHead>规模加权收益</TableHead>
-                  <TableHead>综合分</TableHead>
-                  <TableHead>说明</TableHead>
+                  <SortableTableHead sortKey="rank" label="排名" activeSort={activeRankingSort} onSort={handleRankingSort} />
+                  <SortableTableHead sortKey="managerName" label="基金经理" activeSort={activeRankingSort} onSort={handleRankingSort} />
+                  <SortableTableHead sortKey="representativeFundName" label="代表基金" activeSort={activeRankingSort} onSort={handleRankingSort} />
+                  <SortableTableHead sortKey="fundCompany" label="基金公司" activeSort={activeRankingSort} onSort={handleRankingSort} />
+                  <SortableTableHead sortKey="activeFundCount" label="在管基金" activeSort={activeRankingSort} onSort={handleRankingSort} />
+                  {showManagerScaleColumn ? (
+                    <SortableTableHead sortKey="activeScale" label="在管规模" activeSort={activeRankingSort} onSort={handleRankingSort} />
+                  ) : null}
+                  <SortableTableHead sortKey="averageTenureRoi" label="任期收益" activeSort={activeRankingSort} onSort={handleRankingSort} />
+                  <SortableTableHead sortKey="averageAnnualizedRoi" label="年化收益" activeSort={activeRankingSort} onSort={handleRankingSort} />
+                  {showManagerScaleWeightedRoiColumn ? (
+                    <SortableTableHead sortKey="scaleWeightedRoi" label="规模加权收益" activeSort={activeRankingSort} onSort={handleRankingSort} />
+                  ) : null}
+                  <SortableTableHead sortKey="score" label="综合分" activeSort={activeRankingSort} onSort={handleRankingSort} />
+                  <SortableTableHead sortKey="rationale" label="说明" activeSort={activeRankingSort} onSort={handleRankingSort} />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {activeRankingRows.map((manager) => (
-                  <TableRow key={manager.managerCode ?? `${manager.managerName}-${manager.rank}`}>
-                    <TableCell>{manager.rank}</TableCell>
-                    <TableCell className="font-medium">{manager.managerName ?? "-"}</TableCell>
-                    <TableCell>
-                      <div className="space-y-1">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => navigateTo("/assets", { assetId: `ck_fund_${manager.representativeFundCode ?? ""}` })}
-                          disabled={!manager.representativeFundCode}
+                {sortedActiveRankingRows.map((manager, index) => {
+                  const roiDateRange = formatDateRange(manager.earliestRoiStartDate, manager.latestRoiEndDate);
+                  const representativeLabel = manager.representativeFundName ?? manager.representativeFundCode;
+                  return (
+                    <TableRow key={manager.managerCode ?? `${manager.managerName}-${manager.rank}`}>
+                      <TableCell>{index + 1}</TableCell>
+                      <TableCell className="font-medium">{manager.managerName ?? "-"}</TableCell>
+                      <TableCell>
+                        {representativeLabel ? (
+                          <div className="space-y-1">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => navigateTo("/assets", { assetId: `ck_fund_${manager.representativeFundCode ?? ""}` })}
+                              disabled={!manager.representativeFundCode}
+                              className="leaderboard-fund-button"
+                            >
+                              {representativeLabel}
+                            </Button>
+                            {manager.representativeFundCode ? (
+                              <p className="text-xs text-muted-foreground">{manager.representativeFundCode}</p>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">暂无代表基金</span>
+                        )}
+                      </TableCell>
+                      <TableCell>{manager.fundCompany ?? <span className="text-xs text-muted-foreground">待补充</span>}</TableCell>
+                      <TableCell>
+                        <span
+                          className="cursor-help underline decoration-dotted underline-offset-4"
+                          title={formatManagedFundsTooltip(manager.managedFunds)}
                         >
-                          {manager.representativeFundName ?? "-"}
-                        </Button>
-                        <p className="text-xs text-muted-foreground">{manager.representativeFundCode ?? "-"}</p>
-                      </div>
-                    </TableCell>
-                    <TableCell>{manager.fundCompany ?? "-"}</TableCell>
-                    <TableCell>
-                      <span
-                        className="cursor-help underline decoration-dotted underline-offset-4"
-                        title={formatManagedFundsTooltip(manager.managedFunds)}
-                      >
-                        {manager.activeFundCount ?? 0}
-                      </span>
-                    </TableCell>
-                    <TableCell>{formatAum(manager.activeScale)}</TableCell>
-                    <TableCell className={(manager.averageTenureRoi ?? 0) >= 0 ? "text-emerald-600" : "text-red-500"}>
-                      {formatRatioPercent(manager.averageTenureRoi)}
-                    </TableCell>
-                    <TableCell className={(manager.averageAnnualizedRoi ?? 0) >= 0 ? "text-emerald-600" : "text-red-500"}>
-                      {formatRatioPercent(manager.averageAnnualizedRoi)}
-                    </TableCell>
-                    <TableCell className={(manager.scaleWeightedRoi ?? 0) >= 0 ? "text-emerald-600" : "text-red-500"}>
-                      {formatRatioPercent(manager.scaleWeightedRoi)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={manager.score >= 80 ? "default" : "secondary"}>{manager.score.toFixed(1)}</Badge>
-                    </TableCell>
-                    <TableCell className="max-w-[360px] text-xs text-muted-foreground">{manager.rationale}</TableCell>
-                  </TableRow>
-                ))}
+                          {manager.activeFundCount ?? 0}
+                        </span>
+                      </TableCell>
+                      {showManagerScaleColumn ? <TableCell>{formatAum(manager.activeScale)}</TableCell> : null}
+                      <TableCell className={(manager.averageTenureRoi ?? 0) >= 0 ? "text-emerald-600" : "text-red-500"}>
+                        <div className="space-y-1">
+                          <span>{formatRatioPercent(manager.averageTenureRoi)}</span>
+                          {roiDateRange ? <p className="text-xs text-muted-foreground">{roiDateRange}</p> : null}
+                        </div>
+                      </TableCell>
+                      <TableCell className={(manager.averageAnnualizedRoi ?? 0) >= 0 ? "text-emerald-600" : "text-red-500"}>
+                        {formatRatioPercent(manager.averageAnnualizedRoi)}
+                      </TableCell>
+                      {showManagerScaleWeightedRoiColumn ? (
+                        <TableCell className={(manager.scaleWeightedRoi ?? 0) >= 0 ? "text-emerald-600" : "text-red-500"}>
+                          {formatRatioPercent(manager.scaleWeightedRoi)}
+                        </TableCell>
+                      ) : null}
+                      <TableCell>
+                        <Badge variant={manager.score >= 80 ? "default" : "secondary"}>{manager.score.toFixed(1)}</Badge>
+                      </TableCell>
+                      <TableCell className="max-w-[360px] text-xs text-muted-foreground">
+                        <RankingInsightCell item={manager} rationale={managerRationale(manager)} />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>排名</TableHead>
-                  <TableHead>{activeRankingTab === "etf" ? "ETF" : "基金"}</TableHead>
-                  <TableHead>基金公司</TableHead>
-                  <TableHead>类型</TableHead>
-                  <TableHead>规模</TableHead>
-                  <TableHead>最新净值/收盘</TableHead>
-                  <TableHead>近一年收益</TableHead>
-                  <TableHead>回撤</TableHead>
-                  <TableHead>基金经理</TableHead>
-                  <TableHead>综合分</TableHead>
-                  <TableHead>要点</TableHead>
+                  <SortableTableHead sortKey="rank" label="排名" activeSort={activeRankingSort} onSort={handleRankingSort} />
+                  <SortableTableHead sortKey="name" label={activeRankingTab === "etf" ? "ETF" : "基金"} activeSort={activeRankingSort} onSort={handleRankingSort} />
+                  <SortableTableHead sortKey="fundCompany" label="基金公司" activeSort={activeRankingSort} onSort={handleRankingSort} />
+                  <SortableTableHead sortKey="fundType" label="类型" activeSort={activeRankingSort} onSort={handleRankingSort} />
+                  <SortableTableHead sortKey="scale" label="规模" activeSort={activeRankingSort} onSort={handleRankingSort} />
+                  <SortableTableHead sortKey="latestNav" label="最新净值/收盘" activeSort={activeRankingSort} onSort={handleRankingSort} />
+                  <SortableTableHead sortKey="return1y" label="近一年收益" activeSort={activeRankingSort} onSort={handleRankingSort} />
+                  <SortableTableHead sortKey="drawdown" label="回撤" activeSort={activeRankingSort} onSort={handleRankingSort} />
+                  <SortableTableHead sortKey="representativeManager" label="基金经理" activeSort={activeRankingSort} onSort={handleRankingSort} />
+                  <SortableTableHead sortKey="score" label="综合分" activeSort={activeRankingSort} onSort={handleRankingSort} />
+                  <SortableTableHead sortKey="rationale" label="要点" activeSort={activeRankingSort} onSort={handleRankingSort} />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {activeRankingRows.map((fund) => (
+                {sortedActiveRankingRows.map((fund, index) => (
                   <TableRow key={fund.code ?? `${fund.name}-${fund.rank}`}>
-                    <TableCell>{fund.rank}</TableCell>
+                    <TableCell>{index + 1}</TableCell>
                     <TableCell>
                       <div className="space-y-1">
                         <Button
@@ -526,7 +818,9 @@ export default function LeaderboardPage() {
                     <TableCell>
                       <Badge variant={fund.score >= 80 ? "default" : "secondary"}>{fund.score.toFixed(1)}</Badge>
                     </TableCell>
-                    <TableCell className="max-w-[360px] text-xs text-muted-foreground">{fund.rationale}</TableCell>
+                    <TableCell className="max-w-[400px] text-xs text-muted-foreground">
+                      <RankingInsightCell item={fund} rationale={fund.rationale} />
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

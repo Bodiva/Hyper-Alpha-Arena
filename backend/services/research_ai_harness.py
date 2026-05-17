@@ -270,6 +270,8 @@ TOOL_CLASSIFIERS: Dict[str, Callable[[str, Dict[str, Any]], ToolExecutionMeta]] 
     "get_klines": _classify_infra_prone,
     "get_market_regime": _classify_infra_prone,
     "get_market_flow": _classify_infra_prone,
+    "query_clickhouse_market_context": _classify_infra_prone,
+    "search_bocha_evidence": _classify_infra_prone,
     "web_search": _classify_infra_prone,
     "fetch_url": _classify_infra_prone,
     "analyze_tracked_address": _classify_infra_prone,

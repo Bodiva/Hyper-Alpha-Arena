@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Activity, CircleDollarSign } from 'lucide-react'
+import { Activity, CircleDollarSign, LogOut, UserRound } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { useAuth } from '@/contexts/AuthContext'
 import { useCurrentExchangeInfo } from '@/contexts/ExchangeContext'
 import { getClickHouseOverviewAsync } from '@/entities/data-source/api'
 import {
@@ -91,6 +93,7 @@ export default function Header({
   showRuntimeStatus = true,
 }: HeaderProps) {
   const currentExchangeInfo = useCurrentExchangeInfo()
+  const { user, logout } = useAuth()
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatusState>({
     qwen: emptyRuntimeService(),
     bocha: emptyRuntimeService(),
@@ -199,6 +202,15 @@ export default function Header({
             <div className="hidden items-center gap-2 rounded-md border bg-background px-2.5 py-1.5 text-xs text-muted-foreground lg:flex">
               <CircleDollarSign className="h-3.5 w-3.5 text-primary" />
               <span className="max-w-[180px] truncate">{currentAccount.name}</span>
+            </div>
+          ) : null}
+          {user ? (
+            <div className="hidden items-center gap-2 rounded-md border bg-background px-2.5 py-1.5 text-xs text-muted-foreground md:flex">
+              <UserRound data-icon="inline-start" />
+              <span className="max-w-[140px] truncate">{user.displayName || user.name}</span>
+              <Button variant="ghost" size="icon" className="size-6" aria-label="退出登录" onClick={logout}>
+                <LogOut data-icon="inline-start" />
+              </Button>
             </div>
           ) : null}
           <LanguageToggle />

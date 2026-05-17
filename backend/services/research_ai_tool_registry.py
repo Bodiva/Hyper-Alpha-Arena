@@ -80,8 +80,16 @@ def _get_legacy_tool_configs(db: Session) -> dict:
 
 
 def get_tool_configs(db: Session) -> dict:
-    """Read Research AI tool configs from the independent ResearchAiProfile."""
-    return _get_legacy_tool_configs(db)
+    """Read Research AI tool configs from MySQL system config, then legacy profile JSON."""
+    configs = {}
+    try:
+        from services.system_config_store import get_mysql_system_config_store
+
+        configs.update(get_mysql_system_config_store().get_tool_configs())
+    except Exception as exc:
+        logger.debug("MySQL tool config store unavailable: %s", exc)
+    configs.update(_get_legacy_tool_configs(db))
+    return configs
 
 
 def get_custom_tool_registry(configs: dict) -> Dict[str, dict]:
@@ -151,6 +159,15 @@ def normalize_custom_tool_name(value: str) -> str:
 
 def get_tool_api_key(db: Session, tool_name: str) -> Optional[str]:
     """Get decrypted API key for a tool. Returns None if not configured."""
+    try:
+        from services.system_config_store import get_mysql_system_config_store
+
+        api_key = get_mysql_system_config_store().get_tool_api_key(tool_name)
+        if api_key:
+            return api_key
+    except Exception as exc:
+        logger.debug("MySQL tool API key unavailable for %s: %s", tool_name, exc)
+
     from utils.encryption import decrypt_private_key
     configs = _get_legacy_tool_configs(db)
     tool_cfg = configs.get(tool_name, {})

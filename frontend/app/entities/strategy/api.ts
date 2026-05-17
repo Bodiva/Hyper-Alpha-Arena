@@ -44,6 +44,7 @@ export interface ListClickHouseRankingsParams {
   sortBy?: "score" | "roi" | "annualizedRoi" | "scale" | "return1y" | "drawdown";
   limit?: number;
   offset?: number;
+  refresh?: boolean;
 }
 
 interface BackendStrategyListResponse {
@@ -467,6 +468,7 @@ export const listClickHouseRankingsAsync = (
         sortBy: params.sortBy ?? "score",
         limit: params.limit ?? 50,
         offset: params.offset ?? 0,
+        refresh: params.refresh ?? false,
       },
       timeoutMs: 15_000,
     })

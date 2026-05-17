@@ -167,7 +167,8 @@ export default function Sidebar({ currentPage = 'comprehensive', onPageChange, o
       id: 'pinned',
       label: pick('置顶', 'Pinned'),
       items: [
-        { label: pick('市场看板', 'Market Board'), page: 'dashboard-test', icon: LayoutGrid },
+        { label: pick('个人看板', 'Personal Board'), page: 'dashboard-test', icon: LayoutGrid },
+        { label: pick('市场取证', 'Market Evidence'), page: 'research-market-evidence', icon: Network },
         { label: pick('策略雷达', 'Strategy Radar'), page: 'strategy-radar', icon: BarChart3 },
         { label: pick('排行', 'Rankings'), page: 'leaderboard', icon: Trophy },
       ],

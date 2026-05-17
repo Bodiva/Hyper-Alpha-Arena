@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { isRetiredEvidenceId, stripRetiredEvidenceIdsFromText } from "@/shared/lib/evidence-filter";
 
 interface StructuredReportViewProps {
   text?: string;
@@ -26,9 +27,11 @@ const SECTION_TITLE_LABEL: Record<string, string> = {
 
 const stripStructuredJsonBlocks = (text: string): string => {
   return text
-    .replace(/```(?:json|JSON)\s*[\s\S]*?```/g, "")
-    .replace(/```(?:json|JSON)\s*[\s\S]*$/g, "")
-    .replace(/^\s*JSON\s*[:：]\s*{[\s\S]*$/i, "")
+    .replace(/```(?:json|JSON)?\s*[\s\S]*?```/g, "")
+    .replace(/```(?:json|JSON)?\s*[\s\S]*$/g, "")
+    .replace(/\n\s*(?:json|JSON)\s*\n\s*[\[{][\s\S]*$/g, "")
+    .replace(/^\s*(?:json|JSON)\s*\n\s*[\[{][\s\S]*$/g, "")
+    .replace(/^\s*JSON\s*[:：]\s*[\[{][\s\S]*$/i, "")
     .trim();
 };
 
@@ -167,6 +170,10 @@ const renderInline = (text: string): ReactNode[] => {
         </code>,
       );
     } else if (token.startsWith("ev_")) {
+      if (isRetiredEvidenceId(token)) {
+        lastIndex = pattern.lastIndex;
+        continue;
+      }
       nodes.push(
         <code key={key} className="mx-0.5 rounded border border-blue-500/30 bg-blue-500/10 px-1.5 py-0.5 text-[0.88em] font-medium text-blue-700 dark:text-blue-300">
           {token}
@@ -194,7 +201,7 @@ const headingClassName = (level: 2 | 3 | 4, compact: boolean): string => {
 
 const StructuredReportView = ({ text, title, className = "", compact = false }: StructuredReportViewProps) => {
   const originalContent = text?.trim();
-  const content = originalContent ? stripStructuredJsonBlocks(originalContent) : "";
+  const content = originalContent ? stripRetiredEvidenceIdsFromText(stripStructuredJsonBlocks(originalContent)) : "";
 
   if (!content) {
     const jsonOnly = originalContent && !content;

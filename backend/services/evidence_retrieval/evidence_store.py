@@ -6,7 +6,17 @@ from typing import Iterable, List, Optional
 from schemas.alpha_trace_evidence import AlphaTraceEvidenceItem, AlphaTraceExtractedField
 from services.domain_store import get_domain_store_type, get_mysql_domain_store
 from services.evidence_retrieval.retriever import EvidenceRetriever
-from services.evidence_retrieval.static_evidence_seed import EvidenceItem, get_static_evidence_seed
+from services.evidence_retrieval.static_evidence_seed import (
+    EvidenceItem,
+    get_static_evidence_seed,
+    is_static_seed_evidence_id,
+    static_evidence_seed_enabled,
+)
+
+
+def _is_static_seed_api_item(item: AlphaTraceEvidenceItem) -> bool:
+    metadata = item.metadata or {}
+    return bool(metadata.get("staticSeed")) or is_static_seed_evidence_id(item.evidenceId)
 
 
 class StaticEvidenceStore:
@@ -47,6 +57,8 @@ class StaticEvidenceStore:
         return [self._to_api_item(item) for item in items[: max(1, limit)]]
 
     def get_evidence(self, evidence_id: str) -> Optional[AlphaTraceEvidenceItem]:
+        if not static_evidence_seed_enabled() and is_static_seed_evidence_id(evidence_id):
+            return None
         item = self._by_id.get(evidence_id)
         return self._to_api_item(item) if item else None
 
@@ -129,6 +141,8 @@ class MysqlEvidenceStore(StaticEvidenceStore):
             AlphaTraceEvidenceItem.model_validate(item)
             for item in domain_store.fetch_all(domain_store.evidence_items)
         ]
+        if not static_evidence_seed_enabled():
+            self._items = [item for item in self._items if not _is_static_seed_api_item(item)]
         self._by_id = {item.evidenceId: item for item in self._items}
 
     def list_evidence(
@@ -161,6 +175,8 @@ class MysqlEvidenceStore(StaticEvidenceStore):
         return items[: max(1, limit)]
 
     def get_evidence(self, evidence_id: str) -> Optional[AlphaTraceEvidenceItem]:
+        if not static_evidence_seed_enabled() and is_static_seed_evidence_id(evidence_id):
+            return None
         return self._by_id.get(evidence_id)
 
     def search(

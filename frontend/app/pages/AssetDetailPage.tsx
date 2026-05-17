@@ -21,7 +21,7 @@ import {
 import { createDemoAgentRunAsync, getAgentRunsByAssetId } from "@/entities/agent/api";
 import { listStrategies } from "@/entities/strategy/api";
 import { getApiMode } from "@/shared/api/api-mode";
-import { goBackOrDashboard, navigateTo } from "@/shared/lib/navigation";
+import { navigateTo } from "@/shared/lib/navigation";
 import ResearchWorkspaceNav from "@/shared/ui/ResearchWorkspaceNav";
 import ResearchAssetChart from "@/shared/ui/ResearchAssetChart";
 
@@ -75,8 +75,37 @@ const formatDateTime = (value?: string): string => {
 
 const formatPercent = (value: number, digits = 2): string => `${value.toFixed(digits)}%`;
 const formatNumber = (value: number): string => value.toLocaleString("en-US");
+const formatReadableText = (value?: string): string => {
+  const text = value?.trim();
+  if (!text) return "-";
+  if (!text.startsWith("[") && !text.startsWith("{")) return text;
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (Array.isArray(parsed)) return parsed.map((item) => String(item).trim()).filter(Boolean).join("；") || text;
+    if (parsed && typeof parsed === "object") return Object.values(parsed).map((item) => String(item).trim()).filter(Boolean).join("；") || text;
+  } catch {
+    return text;
+  }
+  return text;
+};
 const formatMarketNumber = (value?: number | null, digits = 2): string =>
   typeof value === "number" && Number.isFinite(value) ? value.toLocaleString("en-US", { maximumFractionDigits: digits }) : "-";
+
+const pickMarketNumber = (record: Record<string, unknown> | undefined, keys: string[]): number | null => {
+  if (!record) return null;
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string" && value.trim()) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+  return null;
+};
+
+const formatRatioPercent = (value?: number | null, digits = 1): string =>
+  typeof value === "number" && Number.isFinite(value) ? `${(value * 100).toFixed(digits)}%` : "-";
 
 const formatMarketRecordValue = (record: Record<string, unknown> | undefined, keys: string[]): string => {
   if (!record) return "-";
@@ -86,6 +115,69 @@ const formatMarketRecordValue = (record: Record<string, unknown> | undefined, ke
     if (typeof value === "string" && value.trim()) return value;
   }
   return "-";
+};
+
+const formatMarketRecordRatio = (record: Record<string, unknown> | undefined, keys: string[]): string =>
+  formatRatioPercent(pickMarketNumber(record, keys));
+
+const formatMarketRecordItemCount = (record: Record<string, unknown> | undefined, keys: string[]): string => {
+  if (!record) return "-";
+  for (const key of keys) {
+    const value = record[key];
+    if (Array.isArray(value)) return value.length ? `${value.length} 项` : "-";
+    if (value && typeof value === "object") return `${Object.keys(value).length} 项`;
+  }
+  return "-";
+};
+
+const pickMarketRecordText = (record: Record<string, unknown> | undefined, keys: string[]): string => {
+  if (!record) return "";
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value;
+    if (typeof value === "number" && Number.isFinite(value)) return formatMarketNumber(value);
+  }
+  return "";
+};
+
+const nestedMarketRecord = (record: Record<string, unknown> | undefined, key: string): Record<string, unknown> | undefined => {
+  const value = record?.[key];
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+};
+
+const summarizeFundManagers = (fundFlow: Record<string, unknown> | undefined): string => {
+  const managers = fundFlow?.["管理人"];
+  if (!Array.isArray(managers)) return "-";
+  const names = managers
+    .map((item) =>
+      item && typeof item === "object" && !Array.isArray(item)
+        ? pickMarketRecordText(item as Record<string, unknown>, ["manager_name", "managerName", "name"])
+        : "",
+    )
+    .filter(Boolean);
+  return names.length ? names.slice(0, 3).join(" / ") : "-";
+};
+
+const summarizeFundAllocation = (fundFlow: Record<string, unknown> | undefined): string => {
+  const allocation = nestedMarketRecord(fundFlow, "资产配置");
+  if (!allocation) return "-";
+  const parts = [
+    ["股票", ["股票占比", "equityRatio"]],
+    ["固收", ["固收占比", "fixedIncomeRatio"]],
+    ["现金", ["现金占比", "cashRatio"]],
+  ]
+    .map(([label, keys]) => `${label} ${formatMarketRecordRatio(allocation, keys as string[])}`)
+    .filter((item) => !item.endsWith(" -"));
+  return parts.length ? parts.join(" / ") : "-";
+};
+
+const summarizeFundFees = (fundFlow: Record<string, unknown> | undefined): string => {
+  const fees = nestedMarketRecord(fundFlow, "费用");
+  if (!fees) return "-";
+  const management = formatMarketRecordRatio(fees, ["管理费率", "managementFeeRate"]);
+  const custody = formatMarketRecordRatio(fees, ["托管费率", "custodyFeeRate"]);
+  if (management === "-" && custody === "-") return "-";
+  return `管理 ${management} / 托管 ${custody}`;
 };
 
 const inferRiskLevel = (asset: Asset): "LOW" | "MEDIUM" | "HIGH" => {
@@ -173,12 +265,12 @@ const renderProfilePanel = (asset: Asset) => {
     const etf = asset as ETFAsset;
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-muted-foreground">
-        <p>Tracking Index: {etf.profile.trackingIndex}</p>
+        <p>Tracking Index: {formatReadableText(etf.profile.trackingIndex)}</p>
         <p>Fund Company: {etf.profile.fundCompany}</p>
         <p>AUM: {formatNumber(etf.profile.aum)}</p>
-        <p>Expense Ratio: {formatPercent(etf.profile.expenseRatio)}</p>
+        <p>Expense Ratio: {formatRatioPercent(etf.profile.expenseRatio)}</p>
         <p>Tracking Error: {formatPercent(etf.profile.trackingError)}</p>
-        <p>Premium/Discount: {formatPercent(etf.profile.premiumDiscount)}</p>
+        <p>Premium/Discount: {formatRatioPercent(etf.profile.premiumDiscount, 2)}</p>
         <p>Liquidity Score: {etf.profile.liquidityScore}</p>
       </div>
     );
@@ -193,8 +285,8 @@ const renderProfilePanel = (asset: Asset) => {
         <p>Fund Type: {fund.profile.fundType}</p>
         <p>NAV: {fund.profile.nav.toFixed(3)}</p>
         <p>AUM: {formatNumber(fund.profile.aum)}</p>
-        <p>Expense Ratio: {formatPercent(fund.profile.expenseRatio)}</p>
-        <p>Drawdown: {formatPercent(fund.profile.drawdown)}</p>
+        <p>Expense Ratio: {formatRatioPercent(fund.profile.expenseRatio)}</p>
+        <p>Drawdown: {formatRatioPercent(fund.profile.drawdown)}</p>
         <p>
           Style Exposure:{" "}
           {fund.profile.styleExposure
@@ -443,10 +535,10 @@ export default function AssetDetailPage({ assetId }: AssetDetailPageProps) {
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              {assetError ? `Asset API error: ${assetError}` : "请返回 Asset Research 页面重新选择资产。"}
+              {assetError ? `资产接口错误：${assetError}` : "请在资产研究页面选择有效资产。"}
             </p>
             <Button variant="outline" onClick={goToAssetResearch}>
-              返回 Asset Research
+              打开资产研究
             </Button>
           </CardContent>
         </Card>
@@ -462,7 +554,6 @@ export default function AssetDetailPage({ assetId }: AssetDetailPageProps) {
     }
   })();
   const text = {
-    back: isZh ? "返回" : "Back",
     agent: isZh ? "Agent 分析" : "Agent",
     portfolio: isZh ? "加入组合" : "Portfolio",
     watch: isZh ? "自选" : "Watch",
@@ -491,7 +582,7 @@ export default function AssetDetailPage({ assetId }: AssetDetailPageProps) {
         navigateTo("/agent-lab", { assetId: asset.id });
         return;
       }
-      setDemoRunError(error instanceof Error ? error.message : "Demo Agent Run 创建失败");
+      setDemoRunError(error instanceof Error ? error.message : "Agent Run 创建失败");
     } finally {
       setIsCreatingDemoRun(false);
     }
@@ -530,10 +621,16 @@ export default function AssetDetailPage({ assetId }: AssetDetailPageProps) {
   });
 
   const backtest = avgBacktest(relatedStrategies);
+  const marketReturn = pickMarketNumber(marketSnapshot?.volatility, ["近1年收益", "return_1y", "return1y", "近3月收益", "return_3m"]);
+  const marketVolatility = pickMarketNumber(marketSnapshot?.volatility, ["年化波动率", "annualizedVolatility", "volatility"]);
+  const marketDrawdown = pickMarketNumber(marketSnapshot?.volatility, ["近1年最大回撤", "maxDrawdown", "drawdown"]);
   const metricsSummary = {
-    totalReturn: backtest?.totalReturn ?? null,
-    volatility: backtest?.volatility ?? null,
-    drawdown: backtest?.maxDrawdown ?? null,
+    totalReturn: marketReturn,
+    volatility: marketVolatility,
+    drawdown: marketDrawdown,
+    backtestTotalReturn: backtest?.totalReturn ?? null,
+    backtestVolatility: backtest?.volatility ?? null,
+    backtestDrawdown: backtest?.maxDrawdown ?? null,
     liquidity: inferLiquidity(asset),
     riskLevel: inferRiskLevel(asset),
     exposure: inferExposureSummary(asset),
@@ -542,89 +639,97 @@ export default function AssetDetailPage({ assetId }: AssetDetailPageProps) {
   };
 
   return (
-    <div className="flex flex-col gap-4 h-full overflow-auto">
+    <div className="flex flex-col gap-3 h-full overflow-auto">
       <ResearchWorkspaceNav />
       <Card>
-        <CardHeader>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="space-y-2">
+        <CardHeader className="px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0 space-y-1">
               <div className="flex flex-wrap items-center gap-2">
-                <CardTitle className="text-xl">{asset.symbol}</CardTitle>
-                <Badge variant="secondary">{asset.assetType}</Badge>
+                <CardTitle className="text-lg">{asset.symbol}</CardTitle>
+                <Badge variant="secondary" className="rounded-md">{asset.assetType}</Badge>
+                {asset.tags.slice(0, 4).map((tag) => (
+                  <Badge key={`${asset.id}-${tag}`} variant="outline" className="rounded-md">
+                    {tag}
+                  </Badge>
+                ))}
               </div>
-              <CardDescription>{asset.name}</CardDescription>
+              <CardDescription className="truncate">{asset.name}</CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant="outline" onClick={goBackOrDashboard}>{text.back}</Button>
-              <Button size="sm" onClick={handleStartAgentAnalysis} disabled={isCreatingDemoRun}>
+              <Button size="sm" className="h-8" onClick={handleStartAgentAnalysis} disabled={isCreatingDemoRun}>
                 {isCreatingDemoRun ? "..." : text.agent}
               </Button>
-              <Button size="sm" variant="outline" onClick={() => navigateTo("/portfolio", { assetId: asset.id })}>{text.portfolio}</Button>
-              <Button size="sm" variant="outline">{text.watch}</Button>
-              <Button size="sm" variant="outline" onClick={() => navigateTo("/leaderboard", { assetId: asset.id })}>{text.strategy}</Button>
+              <Button size="sm" variant="outline" className="h-8" onClick={() => navigateTo("/portfolio", { assetId: asset.id })}>{text.portfolio}</Button>
+              <Button size="sm" variant="outline" className="h-8">{text.watch}</Button>
+              <Button size="sm" variant="outline" className="h-8" onClick={() => navigateTo("/leaderboard", { assetId: asset.id })}>{text.strategy}</Button>
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-2">
-          {demoRunError ? <p className="text-xs text-destructive">Demo Agent Run 创建失败：{demoRunError}</p> : null}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs text-muted-foreground">
-            <p>{isZh ? "市场" : "Market"}: {asset.market}</p>
-            <p>CCY: {asset.currency}</p>
-            <p>{isZh ? "更新" : "Updated"}: {formatDateTime(asset.updatedAt)}</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {asset.tags.map((tag) => (
-              <Badge key={`${asset.id}-${tag}`} variant="outline">
-                {tag}
-              </Badge>
-            ))}
+        <CardContent className="border-t px-4 py-2">
+          {demoRunError ? <p className="text-xs text-destructive">Agent Run 创建失败：{demoRunError}</p> : null}
+          <div className="grid grid-cols-1 gap-2 text-xs text-muted-foreground md:grid-cols-3">
+            <p>{isZh ? "市场" : "Market"}: <span className="font-medium text-foreground">{asset.market}</span></p>
+            <p>CCY: <span className="font-medium text-foreground">{asset.currency}</span></p>
+            <p>{isZh ? "更新" : "Updated"}: <span className="font-medium text-foreground">{formatDateTime(asset.updatedAt)}</span></p>
           </div>
         </CardContent>
       </Card>
 
       <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">{text.profile}</CardTitle>
-        </CardHeader>
-        <CardContent>{renderProfilePanel(asset)}</CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">{text.metrics}</CardTitle>
-        </CardHeader>
-        <CardContent className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-2 text-xs">
-          <div className="rounded border p-2">
-            <p className="text-muted-foreground">{isZh ? "收益" : "Return"}</p>
-            <p className="font-medium">{metricsSummary.totalReturn == null ? "-" : formatPercent(metricsSummary.totalReturn, 1)}</p>
+        <CardContent className="grid gap-4 px-4 py-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.45fr)]">
+          <div className="min-w-0">
+            <p className="mb-2 text-sm font-semibold">{text.profile}</p>
+            {renderProfilePanel(asset)}
           </div>
-          <div className="rounded border p-2">
-            <p className="text-muted-foreground">{isZh ? "波动" : "Vol"}</p>
-            <p className="font-medium">{metricsSummary.volatility == null ? "-" : formatPercent(metricsSummary.volatility, 1)}</p>
-          </div>
-          <div className="rounded border p-2">
-            <p className="text-muted-foreground">{isZh ? "回撤" : "Drawdown"}</p>
-            <p className="font-medium">{metricsSummary.drawdown == null ? "-" : formatPercent(metricsSummary.drawdown, 1)}</p>
-          </div>
-          <div className="rounded border p-2">
-            <p className="text-muted-foreground">{isZh ? "流动性" : "Liquidity"}</p>
-            <p className="font-medium">{metricsSummary.liquidity}</p>
-          </div>
-          <div className="rounded border p-2">
-            <p className="text-muted-foreground">{isZh ? "风险" : "Risk"}</p>
-            <p className="font-medium">{metricsSummary.riskLevel}</p>
-          </div>
-          <div className="rounded border p-2">
-            <p className="text-muted-foreground">{isZh ? "暴露" : "Exposure"}</p>
-            <p className="font-medium">{metricsSummary.exposure}</p>
-          </div>
-          <div className="rounded border p-2">
-            <p className="text-muted-foreground">{text.evidence}</p>
-            <p className="font-medium">{metricsSummary.evidenceCount}</p>
-          </div>
-          <div className="rounded border p-2">
-            <p className="text-muted-foreground">{text.runs}</p>
-            <p className="font-medium">{metricsSummary.runCount}</p>
+          <div className="min-w-0">
+            <p className="mb-2 text-sm font-semibold">{text.metrics}</p>
+            <div className="grid grid-cols-2 gap-2 text-xs md:grid-cols-4 xl:grid-cols-8">
+              <div className="rounded border px-2 py-1.5">
+                <p className="text-muted-foreground">{isZh ? "收益" : "Return"}</p>
+                <p className="font-medium">
+                  {metricsSummary.totalReturn == null
+                    ? (metricsSummary.backtestTotalReturn == null ? "-" : formatPercent(metricsSummary.backtestTotalReturn, 1))
+                    : formatRatioPercent(metricsSummary.totalReturn)}
+                </p>
+              </div>
+              <div className="rounded border px-2 py-1.5">
+                <p className="text-muted-foreground">{isZh ? "波动" : "Vol"}</p>
+                <p className="font-medium">
+                  {metricsSummary.volatility == null
+                    ? (metricsSummary.backtestVolatility == null ? "-" : formatPercent(metricsSummary.backtestVolatility, 1))
+                    : formatRatioPercent(metricsSummary.volatility)}
+                </p>
+              </div>
+              <div className="rounded border px-2 py-1.5">
+                <p className="text-muted-foreground">{isZh ? "回撤" : "Drawdown"}</p>
+                <p className="font-medium">
+                  {metricsSummary.drawdown == null
+                    ? (metricsSummary.backtestDrawdown == null ? "-" : formatPercent(metricsSummary.backtestDrawdown, 1))
+                    : formatRatioPercent(metricsSummary.drawdown)}
+                </p>
+              </div>
+              <div className="rounded border px-2 py-1.5">
+                <p className="text-muted-foreground">{isZh ? "流动性" : "Liquidity"}</p>
+                <p className="font-medium">{metricsSummary.liquidity}</p>
+              </div>
+              <div className="rounded border px-2 py-1.5">
+                <p className="text-muted-foreground">{isZh ? "风险" : "Risk"}</p>
+                <p className="font-medium">{metricsSummary.riskLevel}</p>
+              </div>
+              <div className="rounded border px-2 py-1.5">
+                <p className="text-muted-foreground">{isZh ? "暴露" : "Exposure"}</p>
+                <p className="truncate font-medium">{metricsSummary.exposure}</p>
+              </div>
+              <div className="rounded border px-2 py-1.5">
+                <p className="text-muted-foreground">{text.evidence}</p>
+                <p className="font-medium">{metricsSummary.evidenceCount}</p>
+              </div>
+              <div className="rounded border px-2 py-1.5">
+                <p className="text-muted-foreground">{text.runs}</p>
+                <p className="font-medium">{metricsSummary.runCount}</p>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -681,7 +786,7 @@ export default function AssetDetailPage({ assetId }: AssetDetailPageProps) {
                 </div>
                 <div className="rounded border p-2">
                   <p className="text-muted-foreground">Premium</p>
-                  <p className="font-medium">{formatMarketNumber(marketQuote.premiumDiscount, 3)}</p>
+                  <p className="font-medium">{formatRatioPercent(marketQuote.premiumDiscount, 2)}</p>
                 </div>
                 <div className="rounded border p-2">
                   <p className="text-muted-foreground">Source</p>
@@ -694,22 +799,47 @@ export default function AssetDetailPage({ assetId }: AssetDetailPageProps) {
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2">
                 <div className="rounded border p-2">
                   <p className="font-medium">Valuation</p>
-                  <p className="text-muted-foreground">PE: {formatMarketRecordValue(marketSnapshot.valuation, ["pe", "peTtm"])}</p>
-                  <p className="text-muted-foreground">PB: {formatMarketRecordValue(marketSnapshot.valuation, ["pb"])}</p>
+                  {marketSnapshot.assetType === "INDEX" ? (
+                    <>
+                      <p className="text-muted-foreground">PE: {formatMarketRecordValue(marketSnapshot.valuation, ["PE_TTM_MC", "PE_TTM_等权", "pe_ttm_mcw", "pe", "peTtm"])}</p>
+                      <p className="text-muted-foreground">PB: {formatMarketRecordValue(marketSnapshot.valuation, ["PB_MC", "PB_等权", "pb_mcw", "pb"])}</p>
+                      <p className="text-muted-foreground">Dividend: {formatMarketRecordRatio(marketSnapshot.valuation, ["股息率", "dyr_mcw", "dividendYield"])}</p>
+                    </>
+                  ) : (
+                    <>
+                      {formatMarketRecordValue(marketSnapshot.valuation, ["PE_TTM_MC", "PE_TTM_等权", "pe_ttm_mcw", "pe", "peTtm"]) !== "-" ? (
+                        <p className="text-muted-foreground">Tracking PE: {formatMarketRecordValue(marketSnapshot.valuation, ["PE_TTM_MC", "PE_TTM_等权", "pe_ttm_mcw", "pe", "peTtm"])}</p>
+                      ) : null}
+                      {formatMarketRecordValue(marketSnapshot.valuation, ["PB_MC", "PB_等权", "pb_mcw", "pb"]) !== "-" ? (
+                        <p className="text-muted-foreground">Tracking PB: {formatMarketRecordValue(marketSnapshot.valuation, ["PB_MC", "PB_等权", "pb_mcw", "pb"])}</p>
+                      ) : null}
+                      <p className="text-muted-foreground">NAV: {formatMarketRecordValue(marketSnapshot.valuation, ["单位净值", "nav"])}</p>
+                      <p className="text-muted-foreground">Total NAV: {formatMarketRecordValue(marketSnapshot.valuation, ["累计净值", "totalNav"])}</p>
+                      <p className="text-muted-foreground">Reinvested: {formatMarketRecordValue(marketSnapshot.valuation, ["复权净值", "reinvestmentNav"])}</p>
+                      <p className="text-muted-foreground">Premium: {formatMarketRecordRatio(marketSnapshot.premiumDiscount, ["估算溢折价", "premiumDiscount"])}</p>
+                    </>
+                  )}
                 </div>
                 <div className="rounded border p-2">
                   <p className="font-medium">Liquidity</p>
-                  <p className="text-muted-foreground">Score: {formatMarketRecordValue(marketSnapshot.liquidity, ["score", "liquidityScore"])}</p>
-                  <p className="text-muted-foreground">Turnover: {formatMarketRecordValue(marketSnapshot.liquidity, ["turnover", "turnoverRate"])}</p>
+                  <p className="text-muted-foreground">Amount: {formatMarketRecordValue(marketSnapshot.liquidity, ["最新成交额", "amount"])}</p>
+                  <p className="text-muted-foreground">Volume: {formatMarketRecordValue(marketSnapshot.liquidity, ["最新成交量", "volume"])}</p>
+                  <p className="text-muted-foreground">Scale: {formatMarketRecordValue(marketSnapshot.liquidity, ["场内规模", "assetScale"])}</p>
+                  <p className="text-muted-foreground">Turnover: {formatMarketRecordRatio(marketSnapshot.volatility, ["换手率", "turnover", "turnoverRate"])}</p>
                 </div>
                 <div className="rounded border p-2">
                   <p className="font-medium">Volatility / Trend</p>
-                  <p className="text-muted-foreground">Vol: {formatMarketRecordValue(marketSnapshot.volatility, ["volatility", "annualizedVolatility"])}</p>
-                  <p className="text-muted-foreground">Trend: {formatMarketRecordValue(marketSnapshot.trend, ["summary", "direction", "trend"])}</p>
+                  <p className="text-muted-foreground">Return: {formatMarketRecordRatio(marketSnapshot.volatility, ["近1年收益", "return_1y", "近3月收益", "return_3m"])}</p>
+                  <p className="text-muted-foreground">Vol: {formatMarketRecordRatio(marketSnapshot.volatility, ["年化波动率", "volatility", "annualizedVolatility"])}</p>
+                  <p className="text-muted-foreground">Drawdown: {formatMarketRecordRatio(marketSnapshot.volatility, ["近1年最大回撤", "drawdown", "maxDrawdown"])}</p>
+                  <p className="text-muted-foreground">Profile: {formatMarketRecordValue(marketSnapshot.trend, ["基金公司", "运作方式", "company", "summary", "direction", "trend"])}</p>
                 </div>
                 <div className="rounded border p-2">
                   <p className="font-medium">Fund Flow</p>
-                  <p className="text-muted-foreground">Flow: {formatMarketRecordValue(marketSnapshot.fundFlow, ["netInflow", "flow", "summary"])}</p>
+                  <p className="text-muted-foreground">Managers: {summarizeFundManagers(marketSnapshot.fundFlow)}</p>
+                  <p className="text-muted-foreground">Allocation: {summarizeFundAllocation(marketSnapshot.fundFlow)}</p>
+                  <p className="text-muted-foreground">Fees: {summarizeFundFees(marketSnapshot.fundFlow)}</p>
+                  <p className="text-muted-foreground">Holdings: {formatMarketRecordItemCount(marketSnapshot.fundFlow, ["前十大持仓", "前十大成分"])}</p>
                   <p className="text-muted-foreground">Collected: {formatDateTime(marketSnapshot.collectedAt)}</p>
                 </div>
               </div>
@@ -856,7 +986,7 @@ export default function AssetDetailPage({ assetId }: AssetDetailPageProps) {
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
           <Button size="sm" onClick={handleStartAgentAnalysis} disabled={isCreatingDemoRun}>
-            {isCreatingDemoRun ? "正在创建 Demo Run..." : "发起单资产分析"}
+            {isCreatingDemoRun ? "正在创建任务..." : "发起单资产分析"}
           </Button>
           <Button size="sm" variant="outline" onClick={() => navigateTo("/agent-lab", { assetId: asset.id, taskType: "MULTI_ASSET_COMPARISON" })}>与其他资产比较</Button>
           <Button size="sm" variant="outline" onClick={() => navigateTo("/portfolio", { assetId: asset.id })}>加入组合诊断</Button>

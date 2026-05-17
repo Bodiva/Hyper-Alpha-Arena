@@ -10,7 +10,7 @@ Provides endpoints for:
 """
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, case
+from sqlalchemy import func, case, inspect
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 from typing import Optional, List
@@ -48,6 +48,14 @@ router = APIRouter(prefix="/api/hyperliquid", tags=["hyperliquid"])
 
 def _ts_to_iso(ts: float) -> str:
     return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _db_table_exists(db: Session, table_name: str) -> bool:
+    try:
+        return inspect(db.get_bind()).has_table(table_name)
+    except Exception as exc:
+        logger.warning("Could not inspect database table %s: %s", table_name, exc)
+        return False
 
 
 # Request/Response Models
@@ -1735,6 +1743,15 @@ def check_wallet_upgrade_needed(db: Session = Depends(get_db)):
     from database.models import HyperliquidWallet, Account
 
     try:
+        if not _db_table_exists(db, "hyperliquid_wallets"):
+            return {
+                "success": True,
+                "needsUpgrade": [],
+                "count": 0,
+                "skipped": True,
+                "reason": "hyperliquid_wallets table is not present in this deployment.",
+            }
+
         wallets = db.query(HyperliquidWallet, Account).join(
             Account, HyperliquidWallet.account_id == Account.id
         ).filter(

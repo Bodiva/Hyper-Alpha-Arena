@@ -223,6 +223,131 @@
   text-transform: uppercase;
 }
 
+.leaderboard-sort-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  margin: -4px 0;
+  padding: 4px 6px;
+  border: 0 !important;
+  background: transparent !important;
+  color: inherit !important;
+  font: inherit;
+  text-transform: inherit;
+  white-space: nowrap;
+}
+
+.leaderboard-sort-button:hover,
+.leaderboard-sort-button.is-active {
+  background: rgba(255, 255, 255, 0.68) !important;
+  color: var(--lb-text-primary) !important;
+}
+
+.leaderboard-sort-button svg {
+  flex: 0 0 auto;
+  color: currentColor;
+  opacity: 0.64;
+}
+
+.leaderboard-sort-button.is-active svg {
+  opacity: 1;
+}
+
+.leaderboard-fund-button {
+  max-width: 220px;
+  justify-content: flex-start;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.leaderboard-insight-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 260px;
+  line-height: 1.55;
+}
+
+.leaderboard-insight-cell p {
+  margin: 0;
+  color: var(--lb-text-secondary);
+}
+
+.leaderboard-insight-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.leaderboard-insight-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 850;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.leaderboard-insight-tag--tech {
+  border-color: #c7d7f4;
+  background: #edf4ff;
+  color: #27548f;
+}
+
+.leaderboard-insight-tag--growth {
+  border-color: #cce7c2;
+  background: #eef9ea;
+  color: #3f7c39;
+}
+
+.leaderboard-insight-tag--defense {
+  border-color: #ddd6c8;
+  background: #f6f2ea;
+  color: #766345;
+}
+
+.leaderboard-insight-tag--cycle {
+  border-color: #f0d3a8;
+  background: #fff4e3;
+  color: #986013;
+}
+
+.leaderboard-insight-tag--health {
+  border-color: #c7e6dc;
+  background: #edf9f5;
+  color: #28735e;
+}
+
+.leaderboard-insight-tag--consumer {
+  border-color: #f1cfd8;
+  background: #fff0f4;
+  color: #9a3f59;
+}
+
+.leaderboard-insight-tag--finance {
+  border-color: #d1d4ee;
+  background: #f0f1fb;
+  color: #4c569a;
+}
+
+.leaderboard-insight-tag--global {
+  border-color: #d3d8df;
+  background: #f3f6f9;
+  color: #526070;
+}
+
+.leaderboard-insight-tag--quality {
+  border-color: #d7dfbd;
+  background: #f4f8e8;
+  color: #64742e;
+}
+
 .leaderboard-page table {
   border-collapse: separate;
   border-spacing: 0 8px;

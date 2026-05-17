@@ -59,9 +59,9 @@ const AUTO_DATASET_SELECT_VALUE = "__auto_dataset__";
 
 const RUNNER_LABEL: Record<SubmitRunnerKind | string, string> = {
   stub: "演示模式",
-  qwen: "通义千问",
-  alphatrace_native: "AlphaTrace 原生",
-  tradingagents: "TradingAgents",
+  qwen: "flash",
+  alphatrace_native: "plus",
+  tradingagents: "pro",
 };
 
 const RUNNER_META: Record<
@@ -75,21 +75,21 @@ const RUNNER_META: Record<
   }
 > = {
   qwen: {
-    title: "通义千问",
+    title: "flash",
     brief: "AlphaTrace 后端内置 Qwen Runner，适合常规投研问答。",
     backend: "AlphaTrace Backend / Qwen Runner",
     model: "qwen-plus",
     flow: ["AlphaTrace API", "Qwen Runner", "准备数据", "外部搜索", "报告与决策"],
   },
   alphatrace_native: {
-    title: "AlphaTrace 原生",
+    title: "plus",
     brief: "我们自己的多 Agent 编排，保留 AlphaTrace 的证据、报告和决策结构。",
     backend: "AlphaTrace Backend / Native Multi-Agent",
     model: "qwen-plus",
     flow: ["AlphaTrace API", "Native Orchestrator", "准备数据", "外部搜索", "多 Agent", "报告与决策"],
   },
   tradingagents: {
-    title: "TradingAgents",
+    title: "pro",
     brief: "可选外部适配器，用于 TradingAgents PoC，不是主后端。",
     backend: "AlphaTrace Backend / TradingAgents Adapter",
     model: "qwen-plus",
@@ -98,9 +98,9 @@ const RUNNER_META: Record<
   stub: {
     title: "演示模式",
     brief: "仅用于开发调试，不调用真实模型，不使用外部搜索。",
-    backend: "Local Demo / Stub Runner",
+    backend: "本地离线运行器",
     model: "none",
-    flow: ["演示数据", "模拟任务", "模拟报告"],
+    flow: ["离线数据", "本地任务", "结果预览"],
   },
 };
 
@@ -413,7 +413,7 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
   const submitRouteLabel =
     apiMode === "real"
       ? `${SUBMIT_ENDPOINT} -> runnerType=${draftRunner}`
-      : `Mock 数据模式 -> runnerType=${draftRunner}`;
+      : `离线模式 -> runnerType=${draftRunner}`;
   const activeDatasetId = selectedDatasetId === AUTO_DATASET_SELECT_VALUE ? undefined : selectedDatasetId;
   const selectedCatalogDataset = useMemo(
     () => catalogDatasets.find((dataset) => dataset.importId === activeDatasetId),
@@ -728,7 +728,7 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
   const handleCreateDemoRun = async () => {
     setIsCreatingDemoRun(true);
     setDemoRunError(null);
-    setDemoRunMessage(apiMode === "real" ? "正在创建样例任务..." : "当前使用本地样例数据。");
+    setDemoRunMessage(apiMode === "real" ? "正在创建任务..." : "当前为离线模式。");
 
     try {
       const demoRun = await createDemoAgentRunAsync({
@@ -738,7 +738,7 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
       });
       navigateTo(`/agent-lab/runs/${encodeURIComponent(demoRun.runId)}`);
     } catch (error) {
-      setDemoRunError(getErrorMessage(error, "创建样例任务失败"));
+      setDemoRunError(getErrorMessage(error, "创建任务失败"));
       setDemoRunMessage(null);
     } finally {
       setIsCreatingDemoRun(false);
@@ -773,7 +773,7 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
     setDemoRunMessage(
       apiMode === "real"
         ? `正在提交到 ${SUBMIT_ENDPOINT}，执行器 ${RUNNER_LABEL[runner] ?? runner}。`
-        : "当前使用本地样例数据。",
+        : "当前为离线模式。",
     );
 
     const isTradingAgents = runner === "tradingagents";
@@ -850,7 +850,7 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
     setDemoRunMessage(
       apiMode === "real"
         ? `正在提交到 ${SUBMIT_ENDPOINT}，执行器 ${RUNNER_LABEL[draftRunner] ?? draftRunner}。`
-        : "当前使用本地样例数据。",
+        : "当前为离线模式。",
     );
 
     const isTradingAgents = draftRunner === "tradingagents";
@@ -990,7 +990,7 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
                 onClick={() => setDraftRunner("qwen")}
                 disabled={Boolean(qwenSubmitBlockedReason)}
               >
-                通义千问
+                flash
               </Button>
               <Button
                 size="sm"
@@ -998,7 +998,7 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
                 onClick={() => setDraftRunner("alphatrace_native")}
                 disabled={Boolean(nativeSubmitBlockedReason)}
               >
-                原生多 Agent
+                plus
               </Button>
               <Button
                 size="sm"
@@ -1006,7 +1006,7 @@ export default function AgentLabPage({ onOpenRun }: AgentLabPageProps) {
                 onClick={() => setDraftRunner("tradingagents")}
                 disabled={Boolean(tradingAgentsSubmitBlockedReason)}
               >
-                TradingAgents
+                pro
               </Button>
             </div>
 

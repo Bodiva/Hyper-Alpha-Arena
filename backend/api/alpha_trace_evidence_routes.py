@@ -8,9 +8,16 @@ from schemas.alpha_trace_agent_runtime import EvidenceReference
 from schemas.alpha_trace_evidence import AlphaTraceEvidenceItem, AlphaTraceExtractedField, EvidenceListResponse, EvidenceSearchResponse
 from services.agent_runtime_store.registry import get_agent_run_store
 from services.evidence_retrieval.evidence_store import get_static_evidence_store
+from services.evidence_retrieval.static_evidence_seed import is_static_seed_evidence_id, static_evidence_seed_enabled
 
 
 router = APIRouter(prefix="/api/alpha-trace/evidence", tags=["AlphaTrace Evidence"])
+
+
+def _should_hide_static_seed_evidence(evidence_id: str, metadata: dict[str, Any] | None = None) -> bool:
+    if static_evidence_seed_enabled():
+        return False
+    return is_static_seed_evidence_id(evidence_id) or bool((metadata or {}).get("staticSeed"))
 
 
 def _agent_run_evidence_to_api_item(
@@ -139,6 +146,8 @@ def _list_run_scoped_evidence(
         seen: set[str] = set()
         page_limit = min(1000, max(limit * 20, 100))
         for evidence, run_id, fallback_timestamp in page_loader(evidence_type=evidence_type, limit=page_limit, offset=0):
+            if _should_hide_static_seed_evidence(evidence.evidenceId):
+                continue
             if evidence.evidenceId in seen:
                 continue
             item = _agent_run_evidence_to_api_item(
@@ -163,6 +172,8 @@ def _list_run_scoped_evidence(
         decision = store.get_decision(run.runId)
         used_by_decision_ids = [f"decision_{run.runId}"] if decision else []
         for evidence in store.get_evidence(run.runId):
+            if _should_hide_static_seed_evidence(evidence.evidenceId):
+                continue
             if evidence.evidenceId in seen:
                 continue
             decision_ids = used_by_decision_ids if decision and evidence.evidenceId in decision.evidenceIds else []
@@ -183,6 +194,8 @@ def _list_run_scoped_evidence(
 
 
 def _find_run_scoped_evidence(evidence_id: str, run_id: Optional[str] = None) -> Optional[AlphaTraceEvidenceItem]:
+    if _should_hide_static_seed_evidence(evidence_id):
+        return None
     store = get_agent_run_store()
     if run_id:
         run = store.get_run(run_id)
@@ -274,6 +287,8 @@ def get_alpha_trace_evidence(
     evidence_id: str,
     runId: Optional[str] = Query(None),
 ):
+    if _should_hide_static_seed_evidence(evidence_id):
+        raise HTTPException(status_code=404, detail=f"Evidence not found: {evidence_id}")
     item = get_static_evidence_store().get_evidence(evidence_id)
     if not item:
         item = _find_run_scoped_evidence(evidence_id, run_id=runId)

@@ -19,8 +19,10 @@ import json
 import logging
 import os
 import random
+import re
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, Generator, List, Optional
 
 import requests
@@ -679,6 +681,36 @@ SUBAGENT_TOOL_NAMES = {"call_prompt_ai", "call_program_ai", "call_signal_ai", "c
 # both yield and return, because Python turns ANY function with yield into a generator.
 
 
+MARKET_RESEARCH_HINTS = (
+    "etf", "fund", "index", "portfolio", "market", "valuation", "trend", "allocation",
+    "资产", "基金", "指数", "组合", "市场", "阶段", "估值", "走势", "趋势", "行情",
+    "配置", "仓位", "增配", "减配", "观察", "风险", "沪深", "中证", "上证", "创业板",
+)
+
+
+def _looks_like_market_research_question(text: str) -> bool:
+    lowered = (text or "").lower()
+    if any(hint in lowered for hint in MARKET_RESEARCH_HINTS):
+        return True
+    return bool(re.search(r"\b\d{6}\b|asset_(?:etf|fund|index)_", lowered))
+
+
+def _guess_market_asset_id(text: str) -> Optional[str]:
+    value = text or ""
+    asset_match = re.search(r"\basset_(?:etf|fund|index)_[a-zA-Z0-9_]+\b", value)
+    if asset_match:
+        return asset_match.group(0)
+    code_match = re.search(r"\b(\d{6})(?:\.(?:SH|SZ|OF))?\b", value, flags=re.IGNORECASE)
+    if code_match:
+        code = code_match.group(1)
+        if code.startswith(("5", "1")):
+            return f"asset_etf_{code}"
+        return code
+    if "沪深300" in value or "csi300" in value.lower() or "000300" in value:
+        return "asset_etf_510300" if "etf" in value.lower() or "ETF" in value else "asset_index_csi300"
+    return None
+
+
 def _tool_error_event_data(meta, severity: str = None) -> Dict[str, Any]:
     return {
         "name": meta.tool_name,
@@ -879,6 +911,79 @@ def stream_chat_response(
     failure_tracker = ToolFailureTracker()
 
     try:
+        if _looks_like_market_research_question(user_message):
+            asset_id = _guess_market_asset_id(user_message)
+            preflight_tasks = (
+                ("query_clickhouse_market_context", {
+                    "question": user_message,
+                    "asset_id": asset_id,
+                    "limit": 6,
+                }),
+                ("search_bocha_evidence", {
+                    "question": user_message,
+                    "asset_id": asset_id,
+                    "task_type": "single_asset_analysis",
+                    "limit": 3,
+                }),
+            )
+            preflight_results_by_tool = {}
+
+            for fn_name, fn_args in preflight_tasks:
+                yield format_sse_event("tool_call", {"name": fn_name, "args": fn_args})
+
+            def _run_preflight_tool(task):
+                fn_name, fn_args = task
+                tool_result, meta = execute_tool_with_meta(
+                    db,
+                    fn_name,
+                    fn_args,
+                    user_id=1,
+                    api_config=llm_config,
+                )
+                return fn_name, fn_args, tool_result, meta
+
+            with ThreadPoolExecutor(max_workers=len(preflight_tasks)) as executor:
+                future_to_task = {
+                    executor.submit(_run_preflight_tool, task): task
+                    for task in preflight_tasks
+                }
+                for future in as_completed(future_to_task):
+                    fn_name, fn_args, tool_result, meta = future.result()
+
+                    failure_tracker.record(meta)
+                    if meta.status in (TOOL_STATUS_INFRA_ERROR, TOOL_STATUS_BLOCKED, TOOL_STATUS_WARNING):
+                        yield format_sse_event("tool_error", _tool_error_event_data(
+                            meta,
+                            severity="infra_error" if meta.status == TOOL_STATUS_INFRA_ERROR else meta.status,
+                        ))
+                    yield format_sse_event("tool_result", {
+                        "name": fn_name,
+                        "result": tool_result[:200] if len(tool_result) > 200 else tool_result,
+                    })
+                    tool_calls_log.append({
+                        "tool": fn_name,
+                        "args": fn_args,
+                        "result": tool_result[:500] if len(tool_result) > 500 else tool_result,
+                    })
+                    preflight_results_by_tool[fn_name] = f"## {fn_name}\n{tool_result}"
+
+            preflight_results = [
+                preflight_results_by_tool[fn_name]
+                for fn_name, _ in preflight_tasks
+                if fn_name in preflight_results_by_tool
+            ]
+            if preflight_results:
+                messages.insert(-1, {
+                    "role": "system",
+                    "content": (
+                        "[投研市场阶段并行预取证据]\n"
+                        "服务端已按任务拆解并行触发 CK、Bocha 等证据工具。"
+                        "回答时先说明任务拆解，再汇总并区分 CK 内部结构化证据、Bocha 外部补充证据和其他工具证据；"
+                        "如果 CK 为空或不可用，要明确说明，不能用外部搜索伪装成内部数据。\n\n"
+                        + "\n\n".join(preflight_results)
+                    ),
+                })
+
         while iteration < MAX_TOOL_ITERATIONS:
             iteration += 1
             is_last_round = (iteration == MAX_TOOL_ITERATIONS)

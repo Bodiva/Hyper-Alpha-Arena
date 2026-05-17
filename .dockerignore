@@ -48,6 +48,7 @@ arena.pid
 data/
 
 # Environment
+.env
 .env.local
 .env.*.local
 

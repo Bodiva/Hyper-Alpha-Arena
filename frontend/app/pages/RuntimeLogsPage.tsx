@@ -186,7 +186,7 @@ export default function RuntimeLogsPage() {
           </CardHeader>
           <CardContent className="space-y-2">
             <div className="text-2xl font-semibold">{logs?.exists ? "可用" : "缺失"}</div>
-            <Badge variant={apiMode === "real" ? "default" : "outline"}>{apiMode === "real" ? "Real API" : "Mock"}</Badge>
+            <Badge variant={apiMode === "real" ? "default" : "outline"}>{apiMode === "real" ? "实时接口" : "离线模式"}</Badge>
           </CardContent>
         </Card>
         <Card>

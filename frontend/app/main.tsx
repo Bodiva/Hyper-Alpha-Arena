@@ -63,6 +63,7 @@ import LixingerDataPage from '@/pages/LixingerDataPage'
 import DecisionAttributionPage from '@/pages/DecisionAttributionPage'
 import RuntimeLogsPage from '@/pages/RuntimeLogsPage'
 import WorkbenchSettingsPage from '@/pages/SettingsPage'
+import LoginPage from '@/pages/LoginPage'
 import ResearchRuntimeConfigPage from '@/pages/ResearchRuntimeConfigPage'
 import ResearchAssistantLabPage from '@/pages/ResearchAssistantLabPage'
 import { createHashUrl, parseAlphaTraceRoute } from '@/shared/lib/navigation'
@@ -108,9 +109,10 @@ const PAGE_TITLES: Record<string, string> = {
   'hyper-ai': 'Hyper AI',
   'research-hyper-ai': 'Research Assistant',
   'research-assistant-lab': 'Research Assistant',
+  'research-market-evidence': 'Market Evidence',
   'research-runtime-config': 'Research Assistant Config',
-  dashboard: 'Dashboard',
-  'dashboard-test': 'Market Dashboard',
+  dashboard: '总览',
+  'dashboard-test': 'Personal Board',
   'asset-research': 'Asset Research',
   'asset-detail': 'Asset Detail',
   'agent-lab': 'Agent Lab',
@@ -130,7 +132,7 @@ const PAGE_TITLES: Record<string, string> = {
   'decision-attribution': 'Decision Attribution',
   'runtime-logs': 'Research Runtime Logs',
   'settings-workbench': 'Settings',
-  comprehensive: 'Dashboard',
+  comprehensive: '交易总览',
   'system-logs': 'Automation Runtime Logs',
   'prompt-management': 'Prompt Templates',
   'program-trader': 'Programs',
@@ -149,9 +151,10 @@ const PAGE_TITLES_ZH: Record<string, string> = {
   'hyper-ai': 'Hyper AI',
   'research-hyper-ai': '投研助手',
   'research-assistant-lab': '投研助手',
+  'research-market-evidence': '市场取证',
   'research-runtime-config': '投研助手配置',
   dashboard: 'Dashboard',
-  'dashboard-test': '市场看板',
+  'dashboard-test': '个人看板',
   'asset-research': '资产研究',
   'asset-detail': '资产详情',
   'agent-lab': 'Agent 实验室',
@@ -199,6 +202,7 @@ const normalizePath = (pathname: string): string => {
 const resolvePathToRoute = (pathname: string): RouteTarget | null => {
   const normalizedPath = normalizePath(pathname)
 
+  if (normalizedPath === '' || normalizedPath === '/') return { page: 'dashboard' }
   if (normalizedPath === '/dashboard') return { page: 'dashboard' }
   if (normalizedPath === '/dashboard-test' || normalizedPath === '/dashboard/test') return { page: 'dashboard' }
   if (normalizedPath === '/assets') return { page: 'asset-research' }
@@ -213,6 +217,13 @@ const resolvePathToRoute = (pathname: string): RouteTarget | null => {
   }
   if (normalizedPath === '/research/assistant-legacy' || normalizedPath === '/research/hyper-ai-legacy') {
     return { page: 'research-hyper-ai' }
+  }
+  if (
+    normalizedPath === '/research/market-evidence' ||
+    normalizedPath === '/research/evidence-chat' ||
+    normalizedPath === '/research/parallel-evidence'
+  ) {
+    return { page: 'research-market-evidence' }
   }
   if (
     normalizedPath === '/research/assistant-lab' ||
@@ -364,6 +375,7 @@ const ALPHA_TRACE_PAGE_KEYS = new Set([
   'asset-detail',
   'research-hyper-ai',
   'research-assistant-lab',
+  'research-market-evidence',
   'research-runtime-config',
   'agent-lab',
   'agent-run-detail',
@@ -406,6 +418,33 @@ const isAlphaTraceRouteTarget = (target: RouteTarget | null): boolean => {
   return !!target && ALPHA_TRACE_PAGE_KEYS.has(target.page)
 }
 
+function AuthGate({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth()
+
+  useEffect(() => {
+    if (!loading && user && normalizePath(window.location.pathname) === '/login') {
+      window.history.replaceState(null, '', '/dashboard')
+    }
+  }, [loading, user])
+
+  if (loading) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-muted/30">
+        <div className="flex items-center gap-3 rounded-md border bg-background px-4 py-3 text-sm text-muted-foreground shadow-sm">
+          <span className="size-2 rounded-full bg-primary" />
+          <span>正在检查登录状态...</span>
+        </div>
+      </main>
+    )
+  }
+
+  if (!user) {
+    return <LoginPage />
+  }
+
+  return <>{children}</>
+}
+
 function App() {
   const { i18n } = useTranslation()
   const { tradingMode } = useTradingMode()
@@ -426,6 +465,7 @@ function App() {
   const [currentPage, setCurrentPage] = useState<string>(initialRouteTarget?.page ?? 'hyper-ai')
   const [routeQuery, setRouteQuery] = useState<string>(initialRouteTarget?.query ?? '')
   const tradingModeRef = useRef(tradingMode)
+  const isAlphaTracePage = ALPHA_TRACE_PAGE_KEYS.has(currentPage)
 
   /**
    * Hash Routing: Updates both React state and browser URL hash.
@@ -899,9 +939,11 @@ function App() {
         handlePageChange('trader-management')
       }
 
+      const shouldRunTradingStartupChecks = TRADING_CONTEXT_PAGE_KEYS.has(currentPage)
+
       // Check builder fee authorization for mainnet accounts (once per session)
       // Builder binding: approve builder fee without user interaction
-      if (!authCheckedRef.current) {
+      if (shouldRunTradingStartupChecks && !authCheckedRef.current) {
         authCheckedRef.current = true
         try {
           const result = await checkMainnetAccounts()
@@ -938,14 +980,16 @@ function App() {
       }
 
       // Check agent wallet upgrade (every time accounts refresh)
-      try {
-        const upgradeResult = await checkWalletUpgradeNeeded()
-        if (upgradeResult.count > 0) {
-          setWalletsNeedUpgrade(upgradeResult.needsUpgrade)
-          setAgentUpgradeModalOpen(true)
+      if (shouldRunTradingStartupChecks) {
+        try {
+          const upgradeResult = await checkWalletUpgradeNeeded()
+          if (upgradeResult.count > 0) {
+            setWalletsNeedUpgrade(upgradeResult.needsUpgrade)
+            setAgentUpgradeModalOpen(true)
+          }
+        } catch (upgradeError) {
+          console.error('Failed to check wallet upgrade:', upgradeError)
         }
-      } catch (upgradeError) {
-        console.error('Failed to check wallet upgrade:', upgradeError)
       }
     } catch (e) {
       console.error('Failed to fetch accounts', e)
@@ -1117,7 +1161,7 @@ function App() {
 
     return (
       <main className={`flex-1 overflow-hidden flex flex-col min-h-0 min-w-0 ${
-        currentPage === 'hyper-ai' || currentPage === 'research-hyper-ai' || currentPage === 'research-assistant-lab' || currentPage === 'strategy-radar' ? 'bg-background' : 'bg-muted/30 p-3 md:p-5'
+        currentPage === 'hyper-ai' || currentPage === 'research-hyper-ai' || currentPage === 'research-assistant-lab' || currentPage === 'research-market-evidence' || currentPage === 'strategy-radar' ? 'bg-background' : 'bg-muted/30 p-3 md:p-5'
       }`}>
 
         {currentPage === 'hyper-ai' && (
@@ -1130,6 +1174,10 @@ function App() {
 
         {currentPage === 'research-assistant-lab' && (
           <ResearchAssistantLabPage />
+        )}
+
+        {currentPage === 'research-market-evidence' && (
+          <ResearchHyperAiPage />
         )}
 
         {currentPage === 'research-runtime-config' && (
@@ -1363,16 +1411,18 @@ function App() {
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <AuthProvider>
-      <FeatureProvider>
-        <ExchangeProvider>
-          <TradingModeProvider>
-            <ArenaDataProvider>
-              <Toaster position="top-right" />
-              <App />
-            </ArenaDataProvider>
-          </TradingModeProvider>
-        </ExchangeProvider>
-      </FeatureProvider>
+      <AuthGate>
+        <FeatureProvider>
+          <ExchangeProvider>
+            <TradingModeProvider>
+              <ArenaDataProvider>
+                <Toaster position="top-right" />
+                <App />
+              </ArenaDataProvider>
+            </TradingModeProvider>
+          </ExchangeProvider>
+        </FeatureProvider>
+      </AuthGate>
     </AuthProvider>
   </React.StrictMode>,
 )

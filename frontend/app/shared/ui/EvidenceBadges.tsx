@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { filterRetiredEvidenceIds } from "@/shared/lib/evidence-filter";
 
 interface EvidenceBadgesProps {
   evidenceIds?: string[];
@@ -7,7 +8,7 @@ interface EvidenceBadgesProps {
   className?: string;
 }
 
-const uniqueIds = (ids?: string[]): string[] => Array.from(new Set((ids ?? []).filter(Boolean)));
+const uniqueIds = (ids?: string[]): string[] => Array.from(new Set(filterRetiredEvidenceIds(ids)));
 
 const EvidenceBadges = ({ evidenceIds, onSelect, maxVisible, className = "" }: EvidenceBadgesProps) => {
   const ids = uniqueIds(evidenceIds);

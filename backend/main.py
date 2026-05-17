@@ -53,6 +53,30 @@ def _legacy_runtime_enabled() -> bool:
     return _env_bool("ALPHATRACE_LEGACY_RUNTIME_ENABLED", not _is_alphatrace_only_profile())
 
 
+def _ensure_alphatrace_mysql_compat_tables() -> None:
+    """Create the minimal legacy config tables still used by shared settings APIs."""
+    try:
+        from database.models import (
+            GlobalSamplingConfig,
+            ResearchAiConversation,
+            ResearchAiMemory,
+            ResearchAiMessage,
+            ResearchAiProfile,
+            UserAuthSession,
+        )
+
+        User.__table__.create(bind=engine, checkfirst=True)
+        UserAuthSession.__table__.create(bind=engine, checkfirst=True)
+        SystemConfig.__table__.create(bind=engine, checkfirst=True)
+        GlobalSamplingConfig.__table__.create(bind=engine, checkfirst=True)
+        ResearchAiProfile.__table__.create(bind=engine, checkfirst=True)
+        ResearchAiMemory.__table__.create(bind=engine, checkfirst=True)
+        ResearchAiConversation.__table__.create(bind=engine, checkfirst=True)
+        ResearchAiMessage.__table__.create(bind=engine, checkfirst=True)
+    except Exception as exc:
+        print(f"[startup] AlphaTrace MySQL compatibility table setup failed (non-fatal): {exc}")
+
+
 app = FastAPI(
     title="Hyper Alpha Arena API",
     version=__version__,
@@ -327,6 +351,7 @@ def on_startup():
         print(f"[startup] AlphaTrace leaderboard cache refresh scheduler failed (non-fatal): {e}")
 
     if os.environ.get("ALPHA_TRACE_DOMAIN_STORE", "").lower() == "mysql" and os.environ.get("ENABLE_LEGACY_POSTGRES_STARTUP") != "true":
+        _ensure_alphatrace_mysql_compat_tables()
         print("[startup] Legacy PostgreSQL startup tasks skipped by AlphaTrace MySQL profile")
         return
 

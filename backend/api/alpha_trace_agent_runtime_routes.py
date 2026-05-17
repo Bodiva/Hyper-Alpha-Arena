@@ -72,6 +72,7 @@ from services.system_config_store import get_mysql_system_config_store
 from services.runtime_config import get_runtime_config_facade
 from services.model_providers import list_model_provider_descriptors
 from services.runtime_readiness import get_runtime_readiness_summary
+from services.evidence_retrieval.static_evidence_seed import is_static_seed_evidence_id, static_evidence_seed_enabled
 
 router = APIRouter(prefix="/api/alpha-trace/agent-runs", tags=["AlphaTrace Agent Runtime"])
 
@@ -89,6 +90,12 @@ def _get_runtime_db():
 
 def _not_found(run_id: str) -> HTTPException:
     return HTTPException(status_code=404, detail=f"Agent Run not found: {run_id}")
+
+
+def _visible_evidence_refs(evidence_refs: list[EvidenceReference]) -> list[EvidenceReference]:
+    if static_evidence_seed_enabled():
+        return evidence_refs
+    return [item for item in evidence_refs if not is_static_seed_evidence_id(item.evidenceId)]
 
 
 def _safe_response_value(value: Any, seen: set[int] | None = None) -> Any:
@@ -876,7 +883,7 @@ def get_agent_run_reports_endpoint(run_id: str):
 def get_agent_run_evidence_endpoint(run_id: str):
     if not get_agent_run(run_id):
         raise _not_found(run_id)
-    return get_agent_run_evidence(run_id)
+    return _visible_evidence_refs(get_agent_run_evidence(run_id))
 
 
 @router.get("/{run_id}/decision", response_model=AgentDecision)

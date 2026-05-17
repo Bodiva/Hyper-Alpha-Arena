@@ -38,7 +38,7 @@ EXPOSE 8802
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD-SHELL curl -f "http://localhost:${BACKEND_PORT:-8802}/api/health" || exit 1
+    CMD curl -f "http://localhost:${BACKEND_PORT:-8802}/api/health" || exit 1
 
 # Start application with database initialization
 CMD ["/app/scripts/start-backend.sh"]

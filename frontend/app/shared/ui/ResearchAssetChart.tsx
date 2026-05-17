@@ -27,6 +27,21 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 type RangeKey = "1M" | "3M" | "6M" | "1Y" | "3Y" | "5Y";
 type DisplayChartType = "candlestick" | "line" | "area";
 type AssetResearchTab = "kline" | "profile" | "managers";
+type TechnicalIndicator =
+  | "MA5"
+  | "MA10"
+  | "MA20"
+  | "EMA20"
+  | "EMA50"
+  | "EMA100"
+  | "VWAP"
+  | "OBV"
+  | "RSI14"
+  | "RSI7"
+  | "STOCH"
+  | "MACD"
+  | "BOLL"
+  | "ATR14";
 
 interface ResearchAssetChartProps {
   asset: Asset;
@@ -54,6 +69,18 @@ interface ResearchPoint {
   volume: number;
 }
 
+interface TechnicalIndicatorSet {
+  ma: Record<"MA5" | "MA10" | "MA20", Array<number | null>>;
+  ema: Record<"EMA20" | "EMA50" | "EMA100", Array<number | null>>;
+  vwap: Array<number | null>;
+  obv: number[];
+  rsi: Record<"RSI14" | "RSI7", Array<number | null>>;
+  stoch: { k: Array<number | null>; d: Array<number | null> };
+  macd: { macd: Array<number | null>; signal: Array<number | null>; histogram: Array<number | null> };
+  boll: { upper: Array<number | null>; middle: Array<number | null>; lower: Array<number | null> };
+  atr14: Array<number | null>;
+}
+
 interface ResearchStats {
   cumulativeReturn: number;
   maxDrawdown: number;
@@ -72,6 +99,26 @@ const RANGE_CONFIG: Record<RangeKey, { label: string; days: number }> = {
   "5Y": { label: "5Y", days: 1260 },
 };
 const KLINE_HISTORY_LIMIT = 1500;
+const TECHNICAL_INDICATOR_GROUPS: Array<{ label: string; items: TechnicalIndicator[] }> = [
+  { label: "趋势", items: ["MA5", "MA10", "MA20", "EMA20", "EMA50", "EMA100"] },
+  { label: "成交量", items: ["VWAP", "OBV"] },
+  { label: "动量", items: ["RSI14", "RSI7", "STOCH", "MACD"] },
+  { label: "波动率", items: ["BOLL", "ATR14"] },
+];
+const PRICE_INDICATOR_COLORS: Partial<Record<TechnicalIndicator, string>> = {
+  MA5: "#2563eb",
+  MA10: "#7c3aed",
+  MA20: "#1f2937",
+  EMA20: "#f97316",
+  EMA50: "#0f766e",
+  EMA100: "#64748b",
+  VWAP: "#db2777",
+};
+const BOLL_COLORS = {
+  upper: "#94a3b8",
+  middle: "#475569",
+  lower: "#94a3b8",
+};
 
 const formatDateLabel = (date: Date): string => {
   return `${date.getMonth() + 1}/${date.getDate()}`;
@@ -115,6 +162,145 @@ const mapKlinesToResearchSeries = (klines: AlphaTraceMarketKline[]): ResearchPoi
       volume: item.volume,
     };
   });
+};
+
+const average = (values: number[]): number | null => {
+  if (values.length === 0) return null;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+};
+
+const calculateSma = (values: number[], period: number): Array<number | null> =>
+  values.map((_, index) => {
+    if (index + 1 < period) return null;
+    return average(values.slice(index + 1 - period, index + 1));
+  });
+
+const calculateEma = (values: number[], period: number): Array<number | null> => {
+  const result: Array<number | null> = [];
+  const multiplier = 2 / (period + 1);
+  let ema: number | null = null;
+  values.forEach((value, index) => {
+    if (index + 1 < period) {
+      result.push(null);
+      return;
+    }
+    if (ema == null) {
+      ema = average(values.slice(index + 1 - period, index + 1));
+    } else {
+      ema = (value - ema) * multiplier + ema;
+    }
+    result.push(ema);
+  });
+  return result;
+};
+
+const calculateRsi = (values: number[], period: number): Array<number | null> => {
+  const result: Array<number | null> = values.map(() => null);
+  if (values.length <= period) return result;
+  for (let index = period; index < values.length; index += 1) {
+    let gains = 0;
+    let losses = 0;
+    for (let cursor = index - period + 1; cursor <= index; cursor += 1) {
+      const diff = values[cursor] - values[cursor - 1];
+      if (diff >= 0) gains += diff;
+      else losses += Math.abs(diff);
+    }
+    if (losses === 0) {
+      result[index] = 100;
+    } else {
+      const rs = gains / losses;
+      result[index] = 100 - 100 / (1 + rs);
+    }
+  }
+  return result;
+};
+
+const calculateTechnicalIndicators = (series: ResearchPoint[]): TechnicalIndicatorSet => {
+  const closes = series.map((point) => point.close);
+  const highs = series.map((point) => point.high);
+  const lows = series.map((point) => point.low);
+  const volumes = series.map((point) => point.volume);
+  const ma20 = calculateSma(closes, 20);
+  const ema12 = calculateEma(closes, 12);
+  const ema26 = calculateEma(closes, 26);
+  const macdLine = closes.map((_, index) =>
+    ema12[index] != null && ema26[index] != null ? (ema12[index] as number) - (ema26[index] as number) : null,
+  );
+  const macdSignal = calculateEma(macdLine.map((value) => value ?? 0), 9).map((value, index) => (macdLine[index] == null ? null : value));
+  const vwap: Array<number | null> = [];
+  const obv: number[] = [];
+  const atr14: Array<number | null> = [];
+  let cumulativeTypicalVolume = 0;
+  let cumulativeVolume = 0;
+  let runningObv = 0;
+  const trueRanges: number[] = [];
+
+  series.forEach((point, index) => {
+    const typical = (point.high + point.low + point.close) / 3;
+    cumulativeTypicalVolume += typical * point.volume;
+    cumulativeVolume += point.volume;
+    vwap.push(cumulativeVolume > 0 ? cumulativeTypicalVolume / cumulativeVolume : null);
+    if (index === 0) {
+      obv.push(0);
+    } else {
+      if (point.close > series[index - 1].close) runningObv += point.volume;
+      if (point.close < series[index - 1].close) runningObv -= point.volume;
+      obv.push(runningObv);
+    }
+    const previousClose = index > 0 ? series[index - 1].close : point.close;
+    trueRanges.push(Math.max(point.high - point.low, Math.abs(point.high - previousClose), Math.abs(point.low - previousClose)));
+    atr14.push(index + 1 >= 14 ? average(trueRanges.slice(index + 1 - 14, index + 1)) : null);
+  });
+
+  const stochK = closes.map((close, index) => {
+    if (index + 1 < 14) return null;
+    const low = Math.min(...lows.slice(index + 1 - 14, index + 1));
+    const high = Math.max(...highs.slice(index + 1 - 14, index + 1));
+    return high === low ? 50 : ((close - low) / (high - low)) * 100;
+  });
+  const stochD = stochK.map((_, index) => {
+    if (index + 1 < 3) return null;
+    const window = stochK.slice(index - 2, index + 1).filter((value): value is number => value != null);
+    return window.length === 3 ? average(window) : null;
+  });
+  const bollStd = closes.map((_, index) => {
+    if (index + 1 < 20 || ma20[index] == null) return null;
+    const window = closes.slice(index + 1 - 20, index + 1);
+    const middle = ma20[index] as number;
+    const variance = window.reduce((sum, value) => sum + (value - middle) ** 2, 0) / window.length;
+    return Math.sqrt(variance);
+  });
+
+  return {
+    ma: {
+      MA5: calculateSma(closes, 5),
+      MA10: calculateSma(closes, 10),
+      MA20: ma20,
+    },
+    ema: {
+      EMA20: calculateEma(closes, 20),
+      EMA50: calculateEma(closes, 50),
+      EMA100: calculateEma(closes, 100),
+    },
+    vwap,
+    obv,
+    rsi: {
+      RSI14: calculateRsi(closes, 14),
+      RSI7: calculateRsi(closes, 7),
+    },
+    stoch: { k: stochK, d: stochD },
+    macd: {
+      macd: macdLine,
+      signal: macdSignal,
+      histogram: macdLine.map((value, index) => (value != null && macdSignal[index] != null ? value - (macdSignal[index] as number) : null)),
+    },
+    boll: {
+      upper: ma20.map((value, index) => (value != null && bollStd[index] != null ? value + 2 * (bollStd[index] as number) : null)),
+      middle: ma20,
+      lower: ma20.map((value, index) => (value != null && bollStd[index] != null ? value - 2 * (bollStd[index] as number) : null)),
+    },
+    atr14,
+  };
 };
 
 const computeResearchStats = (series: ResearchPoint[]): ResearchStats => {
@@ -444,21 +630,28 @@ function ResearchKlineChart({
   chartType,
   compact,
   visibleDays,
+  selectedIndicators,
 }: {
   series: ResearchPoint[];
   chartType: DisplayChartType;
   compact: boolean;
   visibleDays: number;
+  selectedIndicators: TechnicalIndicator[];
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const indicators = useMemo(() => calculateTechnicalIndicators(series), [series]);
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container || series.length === 0) return;
+    const indicatorSet = new Set(selectedIndicators);
+    const hasMomentumPane = indicatorSet.has("RSI14") || indicatorSet.has("RSI7") || indicatorSet.has("STOCH");
+    const hasMacdPane = indicatorSet.has("MACD");
+    const hasAtrPane = indicatorSet.has("ATR14");
 
     const chart = createChart(container, {
       width: container.clientWidth,
-      height: container.clientHeight || (compact ? 420 : 540),
+      height: container.clientHeight || (compact ? 380 : 500),
       layout: {
         background: { color: "transparent" },
         textColor: "#8f98a8",
@@ -504,8 +697,14 @@ function ResearchKlineChart({
     });
 
     const volumePane = chart.addPane();
-    chart.panes()[0].setStretchFactor(2);
+    const momentumPane = hasMomentumPane ? chart.addPane() : null;
+    const macdPane = hasMacdPane ? chart.addPane() : null;
+    const atrPane = hasAtrPane ? chart.addPane() : null;
+    chart.panes()[0].setStretchFactor(4);
     volumePane.setStretchFactor(1);
+    momentumPane?.setStretchFactor(1);
+    macdPane?.setStretchFactor(1);
+    atrPane?.setStretchFactor(1);
 
     const mainSeries =
       chartType === "candlestick"
@@ -529,15 +728,14 @@ function ResearchKlineChart({
               lineWidth: 2,
             });
 
-    const ma20Series = chart.addSeries(LineSeries, {
-      color: "#1f2937",
-      lineWidth: 1,
-      lineStyle: 2,
-    });
     const volumeSeries = volumePane.addSeries(HistogramSeries, {
       color: "#94a3b8",
       priceFormat: { type: "volume" },
     });
+    const createLineData = (values: Array<number | null>) =>
+      values
+        .map((value, index) => (value == null ? null : { time: series[index].date as Time, value }))
+        .filter((item): item is { time: Time; value: number } => item != null);
 
     const candleData = series.map((point) => ({
       time: point.date as Time,
@@ -550,12 +748,6 @@ function ResearchKlineChart({
       time: point.date as Time,
       value: point.close,
     }));
-    const ma20Data = series
-      .filter((point) => point.ma20 != null)
-      .map((point) => ({
-        time: point.date as Time,
-        value: point.ma20 as number,
-      }));
     const volumeData = series.map((point) => ({
       time: point.date as Time,
       value: point.volume,
@@ -567,8 +759,97 @@ function ResearchKlineChart({
     } else {
       mainSeries.setData(lineData);
     }
-    ma20Series.setData(ma20Data);
+    (["MA5", "MA10", "MA20"] as const).forEach((indicator) => {
+      if (!indicatorSet.has(indicator)) return;
+      const line = chart.addSeries(LineSeries, {
+        color: PRICE_INDICATOR_COLORS[indicator],
+        lineWidth: indicator === "MA20" ? 1.5 : 1,
+        lineStyle: indicator === "MA20" ? 2 : 0,
+      });
+      line.setData(createLineData(indicators.ma[indicator]));
+    });
+    (["EMA20", "EMA50", "EMA100"] as const).forEach((indicator) => {
+      if (!indicatorSet.has(indicator)) return;
+      const line = chart.addSeries(LineSeries, {
+        color: PRICE_INDICATOR_COLORS[indicator],
+        lineWidth: 1,
+      });
+      line.setData(createLineData(indicators.ema[indicator]));
+    });
+    if (indicatorSet.has("VWAP")) {
+      const line = chart.addSeries(LineSeries, {
+        color: PRICE_INDICATOR_COLORS.VWAP,
+        lineWidth: 1.5,
+        lineStyle: 2,
+      });
+      line.setData(createLineData(indicators.vwap));
+    }
+    if (indicatorSet.has("BOLL")) {
+      [
+        ["upper", BOLL_COLORS.upper, 2],
+        ["middle", BOLL_COLORS.middle, 1],
+        ["lower", BOLL_COLORS.lower, 2],
+      ].forEach(([key, color, lineStyle]) => {
+        const line = chart.addSeries(LineSeries, {
+          color: color as string,
+          lineWidth: key === "middle" ? 1 : 1,
+          lineStyle: lineStyle as 0 | 1 | 2 | 3 | 4,
+        });
+        line.setData(createLineData(indicators.boll[key as keyof typeof indicators.boll]));
+      });
+    }
     volumeSeries.setData(volumeData);
+    if (indicatorSet.has("OBV")) {
+      const obvSeries = volumePane.addSeries(LineSeries, {
+        color: "#0f766e",
+        lineWidth: 1,
+        priceFormat: { type: "volume" },
+      });
+      obvSeries.setData(createLineData(indicators.obv));
+    }
+    if (momentumPane) {
+      if (indicatorSet.has("RSI14")) {
+        const rsi = momentumPane.addSeries(LineSeries, { color: "#7c3aed", lineWidth: 1 });
+        rsi.setData(createLineData(indicators.rsi.RSI14));
+      }
+      if (indicatorSet.has("RSI7")) {
+        const rsi = momentumPane.addSeries(LineSeries, { color: "#2563eb", lineWidth: 1 });
+        rsi.setData(createLineData(indicators.rsi.RSI7));
+      }
+      if (indicatorSet.has("STOCH")) {
+        const k = momentumPane.addSeries(LineSeries, { color: "#f97316", lineWidth: 1 });
+        const d = momentumPane.addSeries(LineSeries, { color: "#0f766e", lineWidth: 1, lineStyle: 2 });
+        k.setData(createLineData(indicators.stoch.k));
+        d.setData(createLineData(indicators.stoch.d));
+      }
+    }
+    if (macdPane) {
+      const histogram = macdPane.addSeries(HistogramSeries, {
+        color: "#94a3b8",
+        priceFormat: { type: "price", precision: 4, minMove: 0.0001 },
+      });
+      histogram.setData(
+        indicators.macd.histogram
+          .map((value, index) =>
+            value == null
+              ? null
+              : {
+                  time: series[index].date as Time,
+                  value,
+                  color: value >= 0 ? "rgba(95, 191, 116, 0.72)" : "rgba(223, 91, 79, 0.72)",
+                },
+          )
+          .filter((item): item is { time: Time; value: number; color: string } => item != null),
+      );
+      const macd = macdPane.addSeries(LineSeries, { color: "#2563eb", lineWidth: 1 });
+      const signal = macdPane.addSeries(LineSeries, { color: "#f97316", lineWidth: 1 });
+      macd.setData(createLineData(indicators.macd.macd));
+      signal.setData(createLineData(indicators.macd.signal));
+    }
+    if (atrPane) {
+      const atr = atrPane.addSeries(LineSeries, { color: "#dc2626", lineWidth: 1 });
+      atr.setData(createLineData(indicators.atr14));
+    }
     chart.timeScale().setVisibleLogicalRange({
       from: Math.max(0, series.length - visibleDays),
       to: series.length + 5,
@@ -577,7 +858,7 @@ function ResearchKlineChart({
     const resizeObserver = new ResizeObserver(() => {
       chart.applyOptions({
         width: container.clientWidth,
-        height: container.clientHeight || (compact ? 420 : 540),
+        height: container.clientHeight || (compact ? 380 : 500),
       });
     });
     resizeObserver.observe(container);
@@ -586,9 +867,9 @@ function ResearchKlineChart({
       resizeObserver.disconnect();
       chart.remove();
     };
-  }, [chartType, compact, series, visibleDays]);
+  }, [chartType, compact, indicators, selectedIndicators, series, visibleDays]);
 
-  return <div ref={containerRef} className={compact ? "h-[440px] w-full" : "h-[560px] w-full"} />;
+  return <div ref={containerRef} className={compact ? "h-[400px] w-full" : "h-[520px] w-full"} />;
 }
 
 export default function ResearchAssetChart({
@@ -607,6 +888,7 @@ export default function ResearchAssetChart({
   const [range, setRange] = useState<RangeKey>("6M");
   const [chartType, setChartType] = useState<DisplayChartType>("candlestick");
   const [activeTab, setActiveTab] = useState<AssetResearchTab>("kline");
+  const [selectedIndicators, setSelectedIndicators] = useState<TechnicalIndicator[]>(["MA20"]);
   const [marketKlines, setMarketKlines] = useState<AlphaTraceMarketKline[]>([]);
   const [snapshot, setSnapshot] = useState<AlphaTraceMarketSnapshot | undefined>(marketSnapshot);
   const [managerProfile, setManagerProfile] = useState<AlphaTraceFundManagerProfileResponse | undefined>();
@@ -635,6 +917,11 @@ export default function ResearchAssetChart({
     kline: isZh ? "K线" : "K-line",
     profile: isZh ? "资产画像" : "Profile",
     managers: isZh ? "基金经理" : "Managers",
+  };
+  const toggleTechnicalIndicator = (indicator: TechnicalIndicator) => {
+    setSelectedIndicators((items) =>
+      items.includes(indicator) ? items.filter((item) => item !== indicator) : [...items, indicator],
+    );
   };
 
   useEffect(() => {
@@ -733,7 +1020,7 @@ export default function ResearchAssetChart({
 
   return (
     <Card className="shrink-0 overflow-hidden">
-      <CardHeader className="border-b px-4 py-3">
+      <CardHeader className="border-b px-4 py-2.5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <CardTitle className="text-sm">{assetChartLabel[asset.assetType]}</CardTitle>
@@ -757,7 +1044,7 @@ export default function ResearchAssetChart({
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-3 p-4">
+      <CardContent className="space-y-2 p-3">
         {assetOptions?.length && onSelectAsset ? (
           <div className="flex gap-2 overflow-x-auto pb-1">
             {assetOptions.slice(0, compact ? 8 : 12).map((option) => (
@@ -774,36 +1061,36 @@ export default function ResearchAssetChart({
           </div>
         ) : null}
 
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap gap-2">
-            <div className="min-w-[96px] rounded-md border px-2 py-1 text-xs">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted/10 px-2 py-2">
+          <div className="flex flex-wrap gap-1.5">
+            <div className="min-w-[88px] rounded border bg-background px-2 py-1 text-xs">
               <span className="text-muted-foreground">{isZh ? "最新" : "Last"} </span>
               <span className="font-medium">{formatValue(stats.latestClose)}</span>
             </div>
-            <div className="min-w-[96px] rounded-md border px-2 py-1 text-xs">
+            <div className="min-w-[88px] rounded border bg-background px-2 py-1 text-xs">
               <span className="text-muted-foreground">{isZh ? "收益" : "Return"} </span>
               <span className={stats.cumulativeReturn >= 0 ? "font-medium text-emerald-600" : "font-medium text-red-600"}>
                 {formatPercent(stats.cumulativeReturn)}
               </span>
             </div>
-            <div className="min-w-[96px] rounded-md border px-2 py-1 text-xs">
+            <div className="min-w-[88px] rounded border bg-background px-2 py-1 text-xs">
               <span className="text-muted-foreground">{isZh ? "回撤" : "DD"} </span>
               <span className="font-medium text-red-600">{formatPercent(stats.maxDrawdown)}</span>
             </div>
-            <div className="min-w-[96px] rounded-md border px-2 py-1 text-xs">
+            <div className="min-w-[88px] rounded border bg-background px-2 py-1 text-xs">
               <span className="text-muted-foreground">{isZh ? "趋势" : "Regime"} </span>
               <span className={`font-medium ${toneClass(stats.trendTone)}`}>{stats.trendLabel}</span>
             </div>
           </div>
 
-          <div className="flex flex-wrap justify-end gap-2">
+          <div className="flex flex-wrap justify-end gap-1.5">
             {(Object.keys(RANGE_CONFIG) as RangeKey[]).map((item) => (
-              <Button key={item} size="sm" variant={range === item ? "default" : "outline"} className="h-8" onClick={() => setRange(item)}>
+              <Button key={item} size="sm" variant={range === item ? "default" : "outline"} className="h-7 px-2 text-xs" onClick={() => setRange(item)}>
                 {RANGE_CONFIG[item].label}
               </Button>
             ))}
             {(["candlestick", "line", "area"] as DisplayChartType[]).map((item) => (
-              <Button key={item} size="sm" variant={chartType === item ? "default" : "outline"} className="h-8" onClick={() => setChartType(item)}>
+              <Button key={item} size="sm" variant={chartType === item ? "default" : "outline"} className="h-7 px-2 text-xs" onClick={() => setChartType(item)}>
                 {chartTypeLabel[item]}
               </Button>
             ))}
@@ -812,9 +1099,36 @@ export default function ResearchAssetChart({
 
         {klineError ? <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">ClickHouse K线加载失败：{klineError}</p> : null}
 
-        <div className="flex flex-wrap gap-2 border-b pb-2">
+        {activeTab === "kline" ? (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-md border border-blue-100 bg-blue-50/40 px-2 py-2 text-xs">
+            <div className="flex items-center gap-2">
+              <p className="font-medium">{isZh ? "技术指标" : "Technical Indicators"}</p>
+              <Button size="sm" variant="outline" className="h-6 px-2 text-xs" onClick={() => setSelectedIndicators([])}>
+                {isZh ? "清空" : "Clear"}
+              </Button>
+            </div>
+            {TECHNICAL_INDICATOR_GROUPS.map((group) => (
+              <div key={group.label} className="flex flex-wrap items-center gap-1.5">
+                <span className="text-muted-foreground">{group.label}</span>
+                {group.items.map((indicator) => (
+                  <Button
+                    key={indicator}
+                    size="sm"
+                    variant={selectedIndicators.includes(indicator) ? "default" : "outline"}
+                    className="h-6 rounded-md px-2 text-xs"
+                    onClick={() => toggleTechnicalIndicator(indicator)}
+                  >
+                    {indicator}
+                  </Button>
+                ))}
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        <div className="flex flex-wrap gap-1.5">
           {(["kline", "profile", "managers"] as AssetResearchTab[]).map((tab) => (
-            <Button key={tab} size="sm" variant={activeTab === tab ? "default" : "outline"} className="h-8" onClick={() => setActiveTab(tab)}>
+            <Button key={tab} size="sm" variant={activeTab === tab ? "default" : "outline"} className="h-7 px-2 text-xs" onClick={() => setActiveTab(tab)}>
               {tabLabel[tab]}
             </Button>
           ))}
@@ -842,18 +1156,26 @@ export default function ResearchAssetChart({
         ) : null}
 
         {activeTab === "kline" ? (
-          <div className="rounded-md border bg-[#fbfcff] px-2 py-2">
+          <div className="space-y-2">
+            <div className="rounded-md border bg-[#fbfcff] px-2 py-2">
             {isLoadingKlines ? (
-              <div className={compact ? "flex h-[440px] items-center justify-center text-sm text-muted-foreground" : "flex h-[560px] items-center justify-center text-sm text-muted-foreground"}>
+              <div className={compact ? "flex h-[400px] items-center justify-center text-sm text-muted-foreground" : "flex h-[520px] items-center justify-center text-sm text-muted-foreground"}>
                 {isZh ? "正在加载 ClickHouse K线..." : "Loading ClickHouse K-lines..."}
               </div>
             ) : series.length > 0 ? (
-              <ResearchKlineChart series={series} chartType={chartType} compact={compact} visibleDays={RANGE_CONFIG[range].days} />
+              <ResearchKlineChart
+                series={series}
+                chartType={chartType}
+                compact={compact}
+                visibleDays={RANGE_CONFIG[range].days}
+                selectedIndicators={selectedIndicators}
+              />
             ) : (
-              <div className={compact ? "flex h-[440px] items-center justify-center text-sm text-muted-foreground" : "flex h-[560px] items-center justify-center text-sm text-muted-foreground"}>
+              <div className={compact ? "flex h-[400px] items-center justify-center text-sm text-muted-foreground" : "flex h-[520px] items-center justify-center text-sm text-muted-foreground"}>
                 {isZh ? "暂无 ClickHouse K线数据" : "No ClickHouse K-line data"}
               </div>
             )}
+            </div>
           </div>
         ) : null}
       </CardContent>

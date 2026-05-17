@@ -2,8 +2,11 @@ from sqlalchemy.orm import Session
 from typing import Optional
 from database.models import User, UserAuthSession
 import hashlib
+import hmac
 import secrets
 import datetime
+
+PASSWORD_HASH_ITERATIONS = 260_000
 
 
 def create_user(
@@ -80,8 +83,40 @@ def update_user(
 
 
 def _hash_password(password: str) -> str:
-    """Hash password using SHA256"""
-    return hashlib.sha256(password.encode()).hexdigest()
+    """Hash password with a per-user salt.
+
+    The legacy implementation used plain SHA256. Verification below still
+    accepts existing SHA256 hashes, but new passwords are stored as PBKDF2.
+    """
+    salt = secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        salt.encode("utf-8"),
+        PASSWORD_HASH_ITERATIONS,
+    ).hex()
+    return f"pbkdf2_sha256${PASSWORD_HASH_ITERATIONS}${salt}${digest}"
+
+
+def _verify_password_hash(password: str, password_hash: str | None) -> bool:
+    if not password_hash:
+        return False
+
+    if password_hash.startswith("pbkdf2_sha256$"):
+        try:
+            _, iterations_raw, salt, expected = password_hash.split("$", 3)
+            digest = hashlib.pbkdf2_hmac(
+                "sha256",
+                password.encode("utf-8"),
+                salt.encode("utf-8"),
+                int(iterations_raw),
+            ).hex()
+            return hmac.compare_digest(digest, expected)
+        except Exception:
+            return False
+
+    legacy_digest = hashlib.sha256(password.encode("utf-8")).hexdigest()
+    return hmac.compare_digest(legacy_digest, password_hash)
 
 
 def set_user_password(db: Session, user_id: int, password: str) -> Optional[User]:
@@ -90,7 +125,7 @@ def set_user_password(db: Session, user_id: int, password: str) -> Optional[User
     if not user:
         return None
     
-    user.password = _hash_password(password)
+    user.password_hash = _hash_password(password)
     db.commit()
     db.refresh(user)
     return user
@@ -99,16 +134,27 @@ def set_user_password(db: Session, user_id: int, password: str) -> Optional[User
 def verify_user_password(db: Session, user_id: int, password: str) -> bool:
     """Verify user trading password"""
     user = db.query(User).filter(User.id == user_id).first()
-    if not user or not user.password:
+    if not user:
         return False
     
-    return user.password == _hash_password(password)
+    return _verify_password_hash(password, user.password_hash)
 
 
 def user_has_password(db: Session, user_id: int) -> bool:
     """Check if user has set a trading password"""
     user = db.query(User).filter(User.id == user_id).first()
-    return user is not None and user.password is not None and user.password.strip() != ""
+    return user is not None and user.password_hash is not None and user.password_hash.strip() != ""
+
+
+def any_password_user_exists(db: Session) -> bool:
+    """Return whether any active user can log in with a password."""
+    return (
+        db.query(User)
+        .filter(User.is_active == "true")
+        .filter(User.password_hash.isnot(None))
+        .first()
+        is not None
+    )
 
 
 def create_auth_session(db: Session, user_id: int) -> Optional[UserAuthSession]:

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Line, LineChart, ResponsiveContainer, Tooltip, YAxis } from "recharts";
+import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -54,6 +54,15 @@ function trendAssetPath(series: FundTrendSeries) {
   return `/assets/${encodeURIComponent(`${prefix}${code}`)}`;
 }
 
+function formatTrendDate(label: unknown) {
+  const raw = String(label || "");
+  if (!raw) return "";
+  const normalized = raw.slice(0, 10);
+  const match = normalized.match(/^(\d{4})[-/]?(\d{2})[-/]?(\d{2})$/);
+  if (!match) return raw;
+  return `${match[1]}-${match[2]}-${match[3]}`;
+}
+
 export default function DashboardPage({ onNavigate }: DashboardPageProps) {
   const { i18n } = useTranslation();
   const isZh = i18n.language?.startsWith("zh");
@@ -63,6 +72,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
   const [fundTrends, setFundTrends] = useState<FundTrendSeries[]>([]);
   const [isLoadingFundTrends, setIsLoadingFundTrends] = useState(true);
   const [fundTrendsError, setFundTrendsError] = useState<string | null>(null);
+  const [fundTrendsNotice, setFundTrendsNotice] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -91,15 +101,18 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
   const loadFundTrends = async () => {
     setIsLoadingFundTrends(true);
     setFundTrendsError(null);
+    setFundTrendsNotice(null);
     try {
       const response = await getDashboardFundTrendsAsync();
       setFundTrends(response.series);
-      if (response.status !== "completed" && response.message) {
+      if (response.status === "completed" && response.message) {
+        setFundTrendsNotice(response.message);
+      } else if (response.status !== "completed" && response.message) {
         setFundTrendsError(response.message);
       }
     } catch (error) {
-      console.error("Failed to load ClickHouse fund trends.", error);
-      setFundTrendsError(isZh ? "ClickHouse ETF 走势暂不可用，请稍后重试。" : "ClickHouse ETF trends are temporarily unavailable.");
+      console.error("Failed to load fund trends.", error);
+      setFundTrendsError(isZh ? "ETF 走势暂不可用，请稍后重试。" : "ETF trends are temporarily unavailable.");
       setFundTrends([]);
     } finally {
       setIsLoadingFundTrends(false);
@@ -186,11 +199,11 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
         <CardHeader className="pb-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <CardTitle className="text-base">{isZh ? "ClickHouse ETF 随机走势" : "ClickHouse ETF Trends"}</CardTitle>
+              <CardTitle className="text-base">{isZh ? "ETF 走势观察" : "ETF Trend Watch"}</CardTitle>
               <CardDescription>
                 {isZh
-                  ? "从理杏仁同步到 CK 的业务表随机抽样，展示近 180 个交易日收盘价。"
-                  : "Random samples from Lixinger business tables in ClickHouse, last 180 trading closes."}
+                  ? "展示近期交易日收盘走势，用于快速观察 ETF 价格变化。"
+                  : "Recent trading-close trends for quick ETF price checks."}
               </CardDescription>
             </div>
             <Button size="sm" variant="outline" onClick={() => void loadFundTrends()} disabled={isLoadingFundTrends}>
@@ -199,6 +212,7 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
           </div>
         </CardHeader>
         <CardContent>
+          {fundTrendsNotice ? <p className="mb-3 text-xs text-muted-foreground">{fundTrendsNotice}</p> : null}
           {fundTrendsError ? <p className="mb-3 text-xs text-destructive">{fundTrendsError}</p> : null}
           {isLoadingFundTrends ? (
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -236,11 +250,12 @@ export default function DashboardPage({ onNavigate }: DashboardPageProps) {
                     <div className="mt-3 h-[110px]">
                       <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={series.points}>
+                          <XAxis dataKey="date" hide />
                           <YAxis domain={["dataMin", "dataMax"]} hide />
                           <Tooltip
                             contentStyle={{ borderRadius: 8, borderColor: "#e2e8f0", fontSize: 12 }}
                             formatter={(value) => [Number(value).toFixed(4), isZh ? "收盘价" : "Close"]}
-                            labelFormatter={(label) => String(label)}
+                            labelFormatter={(label) => formatTrendDate(label)}
                           />
                           <Line
                             type="monotone"

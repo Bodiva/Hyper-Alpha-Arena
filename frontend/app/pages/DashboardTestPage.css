@@ -378,9 +378,9 @@
 
 .lat-index-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 16px;
-  margin-bottom: 28px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 24px;
 }
 
 .lat-index-empty-card {
@@ -408,11 +408,11 @@
 
 .lat-index-card {
   display: flex;
-  min-height: 168px;
+  min-height: 154px;
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--lat-border-muted);
-  border-radius: 16px;
+  border-radius: 12px;
   background: var(--lat-bg-card);
   text-align: left;
   box-shadow: var(--lat-shadow-card);
@@ -444,7 +444,7 @@
 }
 
 .lat-index-placeholder-body {
-  padding: 18px 16px 16px;
+  padding: 12px 10px 10px;
   text-align: center;
 }
 
@@ -452,7 +452,7 @@
   width: 100%;
   border: 1px dashed var(--lat-border-muted);
   border-radius: 10px;
-  padding: 18px 10px;
+  padding: 12px 8px;
   color: var(--lat-text-tertiary);
   font-size: 12px;
 }
@@ -479,22 +479,32 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
-  padding: 16px 16px 0;
+  gap: 10px;
+  padding: 14px 14px 0;
+}
+
+.lat-index-card-head > div:first-child {
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .lat-index-title {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  min-width: 0;
+  gap: 6px;
 }
 
 .lat-index-title h3 {
   margin: 0;
+  min-width: 0;
+  overflow: hidden;
   color: var(--lat-text-primary);
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 800;
-  line-height: 1.15;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .lat-index-title span,
@@ -509,11 +519,11 @@
 
 .lat-index-semantic {
   display: block;
-  max-width: 180px;
-  margin-top: 4px;
+  max-width: min(190px, 100%);
+  margin-top: 3px;
   overflow: hidden;
   color: var(--lat-text-tertiary);
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
   line-height: 1.35;
   text-overflow: ellipsis;
@@ -522,6 +532,7 @@
 
 .lat-index-price {
   display: grid;
+  flex-shrink: 0;
   gap: 4px;
   text-align: right;
 }
@@ -535,13 +546,13 @@
 
 .lat-index-price strong {
   color: var(--lat-text-primary);
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 800;
 }
 
 .lat-index-price span {
   font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .is-up {
@@ -554,10 +565,10 @@
 
 .lat-index-chart {
   display: flex;
-  height: 112px;
+  height: 92px;
   align-items: center;
   justify-content: center;
-  padding: 8px 4px 10px;
+  padding: 6px 4px 10px;
   color: var(--lat-text-secondary);
   font-size: 12px;
 }
@@ -801,6 +812,15 @@
   bottom: 112px;
   display: flex;
   gap: 10px;
+}
+
+.lat-brief-action-error {
+  position: absolute;
+  right: 32px;
+  bottom: 82px;
+  max-width: 320px;
+  color: #b91c1c;
+  font-size: 12px;
 }
 
 .lat-secondary-action,
@@ -1909,9 +1929,15 @@
   line-height: 1.45;
 }
 
+@media (max-width: 1680px) {
+  .lat-index-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 1320px) {
   .lat-index-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .lat-dashboard-grid {
@@ -1998,6 +2024,12 @@
     flex-direction: column;
     align-self: stretch;
     margin-top: 24px;
+  }
+
+  .lat-brief-action-error {
+    position: static;
+    max-width: none;
+    margin-top: 8px;
   }
 
   .lat-secondary-action,

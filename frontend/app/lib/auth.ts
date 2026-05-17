@@ -21,6 +21,24 @@ export interface ArenaSessionPayload {
   user: User
 }
 
+export interface LocalAuthUser {
+  id: number
+  username: string
+  email?: string | null
+  is_active: boolean
+}
+
+export interface LocalAuthResponse {
+  user: LocalAuthUser
+  session_token: string
+  expires_at: string
+}
+
+export interface LocalBootstrapStatus {
+  has_password_user: boolean
+  registration_enabled: boolean
+}
+
 // User information interface
 export interface User {
   owner: string
@@ -47,6 +65,85 @@ export interface User {
   isGlobalAdmin: boolean
   isForbidden: boolean
   signupApplication: string
+}
+
+export function mapLocalUser(localUser: LocalAuthUser): User {
+  const id = String(localUser.id)
+  return {
+    owner: 'local',
+    name: localUser.username,
+    createdTime: '',
+    updatedTime: '',
+    id,
+    type: 'local-user',
+    displayName: localUser.username,
+    avatar: '',
+    email: localUser.email ?? '',
+    phone: '',
+    location: '',
+    address: [],
+    affiliation: '',
+    title: '',
+    homepage: '',
+    bio: '',
+    tag: '',
+    region: '',
+    language: '',
+    score: 0,
+    isAdmin: false,
+    isGlobalAdmin: false,
+    isForbidden: !localUser.is_active,
+    signupApplication: 'alphatrace',
+  }
+}
+
+export async function getLocalBootstrapStatus(): Promise<LocalBootstrapStatus> {
+  const response = await fetch('/api/users/bootstrap-status')
+  if (!response.ok) {
+    throw new Error('Failed to load login status')
+  }
+  return response.json()
+}
+
+export async function localLogin(username: string, password: string): Promise<LocalAuthResponse> {
+  const response = await fetch('/api/users/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || 'Login failed')
+  }
+  return response.json()
+}
+
+export async function localRegister(username: string, password: string, email?: string): Promise<LocalAuthUser> {
+  const response = await fetch('/api/users/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password, email: email || undefined }),
+  })
+  if (!response.ok) {
+    const message = await response.text()
+    throw new Error(message || 'Registration failed')
+  }
+  return response.json()
+}
+
+export async function getLocalCurrentUser(sessionToken: string): Promise<User | null> {
+  const response = await fetch('/api/users/me', {
+    headers: { Authorization: `Bearer ${sessionToken}` },
+  })
+  if (!response.ok) return null
+  return mapLocalUser(await response.json())
+}
+
+export async function localLogout(sessionToken: string): Promise<void> {
+  await fetch('/api/users/logout', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${sessionToken}` },
+  })
 }
 
 // Global auth configuration

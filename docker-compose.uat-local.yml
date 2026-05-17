@@ -1,0 +1,79 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: alphatrace-uat-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${ALPHATRACE_UAT_MYSQL_ROOT_PASSWORD:-alpha_root_pass}
+      MYSQL_USER: ${ALPHATRACE_UAT_MYSQL_USER:-alpha_user}
+      MYSQL_PASSWORD: ${ALPHATRACE_UAT_MYSQL_PASSWORD:-alpha_pass}
+      MYSQL_DATABASE: ${ALPHATRACE_UAT_MYSQL_DATABASE:-alpha_trace}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    ports:
+      - "127.0.0.1:${ALPHATRACE_UAT_MYSQL_PORT:-23318}:3306"
+    volumes:
+      - alphatrace_uat_mysql_data:/var/lib/mysql
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mysqladmin ping -h localhost -u$${MYSQL_USER} -p$${MYSQL_PASSWORD}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  app:
+    image: alphatrace:uat
+    container_name: alphatrace-uat-app
+    environment:
+      BACKEND_PORT: "8802"
+      ALPHATRACE_BACKEND_PROFILE: alphatrace
+      ALPHATRACE_FRONTEND_WATCHER_ENABLED: "false"
+      ALPHATRACE_LEGACY_RUNTIME_ENABLED: "false"
+      RUN_DB_INIT: "false"
+      ALPHA_TRACE_DOMAIN_STORE: mysql
+      ALPHA_TRACE_AGENT_RUN_STORE: mysql
+      ALPHA_TRACE_MYSQL_DATABASE_URL: mysql+pymysql://${ALPHATRACE_UAT_MYSQL_USER:-alpha_user}:${ALPHATRACE_UAT_MYSQL_PASSWORD:-alpha_pass}@mysql:3306/${ALPHATRACE_UAT_MYSQL_DATABASE:-alpha_trace}?charset=utf8mb4
+      DATABASE_URL: mysql+pymysql://${ALPHATRACE_UAT_MYSQL_USER:-alpha_user}:${ALPHATRACE_UAT_MYSQL_PASSWORD:-alpha_pass}@mysql:3306/${ALPHATRACE_UAT_MYSQL_DATABASE:-alpha_trace}?charset=utf8mb4
+      ALPHA_TRACE_CLICKHOUSE_URL: ${ALPHA_TRACE_DOCKER_CLICKHOUSE_URL:-http://host.docker.internal:28123}
+      ALPHA_TRACE_CLICKHOUSE_USER: ${ALPHA_TRACE_DOCKER_CLICKHOUSE_USER:-alpha_user}
+      ALPHA_TRACE_CLICKHOUSE_PASSWORD: ${ALPHA_TRACE_DOCKER_CLICKHOUSE_PASSWORD:-alpha_pass}
+      ALPHATRACE_LIXINGER_TOKEN: ${ALPHATRACE_LIXINGER_TOKEN:-}
+      LIXINGER_TOKEN: ${LIXINGER_TOKEN:-}
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+      QWEN_API_KEY: ${QWEN_API_KEY:-}
+      QWEN_BASE_URL: ${QWEN_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      QWEN_MODEL: ${QWEN_MODEL:-qwen-plus}
+      BOCHA_API_KEY: ${BOCHA_API_KEY:-}
+      BOCHA_BASE_URL: ${BOCHA_BASE_URL:-https://api.bocha.cn}
+      BOCHA_SEARCH_ENDPOINT: ${BOCHA_SEARCH_ENDPOINT:-/v1/web-search}
+      OPENCLAW_WS_URL: ${OPENCLAW_WS_URL:-}
+      OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:-}
+      OPENCLAW_GATEWAY_PASSWORD: ${OPENCLAW_GATEWAY_PASSWORD:-}
+      OPENCLAW_SESSION_KEY: ${OPENCLAW_SESSION_KEY:-agent:main:main}
+      OPENCLAW_DEVICE_KEY_PATH: /app/data/openclaw-device-key.pem
+      ALPHATRACE_BACKEND_LOG_PATH: /app/logs/backend-runtime.log
+      HTTP_PROXY: ""
+      HTTPS_PROXY: ""
+      http_proxy: ""
+      https_proxy: ""
+      ALL_PROXY: ""
+      NO_PROXY: ""
+      no_proxy: ""
+    ports:
+      - "127.0.0.1:${ALPHATRACE_UAT_APP_PORT:-28802}:8802"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - alphatrace_uat_app_data:/app/data
+      - alphatrace_uat_logs:/app/logs
+    restart: unless-stopped
+
+volumes:
+  alphatrace_uat_mysql_data:
+  alphatrace_uat_app_data:
+  alphatrace_uat_logs:

@@ -771,12 +771,102 @@ class QwenRunnerAdapter:
                 klinePoints=(market_context.get("klineSummary") or {}).get("points"),
                 managerCount=len(market_context.get("fundManagers") or []),
                 sourceRefs=market_context.get("sourceRefs"),
+                dataPreview=self._clickhouse_monitor_data_preview(market_context),
+                tableData=self._clickhouse_monitor_table_data(market_context),
                 summary=f"Loaded ClickHouse monitor context for {request.assetId}.",
             ),
             agent_name="Market Context Loader",
             team="analyst_team",
         )
         return market_context
+
+    @staticmethod
+    def _clickhouse_monitor_data_preview(market_context: Dict[str, Any]) -> Dict[str, Any]:
+        indicators = market_context.get("indicators")
+        fund_managers = market_context.get("fundManagers")
+        return {
+            "asset": {
+                "assetId": market_context.get("assetId"),
+                "symbol": market_context.get("symbol"),
+                "name": market_context.get("name"),
+                "assetType": market_context.get("assetType"),
+                "market": market_context.get("market"),
+                "currency": market_context.get("currency"),
+            },
+            "quote": market_context.get("quote"),
+            "valuation": market_context.get("valuation"),
+            "liquidity": market_context.get("liquidity"),
+            "volatility": market_context.get("volatility"),
+            "trend": market_context.get("trend"),
+            "fundFlow": market_context.get("fundFlow"),
+            "returnWindows": market_context.get("returnWindows"),
+            "klineSummary": market_context.get("klineSummary"),
+            "indicators": indicators[:12] if isinstance(indicators, list) else [],
+            "fundManagers": fund_managers[:8] if isinstance(fund_managers, list) else [],
+        }
+
+    @classmethod
+    def _clickhouse_monitor_table_data(cls, market_context: Dict[str, Any]) -> Dict[str, Any]:
+        source_refs = market_context.get("sourceRefs")
+        refs = source_refs if isinstance(source_refs, dict) else {}
+        table_data: Dict[str, Any] = {}
+
+        def add_table(table_name: Any, payload: Dict[str, Any]) -> None:
+            if isinstance(table_name, str) and table_name:
+                table_data[table_name] = payload
+
+        asset_payload = {
+            "asset": {
+                "assetId": market_context.get("assetId"),
+                "symbol": market_context.get("symbol"),
+                "name": market_context.get("name"),
+                "assetType": market_context.get("assetType"),
+                "market": market_context.get("market"),
+                "currency": market_context.get("currency"),
+            }
+        }
+        price_payload = {
+            "quote": market_context.get("quote"),
+            "returnWindows": market_context.get("returnWindows"),
+            "klineSummary": market_context.get("klineSummary"),
+        }
+        overview_payload = {
+            "quote": market_context.get("quote"),
+            "valuation": market_context.get("valuation"),
+            "liquidity": market_context.get("liquidity"),
+            "volatility": market_context.get("volatility"),
+            "trend": market_context.get("trend"),
+            "fundFlow": market_context.get("fundFlow"),
+            "indicators": (market_context.get("indicators") or [])[:12]
+            if isinstance(market_context.get("indicators"), list)
+            else [],
+        }
+        manager_payload = {
+            "managerCount": len(market_context.get("fundManagers") or []),
+            "fundManagers": (market_context.get("fundManagers") or [])[:8]
+            if isinstance(market_context.get("fundManagers"), list)
+            else [],
+        }
+
+        add_table(refs.get("assetTable"), asset_payload)
+        add_table(refs.get("priceTable"), price_payload)
+        add_table(
+            refs.get("fallbackPriceTable"),
+            {
+                **price_payload,
+                "usage": "price fallback",
+                "fallbackFor": refs.get("priceTable"),
+            },
+        )
+        add_table(refs.get("managerTable"), manager_payload)
+
+        views = refs.get("views")
+        if isinstance(views, list):
+            for view_name in views:
+                payload = manager_payload if isinstance(view_name, str) and "manager" in view_name.lower() else overview_payload
+                add_table(view_name, payload)
+
+        return table_data
 
     @staticmethod
     def _data_context_payload(request: SubmitAgentRunRequest) -> Dict[str, Any]:
@@ -1548,7 +1638,7 @@ class QwenRunnerAdapter:
         if hyper_ai_config:
             return hyper_ai_config
 
-        api_key = os.getenv("DASHSCOPE_API_KEY")
+        api_key = os.getenv("DASHSCOPE_API_KEY") or os.getenv("QWEN_API_KEY")
         if api_key:
             return {
                 "api_key": api_key,
@@ -3562,6 +3652,9 @@ class QwenRunnerAdapter:
         candidates: List[str] = []
         fenced = re.findall(r"```(?:json)?\s*([\s\S]*?)\s*```", content, flags=re.IGNORECASE)
         candidates.extend(candidate.strip() for candidate in fenced if candidate.strip().startswith("{"))
+        labeled = re.search(r"(?is)(?:^|\n)\s*json\s*\n\s*({[\s\S]*})\s*$", content or "")
+        if labeled:
+            candidates.append(labeled.group(1).strip())
 
         stripped = content.strip()
         if stripped.startswith("{") and stripped.endswith("}"):
@@ -3696,7 +3789,11 @@ class QwenRunnerAdapter:
 
     @staticmethod
     def _strip_structured_json_blocks(content: str) -> str:
-        return re.sub(r"```(?:json)?\s*[\[{][\s\S]*?[\]}]\s*```", "", content or "", flags=re.IGNORECASE).strip()
+        text = re.sub(r"```(?:json)?\s*[\[{][\s\S]*?[\]}]\s*```", "", content or "", flags=re.IGNORECASE).strip()
+        text = re.sub(r"(?is)\n\s*json\s*\n\s*[\[{][\s\S]*$", "", text)
+        text = re.sub(r"(?is)^\s*json\s*\n\s*[\[{][\s\S]*$", "", text)
+        text = re.sub(r"(?is)^\s*JSON\s*[:：]\s*[\[{][\s\S]*$", "", text)
+        return text.strip()
 
     @staticmethod
     def _infer_confidence(content: str) -> float:

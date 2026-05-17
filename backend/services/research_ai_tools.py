@@ -13,6 +13,7 @@ Provides tools for:
 import json
 import logging
 import os
+from dataclasses import asdict, is_dataclass
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timezone, timedelta
 
@@ -88,6 +89,32 @@ HYPER_AI_TOOLS = [
                     }
                 },
                 "required": ["doc_type"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "query_clickhouse_market_context",
+            "description": "Query AlphaTrace ClickHouse as the primary internal evidence source for ETF, fund, index, market-stage, valuation, trend, and allocation questions. Can run in parallel with Bocha or other evidence tools during market research task decomposition.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "question": {
+                        "type": "string",
+                        "description": "The user's market or asset research question."
+                    },
+                    "asset_id": {
+                        "type": "string",
+                        "description": "Optional AlphaTrace asset id or code, e.g. asset_etf_510300, 510300, 000300.SH."
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum evidence items to return (default 6, max 10).",
+                        "default": 6
+                    }
+                },
+                "required": ["question"]
             }
         }
     },
@@ -781,6 +808,37 @@ HYPER_AI_TOOLS = [
 
 # --- External Tools (require user-provided API keys) ---
 EXTERNAL_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "search_bocha_evidence",
+            "description": "Search Bocha for recent external evidence. Can run in parallel with ClickHouse and other tools during market research task decomposition. Use it to supplement market events, policy/news changes, or public disclosures.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "question": {
+                        "type": "string",
+                        "description": "The user's research question or a focused external evidence query."
+                    },
+                    "asset_id": {
+                        "type": "string",
+                        "description": "Optional AlphaTrace asset id or code."
+                    },
+                    "task_type": {
+                        "type": "string",
+                        "description": "Research task type, default single_asset_analysis.",
+                        "default": "single_asset_analysis"
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum evidence items to return (default 5, max 10).",
+                        "default": 5
+                    }
+                },
+                "required": ["question"]
+            }
+        }
+    },
     {
         "type": "function",
         "function": {
@@ -2974,6 +3032,120 @@ def execute_web_search(db: Session, query: str, max_results: int = 5) -> str:
         return json.dumps({"error": f"Search failed: {err}"})
 
 
+def _serialize_evidence_item(item: Any) -> Dict[str, Any]:
+    if is_dataclass(item):
+        return asdict(item)
+    if hasattr(item, "model_dump"):
+        return item.model_dump()
+    if hasattr(item, "dict"):
+        return item.dict()
+    if isinstance(item, dict):
+        return item
+    return {"summary": str(item)}
+
+
+def execute_query_clickhouse_market_context(
+    db: Session,
+    question: str,
+    asset_id: Optional[str] = None,
+    limit: int = 6,
+) -> str:
+    """Load primary market evidence from the AlphaTrace ClickHouse mirror."""
+    question = (question or "").strip()
+    asset_id = (asset_id or "").strip() or None
+    limit = min(max(int(limit or 6), 1), 10)
+
+    if not question:
+        return json.dumps({
+            "status": "invalid_request",
+            "error": "question is required",
+            "source": "clickhouse_lixinger_sync",
+        }, ensure_ascii=False)
+
+    try:
+        from services.lixinger_clickhouse_context_service import build_lixinger_clickhouse_evidence_items
+
+        items = build_lixinger_clickhouse_evidence_items(
+            asset_id=asset_id,
+            question=question,
+            limit=limit,
+        )
+        evidence = [_serialize_evidence_item(item) for item in items]
+        return json.dumps({
+            "status": "available" if evidence else "empty",
+            "source": "clickhouse_lixinger_sync",
+            "priority": "primary_internal_market_data",
+            "question": question,
+            "asset_id": asset_id,
+            "evidence_count": len(evidence),
+            "evidence": evidence,
+            "usage_note": (
+                "For market-stage, ETF, fund, index, valuation, trend, or allocation questions, "
+                "treat this ClickHouse result as primary internal structured evidence. It may be collected "
+                "in parallel with external evidence. If it is empty, say CK has no usable internal evidence "
+                "for the requested object."
+            ),
+        }, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.exception("[query_clickhouse_market_context] failed")
+        return json.dumps({
+            "status": "unavailable",
+            "source": "clickhouse_lixinger_sync",
+            "error": str(e),
+            "_error_class": type(e).__name__,
+            "usage_note": "ClickHouse internal evidence could not be loaded; do not present external search as internal data.",
+        }, ensure_ascii=False)
+
+
+def execute_search_bocha_evidence(
+    db: Session,
+    question: str,
+    asset_id: Optional[str] = None,
+    task_type: str = "single_asset_analysis",
+    limit: int = 5,
+) -> str:
+    """Search Bocha as external supplemental evidence."""
+    question = (question or "").strip()
+    asset_id = (asset_id or "").strip() or None
+    task_type = (task_type or "single_asset_analysis").strip()
+    limit = min(max(int(limit or 5), 1), 10)
+
+    if not question:
+        return json.dumps({
+            "status": "invalid_request",
+            "error": "question is required",
+            "source": "bocha_search",
+        }, ensure_ascii=False)
+
+    try:
+        from services.evidence_retrieval.external_search import ExternalEvidenceSearch
+
+        result = ExternalEvidenceSearch().search(
+            asset_id=asset_id or "research_assistant",
+            question=question,
+            task_type=task_type,
+            limit=limit,
+        )
+        evidence = [_serialize_evidence_item(item) for item in result.items]
+        return json.dumps({
+            "status": result.status,
+            "source": "bocha_search",
+            "query": result.query,
+            "asset_id": asset_id,
+            "evidence_count": len(evidence),
+            "evidence": evidence,
+            "usage_note": "Bocha is supplemental external evidence. Cross-check it with CK and other tools when forming a market-stage conclusion.",
+        }, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.exception("[search_bocha_evidence] failed")
+        return json.dumps({
+            "status": "unavailable",
+            "source": "bocha_search",
+            "error": str(e),
+            "_error_class": type(e).__name__,
+        }, ensure_ascii=False)
+
+
 def execute_fetch_url(url: str, max_length: int = 8000) -> str:
     """Fetch URL content using Jina Reader API with trafilatura fallback."""
     import requests as req
@@ -3312,6 +3484,14 @@ def execute_hyper_ai_tool(
                 lang=arguments.get("lang", "en")
             )
 
+        elif tool_name == "query_clickhouse_market_context":
+            return execute_query_clickhouse_market_context(
+                db,
+                question=arguments.get("question", ""),
+                asset_id=arguments.get("asset_id"),
+                limit=arguments.get("limit", 6),
+            )
+
         elif tool_name == "get_klines":
             return execute_get_klines(
                 db,
@@ -3573,6 +3753,15 @@ def execute_hyper_ai_tool(
             return execute_web_search(
                 db, query=arguments.get("query", ""),
                 max_results=arguments.get("max_results", 5)
+            )
+
+        elif tool_name == "search_bocha_evidence":
+            return execute_search_bocha_evidence(
+                db,
+                question=arguments.get("question", ""),
+                asset_id=arguments.get("asset_id"),
+                task_type=arguments.get("task_type", "single_asset_analysis"),
+                limit=arguments.get("limit", 5),
             )
 
         elif tool_name == "fetch_url":

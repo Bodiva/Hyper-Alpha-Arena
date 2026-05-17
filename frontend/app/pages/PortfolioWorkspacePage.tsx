@@ -432,7 +432,7 @@ export default function PortfolioWorkspacePage() {
       });
 
       if (apiMode !== "real") {
-        setDiagnosisSubmitError("当前为 Mock Mode，已跳转到本地样例 Agent Run。");
+        setDiagnosisSubmitError("当前为离线模式，已打开本地任务。");
       }
       setDiagnosisSubmitStatus("idle");
       navigateTo(`/agent-lab/runs/${encodeURIComponent(run.runId)}`);

@@ -37,8 +37,9 @@ import type { AgentRuntimeEvent } from "@/entities/agent/runtime-events";
 import { listEvidence } from "@/entities/evidence/api";
 import { getApiMode } from "@/shared/api/api-mode";
 import { buildAgentExecutionProgress } from "@/shared/lib/agent-progress";
+import { filterRetiredEvidenceIds } from "@/shared/lib/evidence-filter";
 import { buildAgentRunProgress } from "@/shared/lib/runtime-step-mapper";
-import { goBackOrDashboard, navigateTo } from "@/shared/lib/navigation";
+import { navigateTo } from "@/shared/lib/navigation";
 import { useTypewriterStream } from "@/shared/lib/use-typewriter-stream";
 import AgentProgressCard from "@/shared/ui/AgentProgressCard";
 import AgentRunProgressCard from "@/shared/ui/AgentRunProgressCard";
@@ -438,6 +439,9 @@ const formatJsonPreview = (value: unknown): string => JSON.stringify(redactPaylo
 
 const getToolContractDescription = (toolName: string): string => {
   const normalized = toolName.toLowerCase();
+  if (normalized.includes("ck.monitor.context.load")) {
+    return "从 ClickHouse monitor 数据库加载资产画像、行情、指标和基金经理上下文。";
+  }
   if (normalized.includes("bocha.search")) {
     return "通过后端 Bocha 适配器执行外部搜索。API Key 仅保存在后端，来源 URL 作为引用依据。";
   }
@@ -831,6 +835,175 @@ const getRuntimeToolActivities = (events: AgentRuntimeEvent[]): RuntimeToolActiv
   return activities;
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const recordField = (record: Record<string, unknown> | undefined, key: string): Record<string, unknown> | undefined => {
+  const value = record?.[key];
+  return isRecord(value) ? value : undefined;
+};
+
+const arrayField = (record: Record<string, unknown> | undefined, key: string): unknown[] => {
+  const value = record?.[key];
+  return Array.isArray(value) ? value : [];
+};
+
+const numberField = (record: Record<string, unknown> | undefined, keys: string[]): number | undefined => {
+  for (const key of keys) {
+    const value = record?.[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+  }
+  return undefined;
+};
+
+const stringField = (record: Record<string, unknown> | undefined, keys: string[]): string | undefined => {
+  for (const key of keys) {
+    const value = record?.[key];
+    if (typeof value === "string" && value.trim()) return value;
+  }
+  return undefined;
+};
+
+const formatMetricValue = (value: unknown, options?: { percent?: boolean }): string => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    if (options?.percent) return formatPercent(value, 2);
+    return value.toLocaleString("zh-CN", { maximumFractionDigits: 4 });
+  }
+  if (typeof value === "string" && value.trim()) return value;
+  return "-";
+};
+
+const collectClickHouseTables = (
+  sourceRefs: Record<string, unknown> | undefined,
+  tableData: Record<string, unknown> | undefined,
+): string[] => {
+  const tables = new Set<string>();
+  Object.keys(tableData ?? {}).forEach((table) => tables.add(table));
+  ["assetTable", "priceTable", "fallbackPriceTable", "managerTable"].forEach((key) => {
+    const value = sourceRefs?.[key];
+    if (typeof value === "string" && value.trim()) tables.add(value);
+  });
+  const views = sourceRefs?.views;
+  if (Array.isArray(views)) {
+    views.forEach((view) => {
+      if (typeof view === "string" && view.trim()) tables.add(view);
+    });
+  }
+  return Array.from(tables);
+};
+
+const renderClickHouseMetric = (label: string, value: string) => (
+  <div key={label} className="rounded border bg-background p-2">
+    <p className="text-muted-foreground">{label}</p>
+    <p className="mt-1 break-words font-medium text-foreground">{value}</p>
+  </div>
+);
+
+const renderClickHouseToolData = (activity: RuntimeToolActivity) => {
+  if (!activity.toolName.toLowerCase().includes("ck.monitor.context.load")) return null;
+
+  const result = activity.resultPayload ?? {};
+  const sourceRefs = recordField(result, "sourceRefs");
+  const tableData = recordField(result, "tableData");
+  const dataPreview = recordField(result, "dataPreview");
+  const asset = recordField(dataPreview, "asset") ?? result;
+  const klineSummary = recordField(dataPreview, "klineSummary");
+  const returnWindows = recordField(dataPreview, "returnWindows");
+  const quote = recordField(dataPreview, "quote");
+  const fundManagers = arrayField(dataPreview, "fundManagers").filter(isRecord).slice(0, 5);
+  const tables = collectClickHouseTables(sourceRefs, tableData);
+  const symbol = stringField(asset, ["symbol"]) ?? stringField(result, ["symbol"]);
+  const assetName = stringField(asset, ["name"]);
+  const klinePoints = numberField(result, ["klinePoints"]) ?? numberField(klineSummary, ["points"]);
+  const managerCount = numberField(result, ["managerCount"]) ?? fundManagers.length;
+  const startDate = stringField(klineSummary, ["startDate"]);
+  const endDate = stringField(klineSummary, ["endDate"]);
+  const latestClose = numberField(returnWindows, ["latestClose"]) ?? numberField(klineSummary, ["latestClose"]) ?? numberField(quote, ["close", "price"]);
+  const periodReturn = numberField(klineSummary, ["periodReturn"]);
+  const maxDrawdown = numberField(klineSummary, ["maxDrawdown"]);
+  const oneMonthReturn = numberField(returnWindows, ["1m"]);
+  const oneYearReturn = numberField(returnWindows, ["1y"]);
+
+  return (
+    <div className="rounded border bg-muted/20 p-2 space-y-2">
+      <div className="space-y-1">
+        <p className="font-medium text-foreground">使用数据表</p>
+        {tables.length ? (
+          <div className="flex flex-wrap gap-1">
+            {tables.map((table) => (
+              <Badge key={table} variant="outline" className="max-w-full break-all font-mono text-[10px]">
+                {table}
+              </Badge>
+            ))}
+          </div>
+        ) : (
+          <p className="text-muted-foreground">本次事件未返回表引用。</p>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+        {renderClickHouseMetric("标的", [symbol, assetName].filter(Boolean).join(" / ") || "-")}
+        {renderClickHouseMetric("K线数量", klinePoints !== undefined ? formatInteger(klinePoints) : "-")}
+        {renderClickHouseMetric("日期范围", startDate || endDate ? `${startDate ?? "-"} 至 ${endDate ?? "-"}` : "-")}
+        {renderClickHouseMetric("最新价格", formatMetricValue(latestClose))}
+        {renderClickHouseMetric("区间收益", formatMetricValue(periodReturn, { percent: true }))}
+        {renderClickHouseMetric("最大回撤", formatMetricValue(maxDrawdown, { percent: true }))}
+        {renderClickHouseMetric("近1月", formatMetricValue(oneMonthReturn, { percent: true }))}
+        {renderClickHouseMetric("近1年", formatMetricValue(oneYearReturn, { percent: true }))}
+        {renderClickHouseMetric("基金经理", managerCount !== undefined ? formatInteger(managerCount) : "-")}
+      </div>
+
+      {fundManagers.length ? (
+        <div className="space-y-1">
+          <p className="font-medium text-foreground">基金经理数据</p>
+          <div className="space-y-1">
+            {fundManagers.map((manager, index) => {
+              const performance = recordField(manager, "performance");
+              const career = recordField(manager, "career");
+              const currentFund = recordField(manager, "currentFund");
+              return (
+                <div key={`${stringField(manager, ["managerCode", "managerName"]) ?? index}`} className="rounded border bg-background p-2">
+                  <p className="font-medium">{stringField(manager, ["managerName"]) ?? "未命名基金经理"}</p>
+                  <p className="text-muted-foreground">
+                    {[
+                      stringField(currentFund, ["fundName", "name"]),
+                      stringField(career, ["startDate", "tenureStartDate"]),
+                      numberField(performance, ["annualizedRoi"]) !== undefined
+                        ? `年化 ${formatMetricValue(numberField(performance, ["annualizedRoi"]), { percent: true })}`
+                        : "",
+                      numberField(performance, ["maxDrawdown"]) !== undefined
+                        ? `回撤 ${formatMetricValue(numberField(performance, ["maxDrawdown"]), { percent: true })}`
+                        : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" · ") || "已返回基金经理画像。"}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      {tableData && Object.keys(tableData).length ? (
+        <details>
+          <summary className="cursor-pointer text-muted-foreground">表数据快照</summary>
+          <div className="mt-1 space-y-2">
+            {Object.entries(tableData).map(([table, payload]) => (
+              <div key={table} className="rounded border bg-background p-2">
+                <p className="mb-1 break-all font-mono text-[10px] font-medium">{table}</p>
+                <pre className="max-h-40 overflow-auto whitespace-pre-wrap rounded bg-muted/40 p-2 font-mono text-[10px] text-muted-foreground">
+                  {formatJsonPreview(payload)}
+                </pre>
+              </div>
+            ))}
+          </div>
+        </details>
+      ) : null}
+    </div>
+  );
+};
+
 const summarizeEvent = (event: AgentEvent, agentName: string): string => {
   switch (event.type) {
     case "agent.started":
@@ -1171,7 +1344,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
   const refreshBackendLogs = async () => {
     if (apiMode !== "real") {
       setBackendLogs({
-        path: "mock",
+        path: "offline",
         exists: false,
         limit: 400,
         truncated: false,
@@ -1196,8 +1369,8 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
     if (apiMode !== "real") {
       setWorkerArtifacts({
         runId: run.runId,
-        workerRoot: "mock",
-        workDir: "mock",
+        workerRoot: "offline",
+        workDir: "offline",
         exists: false,
         files: {},
         stdoutLines: [],
@@ -1347,13 +1520,13 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
       .filter((event): event is Extract<AgentEvent, { type: "risk.warning" }> => event.type === "risk.warning")
       .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 
-    const evidenceIdSet = new Set<string>([
+    const evidenceIdSet = new Set<string>(filterRetiredEvidenceIds([
       ...run.evidenceIds,
       ...run.finalDecision.evidenceIds,
       ...run.toolCalls.flatMap((call) => call.evidenceIds ?? []),
       ...run.events.flatMap((event) => ("evidenceIds" in event && event.evidenceIds ? event.evidenceIds : [])),
       ...runtimeEvents.flatMap((event) => toStringList(runtimePayload(event).evidenceIds)),
-    ]);
+    ]));
     const evidencePool = realRunEvidence ?? evidenceItems;
     const usedEvidence = realRunEvidence ?? evidencePool.filter((item) => evidenceIdSet.has(item.id));
 
@@ -1429,7 +1602,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
           <CardContent className="space-y-3">
             <p className="text-sm text-destructive">{runLoadError}</p>
             <Button variant="outline" onClick={goBackToAgentLab}>
-              返回 Agent Lab
+              打开 Agent 实验室
             </Button>
           </CardContent>
         </Card>
@@ -1446,9 +1619,9 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
             <CardTitle className="text-xl">未找到对应 Agent Run</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground">请返回 Agent Lab 选择有效任务。</p>
+            <p className="text-sm text-muted-foreground">请在 Agent 实验室选择有效任务。</p>
             <Button variant="outline" onClick={goBackToAgentLab}>
-              返回 Agent Lab
+              打开 Agent 实验室
             </Button>
           </CardContent>
         </Card>
@@ -1539,7 +1712,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
           <p>分析资产：{assetLabel}</p>
           <p>任务类型：{formatTaskType(run.taskType)}</p>
           <p>标准类型：{formatResearchRunType(run.researchRunType)}</p>
-          <p>模型配置：{run.modelName ?? "mock-model-config"}</p>
+          <p>模型配置：{run.modelName ?? "-"}</p>
           <p>开始时间：{formatDateTime(run.startedAt)}</p>
           <p>结束时间：{formatDateTime(run.completedAt)}</p>
           <p>持续时间：{derived?.runDuration}</p>
@@ -1549,9 +1722,6 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
           <p>最终建议：{run.finalDecision.summary ?? run.finalDecision.thesis}</p>
         </CardContent>
         <CardContent className="pt-0 flex flex-wrap gap-2">
-          <Button size="sm" variant="outline" onClick={goBackOrDashboard}>
-            返回上一页
-          </Button>
           {["RUNNING", "QUEUED", "PARTIALLY_COMPLETED"].includes(run.status) ? (
             <Button size="sm" variant="destructive" onClick={handleCancelRun} disabled={isCancellingRun}>
               {isCancellingRun ? "正在取消..." : "取消任务"}
@@ -1938,9 +2108,9 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
                             </details>
                           </div>
                         </details>
-                        {call.evidenceIds?.length ? (
+                        {filterRetiredEvidenceIds(call.evidenceIds).length ? (
                           <div className="flex flex-wrap gap-1">
-                            {call.evidenceIds.map((id) => (
+                            {filterRetiredEvidenceIds(call.evidenceIds).map((id) => (
                               <Button
                                 key={`${call.callId}-${id}`}
                                 size="sm"
@@ -1974,6 +2144,7 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
                           <p className="text-muted-foreground">
                             {formatDateTime(activity.startedAt)} {activity.completedAt ? `→ ${formatDateTime(activity.completedAt)}` : ""}
                           </p>
+                          {renderClickHouseToolData(activity)}
                           <details>
                             <summary className="cursor-pointer text-muted-foreground">脱敏事件内容</summary>
                             <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap rounded bg-muted/40 p-2 font-mono text-[10px] text-muted-foreground">
@@ -1985,9 +2156,9 @@ export default function AgentRunDetailPage({ runId }: AgentRunDetailPageProps) {
                           </details>
                         </div>
                       </details>
-                      {activity.evidenceIds.length ? (
+                      {filterRetiredEvidenceIds(activity.evidenceIds).length ? (
                         <div className="flex flex-wrap gap-1">
-                          {activity.evidenceIds.map((id) => (
+                          {filterRetiredEvidenceIds(activity.evidenceIds).map((id) => (
                             <Button
                               key={`${activity.activityId}-${id}`}
                               size="sm"

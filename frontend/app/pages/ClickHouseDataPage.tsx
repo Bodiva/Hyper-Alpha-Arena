@@ -484,7 +484,7 @@ export default function ClickHouseDataPage({ embedded = false }: ClickHouseDataP
                 </Badge>
               </div>
               <p className="mt-1 text-sm text-muted-foreground">
-                查看 ClickHouse 非系统表的规模、字段和明细。点击左侧表名查看前 100 行。
+                查看已接入的投研数据表、字段结构和样例数据，用于核对 Agent 可用的数据来源。
               </p>
             </div>
             <Button variant="outline" onClick={() => void loadOverview()} disabled={isLoading}>

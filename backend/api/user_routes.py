@@ -2,7 +2,7 @@
 User authentication API routes
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Header
 from sqlalchemy.orm import Session
 from typing import List
 import logging
@@ -12,7 +12,8 @@ from database.connection import SessionLocal
 from database.models import User, UserExchangeConfig, UserSubscription
 from repositories.user_repo import (
     create_user, get_user, get_user_by_username,
-    update_user, create_auth_session, verify_auth_session
+    update_user, create_auth_session, verify_auth_session,
+    verify_user_password, revoke_auth_session, any_password_user_exists,
 )
 from datetime import datetime
 from pydantic import BaseModel
@@ -23,6 +24,23 @@ from schemas.user import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/users", tags=["users"])
+
+
+def _registration_allowed(db: Session) -> bool:
+    if not any_password_user_exists(db):
+        return True
+    return os.getenv("ALPHATRACE_ALLOW_USER_REGISTRATION", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _extract_session_token(authorization: str | None = None, session_token: str | None = None) -> str | None:
+    if session_token:
+        return session_token
+    if not authorization:
+        return None
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        return None
+    return token.strip()
 
 
 def get_db():
@@ -36,15 +54,24 @@ def get_db():
 @router.post("/register", response_model=UserOut)
 async def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
     try:
+        if not _registration_allowed(db):
+            raise HTTPException(status_code=403, detail="User registration is disabled")
+        if not user_data.username or not user_data.username.strip():
+            raise HTTPException(status_code=400, detail="Username is required")
+        if not user_data.password or len(user_data.password) < 8:
+            raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+
+        username = user_data.username.strip()
+
         # Check if username exists
-        existing = get_user_by_username(db, user_data.username)
+        existing = get_user_by_username(db, username)
         if existing:
             raise HTTPException(status_code=400, detail="Username already exists")
         
         # Create new user
         user = create_user(
             db=db,
-            username=user_data.username,
+            username=username,
             email=user_data.email,
             password=user_data.password
         )
@@ -66,10 +93,9 @@ async def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
 @router.post("/login", response_model=UserAuthResponse)
 async def login_user(login_data: UserLogin, db: Session = Depends(get_db)):
     try:
-        # For now, just verify username exists and create session
-        # Password verification can be implemented later
-        user = get_user_by_username(db, login_data.username)
-        if not user:
+        username = login_data.username.strip()
+        user = get_user_by_username(db, username)
+        if not user or user.is_active != "true" or not verify_user_password(db, user.id, login_data.password):
             raise HTTPException(status_code=401, detail="Invalid credentials")
         
         # Create auth session
@@ -93,6 +119,53 @@ async def login_user(login_data: UserLogin, db: Session = Depends(get_db)):
     except Exception as e:
         logger.error(f"User login failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"User login failed: {str(e)}")
+
+
+@router.get("/bootstrap-status")
+async def get_bootstrap_status(db: Session = Depends(get_db)):
+    has_password_user = any_password_user_exists(db)
+    return {
+        "has_password_user": has_password_user,
+        "registration_enabled": _registration_allowed(db),
+    }
+
+
+@router.get("/me", response_model=UserOut)
+async def get_current_user(
+    authorization: str | None = Header(default=None),
+    session_token: str | None = None,
+    db: Session = Depends(get_db),
+):
+    token = _extract_session_token(authorization=authorization, session_token=session_token)
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing session token")
+
+    user_id = verify_auth_session(db, token)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
+
+    user = get_user(db, user_id)
+    if not user or user.is_active != "true":
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return UserOut(
+        id=user.id,
+        username=user.username,
+        email=user.email,
+        is_active=user.is_active == "true",
+    )
+
+
+@router.post("/logout")
+async def logout_user(
+    authorization: str | None = Header(default=None),
+    session_token: str | None = None,
+    db: Session = Depends(get_db),
+):
+    token = _extract_session_token(authorization=authorization, session_token=session_token)
+    if token:
+        revoke_auth_session(db, token)
+    return {"status": "success"}
 
 
 @router.get("/profile", response_model=UserOut)

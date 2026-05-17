@@ -2,16 +2,32 @@
 
 import { createContext, useContext, useState, useEffect, useRef, type ReactNode } from 'react'
 import Cookies from 'js-cookie'
-import { getUserInfo, loadAuthConfig, type User, isTokenExpiringSoon, refreshAccessToken, getTokenExpiryTime } from '@/lib/auth'
+import {
+  getLocalBootstrapStatus,
+  getLocalCurrentUser,
+  getUserInfo,
+  loadAuthConfig,
+  localLogin,
+  localLogout,
+  localRegister,
+  mapLocalUser,
+  type User,
+  isTokenExpiringSoon,
+  refreshAccessToken,
+  getTokenExpiryTime,
+} from '@/lib/auth'
 import { getMembershipInfo, type MembershipInfo } from '@/lib/api'
 
 interface AuthContextType {
   user: User | null
   loading: boolean
   authEnabled: boolean
+  registrationEnabled: boolean
   membership: MembershipInfo | null
   membershipLoading: boolean
   setUser: (user: User | null) => void
+  login: (username: string, password: string) => Promise<void>
+  register: (username: string, password: string, email?: string) => Promise<void>
   logout: () => void
   refreshMembership: () => Promise<void>
 }
@@ -21,7 +37,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
-  const [authEnabled, setAuthEnabled] = useState(false)
+  const [authEnabled, setAuthEnabled] = useState(true)
+  const [registrationEnabled, setRegistrationEnabled] = useState(false)
   const [membership, setMembership] = useState<MembershipInfo | null>(null)
   const [membershipLoading, setMembershipLoading] = useState(false)
   const refreshTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -29,6 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const clearAuthState = () => {
     Cookies.remove('arena_token')
     Cookies.remove('arena_refresh_token')
+    Cookies.remove('arena_session_token')
     Cookies.remove('arena_user')
     setUser(null)
     setMembership(null)
@@ -211,13 +229,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const initAuth = async () => {
       try {
+        try {
+          const bootstrap = await getLocalBootstrapStatus()
+          setRegistrationEnabled(bootstrap.registration_enabled)
+        } catch (error) {
+          console.warn('[AuthContext] Failed to load local auth bootstrap status:', error)
+        }
+
+        const localSessionToken = Cookies.get('arena_session_token')
+        if (localSessionToken) {
+          const localUser = await getLocalCurrentUser(localSessionToken)
+          if (localUser) {
+            setUser(localUser)
+            Cookies.set('arena_user', JSON.stringify(localUser), { expires: 7 })
+            setAuthEnabled(true)
+            setLoading(false)
+            return
+          }
+          Cookies.remove('arena_session_token')
+        }
+
         // Check if auth is configured
         const config = await loadAuthConfig()
         const isAuthEnabled = !!config
-        setAuthEnabled(isAuthEnabled)
+        setAuthEnabled(true)
 
         if (!isAuthEnabled) {
-          // Auth disabled, skip authentication
+          // Local authentication is always enabled. If external auth is not
+          // configured, the AuthGate will show the local login page.
           setLoading(false)
           return
         }
@@ -290,6 +329,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const logout = async () => {
+    const localSessionToken = Cookies.get('arena_session_token')
+    if (localSessionToken) {
+      try {
+        await localLogout(localSessionToken)
+      } catch (e) {
+        console.warn('[AuthContext] Failed to revoke local session:', e)
+      }
+    }
+
     // Clear backend membership subscription first
     try {
       await fetch('/api/users/clear-membership', { method: 'POST' })
@@ -303,6 +351,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // because we use prompt=select_account in getSignInUrl()
     Cookies.remove('arena_token')
     Cookies.remove('arena_refresh_token')
+    Cookies.remove('arena_session_token')
     Cookies.remove('arena_user')
     await syncHyperInsightRuntimeToken(null)
     setUser(null)
@@ -314,8 +363,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refreshTimerRef.current = null
     }
 
-    // Refresh page to show logged-out state
-    window.location.href = '/'
+    window.location.href = '/login'
+  }
+
+  const login = async (username: string, password: string) => {
+    const authResponse = await localLogin(username, password)
+    const localUser = mapLocalUser(authResponse.user)
+    Cookies.set('arena_session_token', authResponse.session_token, { expires: 180 })
+    Cookies.set('arena_user', JSON.stringify(localUser), { expires: 7 })
+    setUser(localUser)
+    setMembership(null)
+  }
+
+  const register = async (username: string, password: string, email?: string) => {
+    await localRegister(username, password, email)
+    await login(username, password)
+    try {
+      const bootstrap = await getLocalBootstrapStatus()
+      setRegistrationEnabled(bootstrap.registration_enabled)
+    } catch {
+      setRegistrationEnabled(false)
+    }
   }
 
   return (
@@ -323,9 +391,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       loading,
       authEnabled,
+      registrationEnabled,
       membership,
       membershipLoading,
       setUser,
+      login,
+      register,
       logout,
       refreshMembership
     }}>

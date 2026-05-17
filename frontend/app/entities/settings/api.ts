@@ -76,6 +76,23 @@ export interface RuntimeCredentialStatus {
   tools: HyperAiToolConfigStatus[];
 }
 
+interface RuntimeConfigItem {
+  name: string;
+  status: string;
+  configured: boolean;
+  available: boolean;
+  source: string;
+  message: string;
+  metadata?: Record<string, unknown>;
+}
+
+interface RuntimeConfigResponse {
+  config?: {
+    qwen?: RuntimeConfigItem;
+    bocha?: RuntimeConfigItem;
+  };
+}
+
 export interface SaveQwenConfigPayload {
   apiKey: string;
   model: string;
@@ -141,11 +158,15 @@ export const getHyperAiProfileAsync = (): Promise<HyperAiProfileConfig> =>
 export const getHyperAiToolsAsync = (): Promise<{ tools: HyperAiToolConfigStatus[] }> =>
   httpClient.get<{ tools: HyperAiToolConfigStatus[] }>("/hyper-ai/tools");
 
+const getAgentRuntimeConfigStatus = (): Promise<RuntimeConfigResponse> =>
+  httpClient.get<RuntimeConfigResponse>("/alpha-trace/agent-runs/runtime/config");
+
 export const getRuntimeCredentialStatus = async (): Promise<RuntimeCredentialStatus> => {
-  const [providersResult, profileResult, toolsResult] = await Promise.allSettled([
+  const [providersResult, profileResult, toolsResult, runtimeConfigResult] = await Promise.allSettled([
     getHyperAiProvidersAsync(),
     getHyperAiProfileAsync(),
     getHyperAiToolsAsync(),
+    getAgentRuntimeConfigStatus(),
   ]);
 
   const providers =
@@ -162,8 +183,47 @@ export const getRuntimeCredentialStatus = async (): Promise<RuntimeCredentialSta
           },
         ];
 
-  const profile = profileResult.status === "fulfilled" ? profileResult.value : defaultHyperAiProfile;
-  const tools = toolsResult.status === "fulfilled" ? toolsResult.value.tools ?? [] : [];
+  const runtimeConfig = runtimeConfigResult.status === "fulfilled" ? runtimeConfigResult.value.config : undefined;
+  const qwenRuntime = runtimeConfig?.qwen;
+  const bochaRuntime = runtimeConfig?.bocha;
+  const qwenMetadata = qwenRuntime?.metadata ?? {};
+
+  const profile: HyperAiProfileConfig = {
+    ...(profileResult.status === "fulfilled" ? profileResult.value : defaultHyperAiProfile),
+  };
+  if (qwenRuntime?.available || qwenRuntime?.configured) {
+    profile.llm_configured = true;
+    profile.llm_api_key_available = Boolean(qwenRuntime.available);
+    profile.llm_config_source = qwenRuntime.source || profile.llm_config_source || "runtime";
+    profile.llm_provider = String(qwenMetadata.provider ?? profile.llm_provider ?? "qwen");
+    profile.llm_model = String(qwenMetadata.model ?? profile.llm_model ?? "qwen-plus");
+    profile.llm_base_url = profile.llm_base_url || providers.find((provider) => provider.id === "qwen")?.base_url;
+  }
+
+  const tools = toolsResult.status === "fulfilled" ? [...(toolsResult.value.tools ?? [])] : [];
+  if (bochaRuntime?.available || bochaRuntime?.configured) {
+    const bochaTool: HyperAiToolConfigStatus = {
+      name: "bocha",
+      display_name: "Bocha",
+      display_name_zh: "博查搜索",
+      configured: Boolean(bochaRuntime.configured),
+      api_key_available: Boolean(bochaRuntime.available),
+      config_source: bochaRuntime.source || "runtime",
+      enabled: Boolean(bochaRuntime.available),
+    };
+    const existingIndex = tools.findIndex((tool) => tool.name === "bocha");
+    if (existingIndex >= 0) {
+      tools[existingIndex] = {
+        ...tools[existingIndex],
+        configured: bochaTool.configured,
+        api_key_available: bochaTool.api_key_available,
+        config_source: bochaTool.config_source,
+        enabled: tools[existingIndex].enabled || bochaTool.enabled,
+      };
+    } else {
+      tools.push(bochaTool);
+    }
+  }
 
   return {
     providers,
